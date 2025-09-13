@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  icn-mobile-dev:
+    build: .
+    container_name: icn-navigator-mobile
+    ports:
+      - "8081:8081"     # Metro bundler
+      - "19000:19000"   # Expo DevTools
+      - "19001:19001"   # Expo CLI
+      - "19002:19002"   # Tunnel connection
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - expo_cache:/root/.expo
+    environment:
+      - EXPO_NO_TELEMETRY=1
+      - CHOKIDAR_USEPOLLING=1
+      - WATCHPACK_POLLING=true
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+    stdin_open: true
+    tty: true
+    networks:
+      - icn-network
+
+volumes:
+  expo_cache:
+
+networks:
+  icn-network:
+    driver: bridge
