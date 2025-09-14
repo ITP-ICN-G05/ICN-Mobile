@@ -11,14 +11,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#F99F1C"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.icnvictoria.navigator",
       "config": {
         "googleMapsApiKey": "AIzaSyBsJb-fpJij7dFzZC9QbO4DsGXlw1c2-n0"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "ICN Navigator uses your location to show nearby companies on the map."
       }
     },
     "android": {
@@ -31,10 +32,18 @@
         "googleMaps": {
           "apiKey": "AIzaSyBsJb-fpJij7dFzZC9QbO4DsGXlw1c2-n0"
         }
-      }    
+      },
+      "permissions": ["ACCESS_FINE_LOCATION"]
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": false,
+          "locationAlwaysAndWhenInUsePermission": "Allow ICN Navigator to access your location for showing nearby companies."
+        }
+      ]
     ],
     "scheme": "icn-navigator"
   }

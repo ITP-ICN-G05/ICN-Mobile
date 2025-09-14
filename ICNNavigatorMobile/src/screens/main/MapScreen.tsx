@@ -1,33 +1,50 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import SearchBar from '../../components/common/SearchBar';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { mockCompanies } from '../../data/mockCompanies';
 
+const MELBOURNE_REGION: Region = {
+  latitude: -37.8136,
+  longitude: 144.9631,
+  latitudeDelta: 0.0922,
+  longitudeDelta: 0.0421,
+};
+
 export default function MapScreen() {
+  const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const companies = mockCompanies;
+  const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
+  const [showSearchArea, setShowSearchArea] = useState(false);
 
-  const CompanyMarkerItem = ({ company }: { company: Company }) => (
-    <TouchableOpacity 
-      style={styles.companyItem}
-      onPress={() => setSelectedCompany(company)}
-    >
-      <View style={[
-        styles.markerIcon,
-        { backgroundColor: company.verificationStatus === 'verified' ? Colors.success : Colors.primary }
-      ]}>
-        <Ionicons name="location" size={16} color={Colors.white} />
-      </View>
-      <View style={styles.companyInfo}>
-        <Text style={styles.companyName}>{company.name}</Text>
-        <Text style={styles.companyAddress}>{company.address}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const handleMarkerPress = (company: Company) => {
+    setSelectedCompany(company);
+    mapRef.current?.animateToRegion({
+      latitude: company.latitude,
+      longitude: company.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    }, 500);
+  };
+
+  const handleRegionChangeComplete = (newRegion: Region) => {
+    setRegion(newRegion);
+    setShowSearchArea(true);
+  };
+
+  const handleSearchInArea = () => {
+    console.log('Searching in area:', region);
+    setShowSearchArea(false);
+    // API call would go here
+  };
+
+  const getMarkerColor = (company: Company) => {
+    return company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
+  };
 
   return (
     <View style={styles.container}>
@@ -38,24 +55,59 @@ export default function MapScreen() {
         onFilter={() => console.log('Filter pressed')}
       />
       
-      <View style={styles.mapContainer}>
-        <View style={styles.mapPlaceholder}>
-          <Ionicons name="map-outline" size={80} color={Colors.black50} />
-          <Text style={styles.placeholderText}>Map View</Text>
-          <Text style={styles.subText}>{companies.length} companies in area</Text>
-        </View>
-        
-        <ScrollView style={styles.companiesList}>
-          <Text style={styles.listTitle}>Companies in Area:</Text>
-          {companies.map(company => (
-            <CompanyMarkerItem key={company.id} company={company} />
-          ))}
-        </ScrollView>
-        
-        <TouchableOpacity style={styles.myLocationButton}>
-          <Ionicons name="locate" size={24} color={Colors.primary} />
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={MELBOURNE_REGION}
+        onRegionChangeComplete={handleRegionChangeComplete}
+        showsUserLocation={true}
+        showsMyLocationButton={false}
+        showsCompass={false}
+      >
+        {mockCompanies.map((company) => (
+          <Marker
+            key={company.id}
+            coordinate={{
+              latitude: company.latitude,
+              longitude: company.longitude,
+            }}
+            onPress={() => handleMarkerPress(company)}
+            pinColor={getMarkerColor(company)}
+          >
+            <Callout style={styles.callout}>
+              <View style={styles.calloutContent}>
+                <Text style={styles.calloutTitle}>{company.name}</Text>
+                <Text style={styles.calloutAddress}>{company.address}</Text>
+                <View style={styles.calloutSectors}>
+                  {company.keySectors.map((sector, index) => (
+                    <Text key={index} style={styles.calloutSector}>{sector}</Text>
+                  ))}
+                </View>
+              </View>
+            </Callout>
+          </Marker>
+        ))}
+      </MapView>
+
+      {showSearchArea && (
+        <TouchableOpacity
+          style={styles.searchAreaButton}
+          onPress={handleSearchInArea}
+        >
+          <Ionicons name="search" size={16} color={Colors.white} />
+          <Text style={styles.searchAreaText}>Search this area</Text>
         </TouchableOpacity>
-      </View>
+      )}
+
+      <TouchableOpacity
+        style={styles.myLocationButton}
+        onPress={() => {
+          mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
+        }}
+      >
+        <Ionicons name="locate" size={24} color={Colors.primary} />
+      </TouchableOpacity>
 
       {selectedCompany && (
         <View style={styles.companyDetail}>
@@ -83,77 +135,65 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
-  mapContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  mapPlaceholder: {
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F0F0F0',
-  },
-  placeholderText: {
-    fontSize: 24,
-    color: Colors.text,
-    marginTop: Spacing.md,
-    fontWeight: '600',
-  },
-  subText: {
-    fontSize: 16,
-    color: Colors.black50,
-    marginTop: Spacing.xs,
-  },
-  companiesList: {
-    flex: 1,
-    padding: Spacing.md,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-  companyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.sm,
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-    marginBottom: Spacing.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  markerIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: Spacing.sm,
-  },
-  companyInfo: {
+  map: {
     flex: 1,
   },
-  companyName: {
+  callout: {
+    width: 200,
+  },
+  calloutContent: {
+    padding: 10,
+  },
+  calloutTitle: {
     fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text,
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
-  companyAddress: {
+  calloutAddress: {
     fontSize: 12,
     color: Colors.black50,
-    marginTop: 2,
+    marginBottom: 8,
+  },
+  calloutSectors: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  calloutSector: {
+    fontSize: 10,
+    color: Colors.primary,
+    backgroundColor: Colors.orange[400],
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  searchAreaButton: {
+    position: 'absolute',
+    top: 80,
+    alignSelf: 'center',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  searchAreaText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '500',
   },
   myLocationButton: {
     position: 'absolute',
     right: 16,
-    top: 220,
+    bottom: 100,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -172,7 +212,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: Colors.white,
-    padding: Spacing.lg,
+    padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: '#000',
@@ -196,12 +236,12 @@ const styles = StyleSheet.create({
   detailAddress: {
     fontSize: 14,
     color: Colors.black50,
-    marginBottom: Spacing.md,
+    marginBottom: 12,
   },
   sectorContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.sm,
+    gap: 8,
   },
   sectorChip: {
     backgroundColor: Colors.orange[400],
