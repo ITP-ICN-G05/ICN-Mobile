@@ -7,26 +7,31 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F99F1C"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.icnvictoria.navigator"
+      "bundleIdentifier": "com.icnvictoria.navigator",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBsJb-fpJij7dFzZC9QbO4DsGXlw1c2-n0"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#F99F1C"
       },
-      "package": "com.icnvictoria.navigator"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "package": "com.icnvictoria.navigator",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBsJb-fpJij7dFzZC9QbO4DsGXlw1c2-n0"
+        }
+      }    
     },
     "plugins": [
       "expo-secure-store"
