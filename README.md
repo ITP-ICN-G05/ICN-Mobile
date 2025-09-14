@@ -1,6 +1,17 @@
 # ICN Navigator Mobile
+
 This is the **mobile frontend** for the ICN Navigator project, built with [Expo](https://expo.dev/) and [React Native](https://reactnative.dev/).  
 It connects to the Spring Boot backend via REST APIs.
+
+## ✨ Latest Improvements
+
+**Smart Development Environment (v2.0)**
+- 🔧 **Idempotent Setup**: `make setup` can be run multiple times safely
+- 📦 **Smart Dependency Management**: Automatic conflict resolution with `--legacy-peer-deps`
+- 🌐 **Multi-Network Support**: Tunnel, LAN, and localhost connection modes
+- 🔍 **Comprehensive Diagnostics**: New `make diagnose` command for troubleshooting
+- 💻 **Cross-Platform**: Windows line ending fixes and enhanced compatibility
+- ⚡ **Performance**: Configuration preservation and skip-if-exists logic
 
 ---
 
@@ -17,8 +28,13 @@ It connects to the Spring Boot backend via REST APIs.
 git clone git@github.com:ITP-ICN-G05/ICN-Mobile.git
 cd ICN-Mobile
 
-# Initial setup (automated)
+# Initial setup (smart setup - idempotent)
 make setup
+
+# Alternative setup commands
+make rebuild     # Force rebuild Docker images
+make reinstall   # Force reinstall dependencies
+make fix-expo    # Fix Expo dependencies and versions
 ```
 
 ### Running on Device
@@ -26,11 +42,15 @@ make setup
 # Start development environment
 make dev
 
-# Or start Expo development server directly
-make start
+# Multiple Expo server options
+make start           # Tunnel mode (recommended for most networks)
+make start-lan       # LAN mode (same Wi-Fi network)
+make start-localhost # Localhost mode (local testing only)
 ```
 * Scan the QR code with **Expo Go** app on your phone
-* Ensure phone and computer are on the same Wi-Fi network
+* **Tunnel mode**: Works with any network (uses ngrok)
+* **LAN mode**: Requires same Wi-Fi network
+* **Localhost mode**: For local testing only
 * The app will load instantly with hot reload enabled
 
 ### Platform-Specific Commands
@@ -106,11 +126,22 @@ ICN-Mobile/
 
 ## Development Commands
 
+### Setup Commands
+```bash
+make setup       # Smart initial setup (skips if already built)
+make rebuild     # Force rebuild Docker images
+make install     # Smart dependency install (skips if exists) 
+make reinstall   # Force reinstall dependencies
+make fix-expo    # Fix Expo dependencies and versions
+make clean-install # Clean install with legacy peer deps
+```
+
 ### Core Development
 ```bash
-make setup       # Initial project setup
 make dev         # Start development environment
-make start       # Start Expo development server
+make start       # Start Expo server (tunnel mode)
+make start-lan   # Start Expo server (LAN mode)
+make start-localhost # Start Expo server (localhost mode)
 make android     # Run on Android emulator
 make ios         # Run on iOS simulator
 ```
@@ -120,7 +151,7 @@ make ios         # Run on iOS simulator
 make shell       # Open container shell
 make logs        # View container logs
 make status      # Check environment status
-make install     # Install dependencies
+make diagnose    # Run comprehensive diagnostics
 ```
 
 ### Code Quality
@@ -130,11 +161,12 @@ make format      # Format code with Prettier
 make test        # Run unit tests
 ```
 
-### Quick Commands
+### Maintenance Commands
 ```bash
-make quick-start # Build + install + start (one command)
-make reset       # Emergency reset of environment
 make clean       # Clean up Docker resources
+make clean-all   # Deep clean Docker resources
+make reset       # Emergency reset of environment
+make quick-start # Build + install + start (one command)
 ```
 
 ## Testing
@@ -198,25 +230,71 @@ Built using EAS Build for production deployments to app stores.
 
 ## Troubleshooting
 
-### Common Issues
-* **Container not starting**: Run `make clean` then `make setup`
-* **Dependencies not installing**: Run `make install`
-* **Device not connecting**: Ensure same Wi-Fi network, try `make logs`
-* **Maps not displaying**: Verify Google Maps API key in container environment
+### Smart Setup Features
+The development environment now includes intelligent setup detection:
+- **Idempotent setup**: `make setup` can be run multiple times safely
+- **Smart detection**: Skips Docker builds and dependency installs if already completed
+- **Configuration preservation**: Existing config files are not overwritten
+- **Cross-platform support**: Automatic line ending conversion for Windows
 
-### Development Environment Issues
+### Common Issues & Solutions
+
+#### Environment Setup Issues
 ```bash
-make status      # Check container status
-make logs        # View detailed logs
-make shell       # Debug inside container
-make reset       # Complete environment reset
+make diagnose    # Run comprehensive diagnostics
+make status      # Check container and system status
+make clean-install # Force clean dependency installation
+make fix-expo    # Fix Expo version conflicts
 ```
 
-### Performance
-* App targets 60 FPS navigation
-* Map renders efficiently with 1000+ markers
-* Search results display under 2 seconds
-* Containerized environment ensures consistent performance
+#### Dependency Conflicts
+```bash
+make reinstall   # Force reinstall with --legacy-peer-deps
+make fix-expo    # Fix Expo SDK version mismatches
+make clean-install # Complete clean install
+```
+
+#### Connection Problems
+```bash
+make start           # Try tunnel mode (recommended)
+make start-lan       # Try LAN mode if tunnel fails
+make start-localhost # Try localhost for local testing
+```
+
+#### Container Issues
+```bash
+make logs        # View detailed container logs
+make shell       # Debug inside container
+make reset       # Complete environment reset
+make rebuild     # Force rebuild Docker images
+```
+
+### Development Environment Diagnosis
+```bash
+# Check overall system status
+make status
+
+# Run comprehensive diagnostics
+make diagnose
+
+# View container logs
+make logs
+
+# Enter container for manual debugging
+make shell
+```
+
+### Network Troubleshooting
+- **Tunnel mode**: Works with any network configuration (uses ngrok)
+- **LAN mode**: Requires same Wi-Fi network between device and computer
+- **Localhost mode**: For local testing and debugging only
+- **Firewall**: Ensure ports 8081, 19000-19006 are not blocked
+
+### Performance Optimization
+- App targets 60 FPS navigation performance
+- Map renders efficiently with 1000+ company markers
+- Search results display under 2 seconds
+- Hot reload provides instant development feedback
 
 ## Documentation
 * **Getting Started**: Docker setup and installation
