@@ -93,8 +93,10 @@ mkdir -p assets/{images,icons}
 # Step 5: Create configuration files
 print_header "Creating configuration files..."
 
-# Create app.json with proper configuration
-cat > app.json << EOL
+# Create app.json with proper configuration (only if it doesn't exist)
+if [ ! -f "app.json" ]; then
+    print_status "Creating app.json..."
+    cat > app.json << EOL
 {
   "expo": {
     "name": "ICN Navigator",
@@ -133,9 +135,14 @@ cat > app.json << EOL
   }
 }
 EOL
+else
+    print_warning "app.json already exists, skipping creation..."
+fi
 
-# Create TypeScript configuration
-cat > tsconfig.json << EOL
+# Create TypeScript configuration (only if it doesn't exist)
+if [ ! -f "tsconfig.json" ]; then
+    print_status "Creating tsconfig.json..."
+    cat > tsconfig.json << EOL
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
@@ -160,9 +167,14 @@ cat > tsconfig.json << EOL
   ]
 }
 EOL
+else
+    print_warning "tsconfig.json already exists, skipping creation..."
+fi
 
-# Create ESLint configuration
-cat > .eslintrc.js << EOL
+# Create ESLint configuration (only if it doesn't exist)
+if [ ! -f ".eslintrc.js" ]; then
+    print_status "Creating .eslintrc.js..."
+    cat > .eslintrc.js << EOL
 module.exports = {
   extends: [
     'expo',
@@ -180,9 +192,14 @@ module.exports = {
   ignorePatterns: ['node_modules/', '.expo/'],
 };
 EOL
+else
+    print_warning ".eslintrc.js already exists, skipping creation..."
+fi
 
-# Create Prettier configuration
-cat > .prettierrc << EOL
+# Create Prettier configuration (only if it doesn't exist)
+if [ ! -f ".prettierrc" ]; then
+    print_status "Creating .prettierrc..."
+    cat > .prettierrc << EOL
 {
   "semi": true,
   "trailingComma": "es5",
@@ -192,12 +209,17 @@ cat > .prettierrc << EOL
   "useTabs": false
 }
 EOL
+else
+    print_warning ".prettierrc already exists, skipping creation..."
+fi
 
 # Step 6: Create initial source files
 print_header "Creating initial source files..."
 
-# Create constants file
-cat > src/constants/index.ts << EOL
+# Create constants file (only if it doesn't exist)
+if [ ! -f "src/constants/index.ts" ]; then
+    print_status "Creating constants file..."
+    cat > src/constants/index.ts << EOL
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8080/api';
 export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -222,9 +244,14 @@ export const SPACING = {
   xxl: 48,
 };
 EOL
+else
+    print_warning "Constants file already exists, skipping creation..."
+fi
 
-# Create types file
-cat > src/types/index.ts << EOL
+# Create types file (only if it doesn't exist)
+if [ ! -f "src/types/index.ts" ]; then
+    print_status "Creating types file..."
+    cat > src/types/index.ts << EOL
 export interface Company {
   id: string;
   name: string;
@@ -297,9 +324,14 @@ export interface CompanyState {
   error: string | null;
 }
 EOL
+else
+    print_warning "Types file already exists, skipping creation..."
+fi
 
-# Create basic navigation structure
-cat > src/navigation/AppNavigator.tsx << EOL
+# Create basic navigation structure (only if it doesn't exist)
+if [ ! -f "src/navigation/AppNavigator.tsx" ]; then
+    print_status "Creating AppNavigator..."
+    cat > src/navigation/AppNavigator.tsx << EOL
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -326,9 +358,14 @@ export default function AppNavigator() {
   );
 }
 EOL
+else
+    print_warning "AppNavigator already exists, skipping creation..."
+fi
 
-# Create main App.tsx file
-cat > App.tsx << EOL
+# Create main App.tsx file (only if it doesn't exist)
+if [ ! -f "App.tsx" ]; then
+    print_status "Creating App.tsx..."
+    cat > App.tsx << EOL
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Provider } from 'react-redux';
@@ -344,9 +381,15 @@ export default function App() {
   );
 }
 EOL
+else
+    print_warning "App.tsx already exists, skipping creation..."
+fi
 
 print_header "Creating environment template..."
-cat > .env.example << EOL
+# Create .env.example (always create as template)
+if [ ! -f ".env.example" ]; then
+    print_status "Creating .env.example template..."
+    cat > .env.example << EOL
 # API Configuration
 EXPO_PUBLIC_API_BASE_URL=http://localhost:8080/api
 
@@ -360,15 +403,28 @@ EXPO_PUBLIC_LINKEDIN_CLIENT_ID=your_linkedin_client_id
 # Environment
 NODE_ENV=development
 EOL
+else
+    print_warning ".env.example already exists, skipping creation..."
+fi
+
+# Copy .env.example to .env if .env doesn't exist
+if [ ! -f ".env" ]; then
+    print_status "Creating .env from template..."
+    cp .env.example .env
+    print_warning "⚠️  Please edit .env file and add your actual API keys!"
+else
+    print_warning ".env already exists, skipping creation..."
+fi
 
 # Update package.json scripts
 print_header "Updating package.json scripts..."
-npx json -I -f package.json -e 'this.scripts.lint="eslint . --ext .js,.jsx,.ts,.tsx"'
-npx json -I -f package.json -e 'this.scripts["lint:fix"]="eslint . --ext .js,.jsx,.ts,.tsx --fix"'
-npx json -I -f package.json -e 'this.scripts.format="prettier --write ."'
-npx json -I -f package.json -e 'this.scripts["format:check"]="prettier --check ."'
-npx json -I -f package.json -e 'this.scripts.test="jest"'
-npx json -I -f package.json -e 'this.scripts["test:watch"]="jest --watch"'
+print_status "Adding npm scripts to package.json..."
+npx json -I -f package.json -e 'this.scripts.lint="eslint . --ext .js,.jsx,.ts,.tsx"' 2>/dev/null || echo "lint script already exists"
+npx json -I -f package.json -e 'this.scripts["lint:fix"]="eslint . --ext .js,.jsx,.ts,.tsx --fix"' 2>/dev/null || echo "lint:fix script already exists"
+npx json -I -f package.json -e 'this.scripts.format="prettier --write ."' 2>/dev/null || echo "format script already exists"
+npx json -I -f package.json -e 'this.scripts["format:check"]="prettier --check ."' 2>/dev/null || echo "format:check script already exists"
+npx json -I -f package.json -e 'this.scripts.test="jest"' 2>/dev/null || echo "test script already exists"
+npx json -I -f package.json -e 'this.scripts["test:watch"]="jest --watch"' 2>/dev/null || echo "test:watch script already exists"
 
 print_status "✅ ICN Navigator Mobile MVP setup completed successfully!"
 print_status ""
