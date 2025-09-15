@@ -30,15 +30,16 @@ const CAPABILITY_OPTIONS = [
 ];
 
 const DISTANCE_OPTIONS = [
-  'within 500m',
+  'All',
+  '500m',
   '1km',
   '5km',
   '10km',
-  '25km',
   '50km',
 ];
 
 const VERIFICATION_OPTIONS = [
+  'All',
   'Verified',
   'Unverified',
 ];
@@ -99,7 +100,7 @@ export default function FilterModal({
             style={styles.body}
             showsVerticalScrollIndicator={false}
           >
-            {/* Multi-select for capabilities */}
+            {/* Multi-select dropdown for capabilities */}
             <FilterDropdown
               title="Capability Filter"
               options={CAPABILITY_OPTIONS}
@@ -109,25 +110,53 @@ export default function FilterModal({
               multiSelect={true}
             />
 
-            {/* Single-select for distance */}
-            <FilterDropdown
-              title="Distance Filter"
-              options={DISTANCE_OPTIONS}
-              selected={distance}
-              onApply={(selected) => setDistance(selected as string)}
-              showLimit={4}
-              multiSelect={false}
-            />
+            {/* Button group for distance */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>Distance Filter</Text>
+              <View style={styles.buttonGroup}>
+                {DISTANCE_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.optionButton,
+                      distance === option && styles.optionButtonSelected
+                    ]}
+                    onPress={() => setDistance(option)}
+                  >
+                    <Text style={[
+                      styles.optionButtonText,
+                      distance === option && styles.optionButtonTextSelected
+                    ]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-            {/* Single-select for verification */}
-            <FilterDropdown
-              title="Verification Status"
-              options={VERIFICATION_OPTIONS}
-              selected={verificationStatus}
-              onApply={(selected) => setVerificationStatus(selected as string)}
-              showLimit={4}
-              multiSelect={false}
-            />
+            {/* Button group for verification */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>Verification Status</Text>
+              <View style={styles.buttonGroup}>
+                {VERIFICATION_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.optionButton,
+                      verificationStatus === option && styles.optionButtonSelected
+                    ]}
+                    onPress={() => setVerificationStatus(option)}
+                  >
+                    <Text style={[
+                      styles.optionButtonText,
+                      verificationStatus === option && styles.optionButtonTextSelected
+                    ]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -178,6 +207,42 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: Spacing.lg,
+  },
+  filterSection: {
+    marginBottom: Spacing.lg,
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.black50,
+    marginBottom: Spacing.sm,
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  optionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.black20,
+    backgroundColor: Colors.white,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  optionButtonSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  optionButtonText: {
+    fontSize: 14,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  optionButtonTextSelected: {
+    color: Colors.white,
   },
   footer: {
     flexDirection: 'row',
