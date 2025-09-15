@@ -22,6 +22,7 @@ export default function MapScreen() {
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [showSearchArea, setShowSearchArea] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     capabilities: [],
     distance: 'All',
@@ -88,10 +89,9 @@ export default function MapScreen() {
   }, [searchText, filters, region]);
 
   const hasActiveFilters = () => {
-    return searchText || 
-           filters.capabilities.length > 0 || 
-           filters.distance !== 'All' || 
-           filters.verificationStatus !== 'All';
+    return filters.capabilities.length > 0 || 
+         filters.distance !== 'All' || 
+         filters.verificationStatus !== 'All';
   };
 
   const getActiveFilterCount = () => {
@@ -132,6 +132,7 @@ export default function MapScreen() {
 
   const handleMarkerPress = (company: Company) => {
     setSelectedCompany(company);
+    setIsFromDropdownSelection(false);
     mapRef.current?.animateToRegion({
       latitude: company.latitude,
       longitude: company.longitude,
@@ -140,8 +141,11 @@ export default function MapScreen() {
     }, 500);
   };
 
-  // New handler for company selection from dropdown
+  // Handler for company selection from dropdown
   const handleCompanySelection = (company: Company) => {
+    // Set flag to hide filter bar
+    setIsFromDropdownSelection(true);
+    
     // Zoom to selected company with closer view
     mapRef.current?.animateToRegion({
       latitude: company.latitude,
@@ -156,7 +160,8 @@ export default function MapScreen() {
     // Clear search text after short delay
     setTimeout(() => {
       setSearchText('');
-    }, 1000);
+      setIsFromDropdownSelection(false);
+    }, 1500);
   };
 
   const handleRegionChangeComplete = (newRegion: Region) => {
@@ -179,6 +184,7 @@ export default function MapScreen() {
 
   const handleSearchChange = (text: string) => {
     setSearchText(text);
+    setIsFromDropdownSelection(false);
     if (text === '' || text.length > 2) {
       setTimeout(zoomToFilteredResults, 500);
     }
@@ -192,7 +198,7 @@ export default function MapScreen() {
   };
 
   const clearFilters = () => {
-    setSearchText('');
+    setIsFromDropdownSelection(false);
     setFilters({
       capabilities: [],
       distance: 'All',
@@ -200,6 +206,9 @@ export default function MapScreen() {
     });
     mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
   };
+
+  // Determine if filter bar should be shown
+  const shouldShowFilterBar = hasActiveFilters() && !isFromDropdownSelection;
 
   return (
     <View style={styles.container}>
@@ -212,8 +221,8 @@ export default function MapScreen() {
         placeholder="Search companies on map..."
       />
       
-      {/* Filter indicator bar */}
-      {hasActiveFilters() && (
+      {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
+      {shouldShowFilterBar && (
         <View style={styles.filterBar}>
           <View style={styles.filterInfo}>
             <Text style={styles.filterText}>
@@ -350,7 +359,7 @@ const styles = StyleSheet.create({
   },
   filterBar: {
     position: 'absolute',
-    top: 60,
+    top: 100,  // Changed from 60 to 100 to position it lower
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
