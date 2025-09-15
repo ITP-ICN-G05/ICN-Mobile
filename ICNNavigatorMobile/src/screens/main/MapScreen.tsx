@@ -1,24 +1,66 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
+import React, { useState, useRef } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, NativeModules } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SearchBar from '../../components/common/SearchBar';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { mockCompanies } from '../../data/mockCompanies';
 
-const MELBOURNE_REGION: Region = {
+// Conditional import of react-native-maps
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+let Callout: any = null;
+let Region: any = null;
+
+try {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+  Callout = maps.Callout;
+  Region = maps.Region;
+} catch (error) {
+  console.log('react-native-maps not available, using placeholder');
+}
+
+const MELBOURNE_REGION: any = {
   latitude: -37.8136,
   longitude: 144.9631,
   latitudeDelta: 0.0922,
   longitudeDelta: 0.0421,
 };
 
+// Check if native maps are available
+const isNativeMapsAvailable = () => {
+  try {
+    return MapView && !!NativeModules.RNCMapsManager;
+  } catch {
+    return false;
+  }
+};
+
+// Map placeholder component
+const MapPlaceholder = () => (
+  <View style={[styles.map, styles.mapPlaceholder]}>
+    <View style={styles.placeholderContent}>
+      <Ionicons name="map-outline" size={64} color={Colors.black50} />
+      <Text style={styles.placeholderText}>Map View</Text>
+      <Text style={styles.placeholderSubtext}>
+        Map requires native build or physical device{'\n'}Showing placeholder in Expo Go
+      </Text>
+      <TouchableOpacity style={styles.placeholderButton} onPress={() => console.log('Map placeholder pressed')}>
+        <Text style={styles.placeholderButtonText}>View Company List</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+
 export default function MapScreen() {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
+  const [region, setRegion] = useState<any>(MELBOURNE_REGION);
   const [showSearchArea, setShowSearchArea] = useState(false);
 
   const handleMarkerPress = (company: Company) => {
@@ -31,7 +73,7 @@ export default function MapScreen() {
     }, 500);
   };
 
-  const handleRegionChangeComplete = (newRegion: Region) => {
+  const handleRegionChangeComplete = (newRegion: any) => {
     setRegion(newRegion);
     setShowSearchArea(true);
   };
@@ -55,42 +97,46 @@ export default function MapScreen() {
         onFilter={() => console.log('Filter pressed')}
       />
       
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        initialRegion={MELBOURNE_REGION}
-        onRegionChangeComplete={handleRegionChangeComplete}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-        showsCompass={false}
-      >
-        {mockCompanies.map((company) => (
-          <Marker
-            key={company.id}
-            coordinate={{
-              latitude: company.latitude,
-              longitude: company.longitude,
-            }}
-            onPress={() => handleMarkerPress(company)}
-            pinColor={getMarkerColor(company)}
-          >
-            <Callout style={styles.callout}>
-              <View style={styles.calloutContent}>
-                <Text style={styles.calloutTitle}>{company.name}</Text>
-                <Text style={styles.calloutAddress}>{company.address}</Text>
-                <View style={styles.calloutSectors}>
-                  {company.keySectors.map((sector, index) => (
-                    <Text key={index} style={styles.calloutSector}>{sector}</Text>
-                  ))}
+      {isNativeMapsAvailable() ? (
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          provider={PROVIDER_GOOGLE}
+          initialRegion={MELBOURNE_REGION}
+          onRegionChangeComplete={handleRegionChangeComplete}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          showsCompass={false}
+        >
+          {mockCompanies.map((company) => (
+            <Marker
+              key={company.id}
+              coordinate={{
+                latitude: company.latitude,
+                longitude: company.longitude,
+              }}
+              onPress={() => handleMarkerPress(company)}
+              pinColor={getMarkerColor(company)}
+            >
+              <Callout style={styles.callout}>
+                <View style={styles.calloutContent}>
+                  <Text style={styles.calloutTitle}>{company.name}</Text>
+                  <Text style={styles.calloutAddress}>{company.address}</Text>
+                  <View style={styles.calloutSectors}>
+                    {company.keySectors.slice(0, 2).map((sector, index) => (
+                      <Text key={index} style={styles.calloutSector}>{sector}</Text>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            </Callout>
-          </Marker>
-        ))}
-      </MapView>
+              </Callout>
+            </Marker>
+          ))}
+        </MapView>
+      ) : (
+        <MapPlaceholder />
+      )}
 
-      {showSearchArea && (
+      {isNativeMapsAvailable() && showSearchArea && (
         <TouchableOpacity
           style={styles.searchAreaButton}
           onPress={handleSearchInArea}
@@ -100,14 +146,16 @@ export default function MapScreen() {
         </TouchableOpacity>
       )}
 
-      <TouchableOpacity
-        style={styles.myLocationButton}
-        onPress={() => {
-          mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
-        }}
-      >
-        <Ionicons name="locate" size={24} color={Colors.primary} />
-      </TouchableOpacity>
+      {isNativeMapsAvailable() && (
+        <TouchableOpacity
+          style={styles.myLocationButton}
+          onPress={() => {
+            mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
+          }}
+        >
+          <Ionicons name="locate" size={24} color={Colors.primary} />
+        </TouchableOpacity>
+      )}
 
       {selectedCompany && (
         <View style={styles.companyDetail}>
@@ -252,6 +300,41 @@ const styles = StyleSheet.create({
   sectorText: {
     fontSize: 12,
     color: Colors.primary,
+    fontWeight: '500',
+  },
+  mapPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    padding: 20,
+  },
+  placeholderContent: {
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    color: Colors.black50,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  placeholderButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  placeholderButtonText: {
+    color: Colors.white,
+    fontSize: 14,
     fontWeight: '500',
   },
 });
