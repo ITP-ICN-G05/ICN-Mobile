@@ -1,67 +1,75 @@
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform, NativeModules } from 'react-native';
+import React, { useState, useRef, useMemo } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import SearchBar from '../../components/common/SearchBar';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { mockCompanies } from '../../data/mockCompanies';
 
-// Conditional import of react-native-maps
-let MapView: any = null;
-let Marker: any = null;
-let PROVIDER_GOOGLE: any = null;
-let Callout: any = null;
-let Region: any = null;
-
-try {
-  const maps = require('react-native-maps');
-  MapView = maps.default;
-  Marker = maps.Marker;
-  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
-  Callout = maps.Callout;
-  Region = maps.Region;
-} catch (error) {
-  console.log('react-native-maps not available, using placeholder');
-}
-
-const MELBOURNE_REGION: any = {
+const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
   longitude: 144.9631,
   latitudeDelta: 0.0922,
   longitudeDelta: 0.0421,
 };
 
-// Check if native maps are available
-const isNativeMapsAvailable = () => {
-  try {
-    return MapView && !!NativeModules.RNCMapsManager;
-  } catch {
-    return false;
-  }
-};
-
-// Map placeholder component
-const MapPlaceholder = () => (
-  <View style={[styles.map, styles.mapPlaceholder]}>
-    <View style={styles.placeholderContent}>
-      <Ionicons name="map-outline" size={64} color={Colors.black50} />
-      <Text style={styles.placeholderText}>Map View</Text>
-      <Text style={styles.placeholderSubtext}>
-        Map requires native build or physical device{'\n'}Showing placeholder in Expo Go
-      </Text>
-      <TouchableOpacity style={styles.placeholderButton} onPress={() => console.log('Map placeholder pressed')}>
-        <Text style={styles.placeholderButtonText}>View Company List</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-);
-
 export default function MapScreen() {
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [region, setRegion] = useState<any>(MELBOURNE_REGION);
+  const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [showSearchArea, setShowSearchArea] = useState(false);
+
+
+  // Filter companies based on search text
+  const filteredCompanies = useMemo(() => {
+    let filtered = [...mockCompanies];
+
+    // Apply search text filter
+    if (searchText) {
+      filtered = filtered.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.address.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.keySectors.some(sector => 
+          sector.toLowerCase().includes(searchText.toLowerCase())
+        )
+      );
+    }
+
+    return filtered;
+  }, [searchText, region]);
+
+  // Auto-zoom to show filtered results
+  const zoomToFilteredResults = () => {
+    if (filteredCompanies.length === 0) return;
+
+    if (filteredCompanies.length === 1) {
+      // Zoom to single company
+      mapRef.current?.animateToRegion({
+        latitude: filteredCompanies[0].latitude,
+        longitude: filteredCompanies[0].longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 500);
+    } else {
+      // Calculate bounds for all filtered companies
+      const lats = filteredCompanies.map(c => c.latitude);
+      const lons = filteredCompanies.map(c => c.longitude);
+      
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLon = Math.min(...lons);
+      const maxLon = Math.max(...lons);
+      
+      mapRef.current?.animateToRegion({
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLon + maxLon) / 2,
+        latitudeDelta: (maxLat - minLat) * 1.5,
+        longitudeDelta: (maxLon - minLon) * 1.5,
+      }, 500);
+    }
+  };
 
   const handleMarkerPress = (company: Company) => {
     setSelectedCompany(company);
@@ -73,70 +81,105 @@ export default function MapScreen() {
     }, 500);
   };
 
-  const handleRegionChangeComplete = (newRegion: any) => {
+  const handleRegionChangeComplete = (newRegion: Region) => {
     setRegion(newRegion);
-    setShowSearchArea(true);
+    if (!searchText) {
+      setShowSearchArea(true);
+    }
   };
 
   const handleSearchInArea = () => {
-    console.log('Searching in area:', region);
     setShowSearchArea(false);
-    // API call would go here
+    // In real app, this would fetch companies in the new region
+    console.log('Searching in area:', region);
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchText(text);
+    // Auto-zoom to results when search is cleared or after typing
+    if (text === '' || text.length > 2) {
+      setTimeout(zoomToFilteredResults, 500);
+    }
   };
 
   const getMarkerColor = (company: Company) => {
+    // Highlight searched companies differently
+    if (searchText && company.name.toLowerCase().includes(searchText.toLowerCase())) {
+      return Colors.warning; // Orange for search matches
+    }
     return company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
+  };
+
+  const clearSearch = () => {
+    setSearchText('');
+    mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
   };
 
   return (
     <View style={styles.container}>
       <SearchBar
         value={searchText}
-        onChangeText={setSearchText}
+        onChangeText={handleSearchChange}
         placeholder="Search companies on map..."
-        onFilter={() => console.log('Filter pressed')}
       />
       
-      {isNativeMapsAvailable() ? (
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          provider={PROVIDER_GOOGLE}
-          initialRegion={MELBOURNE_REGION}
-          onRegionChangeComplete={handleRegionChangeComplete}
-          showsUserLocation={true}
-          showsMyLocationButton={false}
-          showsCompass={false}
-        >
-          {mockCompanies.map((company) => (
-            <Marker
-              key={company.id}
-              coordinate={{
-                latitude: company.latitude,
-                longitude: company.longitude,
-              }}
-              onPress={() => handleMarkerPress(company)}
-              pinColor={getMarkerColor(company)}
-            >
-              <Callout style={styles.callout}>
-                <View style={styles.calloutContent}>
-                  <Text style={styles.calloutTitle}>{company.name}</Text>
-                  <Text style={styles.calloutAddress}>{company.address}</Text>
-                  <View style={styles.calloutSectors}>
-                    {company.keySectors.slice(0, 2).map((sector, index) => (
-                      <Text key={index} style={styles.calloutSector}>{sector}</Text>
-                    ))}
-                  </View>
+      {/* Results counter */}
+      {searchText && (
+        <View style={styles.resultsBar}>
+          <Text style={styles.resultsText}>
+            {filteredCompanies.length} companies found
+          </Text>
+          <TouchableOpacity onPress={clearSearch}>
+            <Text style={styles.clearText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={MELBOURNE_REGION}
+        onRegionChangeComplete={handleRegionChangeComplete}
+        showsUserLocation={true}
+        showsMyLocationButton={false}
+        showsCompass={false}
+      >
+        {filteredCompanies.map((company) => (
+          <Marker
+            key={company.id}
+            coordinate={{
+              latitude: company.latitude,
+              longitude: company.longitude,
+            }}
+            onPress={() => handleMarkerPress(company)}
+            pinColor={getMarkerColor(company)}
+          >
+            <Callout style={styles.callout}>
+              <View style={styles.calloutContent}>
+                <Text style={styles.calloutTitle}>{company.name}</Text>
+                <Text style={styles.calloutAddress}>{company.address}</Text>
+                <View style={styles.calloutSectors}>
+                  {company.keySectors.map((sector, index) => (
+                    <Text key={index} style={styles.calloutSector}>{sector}</Text>
+                  ))}
                 </View>
-              </Callout>
-            </Marker>
-          ))}
-        </MapView>
-      ) : (
-        <MapPlaceholder />
+              </View>
+            </Callout>
+          </Marker>
+        ))}
+      </MapView>
+
+      {/* No results overlay */}
+      {filteredCompanies.length === 0 && (
+        <View style={styles.noResultsOverlay}>
+          <Ionicons name="search" size={48} color={Colors.black50} />
+          <Text style={styles.noResultsText}>No companies found</Text>
+          <Text style={styles.noResultsSubText}>Try adjusting your search or filters</Text>
+        </View>
       )}
 
-      {isNativeMapsAvailable() && showSearchArea && (
+      {showSearchArea && (
         <TouchableOpacity
           style={styles.searchAreaButton}
           onPress={handleSearchInArea}
@@ -146,16 +189,14 @@ export default function MapScreen() {
         </TouchableOpacity>
       )}
 
-      {isNativeMapsAvailable() && (
-        <TouchableOpacity
-          style={styles.myLocationButton}
-          onPress={() => {
-            mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
-          }}
-        >
-          <Ionicons name="locate" size={24} color={Colors.primary} />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.myLocationButton}
+        onPress={() => {
+          mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
+        }}
+      >
+        <Ionicons name="locate" size={24} color={Colors.primary} />
+      </TouchableOpacity>
 
       {selectedCompany && (
         <View style={styles.companyDetail}>
@@ -174,6 +215,12 @@ export default function MapScreen() {
               </View>
             ))}
           </View>
+          {selectedCompany.verificationStatus === 'verified' && (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+              <Text style={styles.verifiedText}>Verified Company</Text>
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -186,6 +233,52 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  resultsBar: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    right: 16,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  resultsText: {
+    fontSize: 14,
+    color: Colors.text,
+  },
+  clearText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  noResultsOverlay: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginTop: 16,
+  },
+  noResultsSubText: {
+    fontSize: 14,
+    color: Colors.black50,
+    marginTop: 8,
   },
   callout: {
     width: 200,
@@ -218,7 +311,7 @@ const styles = StyleSheet.create({
   },
   searchAreaButton: {
     position: 'absolute',
-    top: 80,
+    top: 120,
     alignSelf: 'center',
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,
@@ -302,39 +395,14 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '500',
   },
-  mapPlaceholder: {
-    justifyContent: 'center',
+  verifiedBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background,
-    padding: 20,
+    marginTop: 12,
   },
-  placeholderContent: {
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  placeholderSubtext: {
-    fontSize: 14,
-    color: Colors.black50,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  placeholderButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  placeholderButtonText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '500',
+  verifiedText: {
+    fontSize: 12,
+    color: Colors.success,
+    marginLeft: 4,
   },
 });
