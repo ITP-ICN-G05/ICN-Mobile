@@ -25,7 +25,7 @@ export default function MapScreen() {
   const [filters, setFilters] = useState<FilterOptions>({
     capabilities: [],
     distance: 'All',
-    verificationStatus: 'all',
+    verificationStatus: 'All',
   });
 
   // Filter companies based on search text and filters
@@ -43,26 +43,37 @@ export default function MapScreen() {
       );
     }
 
-    // Apply capability filter
+    // Apply capability filter (multi-select)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
         filters.capabilities.some(capability => 
           company.keySectors.includes(capability) ||
-          company.companyType === capability.toLowerCase()
+          company.keySectors.some(sector => 
+            sector.toLowerCase().includes(capability.toLowerCase())
+          )
         )
       );
     }
 
-    // Apply verification filter
-    if (filters.verificationStatus !== 'all') {
+    // Apply verification filter (single-select)
+    if (filters.verificationStatus !== 'All') {
+      const statusToCheck = filters.verificationStatus.toLowerCase();
       filtered = filtered.filter(company =>
-        company.verificationStatus === filters.verificationStatus
+        company.verificationStatus === statusToCheck
       );
     }
 
-    // Apply distance filter (using region bounds)
+    // Apply distance filter (single-select)
     if (filters.distance !== 'All' && region) {
-      const maxDistance = parseInt(filters.distance);
+      let maxDistance = 50; // default max
+      
+      // Parse distance string
+      if (filters.distance.includes('500m')) {
+        maxDistance = 0.5;
+      } else if (filters.distance.includes('km')) {
+        maxDistance = parseInt(filters.distance);
+      }
+      
       const kmToDegrees = maxDistance / 111; // Rough conversion
       
       filtered = filtered.filter(company => {
@@ -76,12 +87,25 @@ export default function MapScreen() {
     return filtered;
   }, [searchText, filters, region]);
 
-  // Auto-zoom to show filtered results
+  const hasActiveFilters = () => {
+    return searchText || 
+           filters.capabilities.length > 0 || 
+           filters.distance !== 'All' || 
+           filters.verificationStatus !== 'All';
+  };
+
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (filters.capabilities.length > 0) count++;
+    if (filters.distance !== 'All') count++;
+    if (filters.verificationStatus !== 'All') count++;
+    return count;
+  };
+
   const zoomToFilteredResults = () => {
     if (filteredCompanies.length === 0) return;
 
     if (filteredCompanies.length === 1) {
-      // Zoom to single company
       mapRef.current?.animateToRegion({
         latitude: filteredCompanies[0].latitude,
         longitude: filteredCompanies[0].longitude,
@@ -89,7 +113,6 @@ export default function MapScreen() {
         longitudeDelta: 0.01,
       }, 500);
     } else {
-      // Calculate bounds for all filtered companies
       const lats = filteredCompanies.map(c => c.latitude);
       const lons = filteredCompanies.map(c => c.longitude);
       
@@ -119,46 +142,42 @@ export default function MapScreen() {
 
   const handleRegionChangeComplete = (newRegion: Region) => {
     setRegion(newRegion);
-    if (!searchText && filters.capabilities.length === 0) {
+    if (!hasActiveFilters()) {
       setShowSearchArea(true);
     }
   };
 
   const handleSearchInArea = () => {
     setShowSearchArea(false);
-    // In real app, this would fetch companies in the new region
     console.log('Searching in area:', region);
   };
 
   const handleApplyFilters = (newFilters: FilterOptions) => {
     setFilters(newFilters);
     setFilterModalVisible(false);
-    // Zoom to show filtered results after a short delay
     setTimeout(zoomToFilteredResults, 300);
   };
 
   const handleSearchChange = (text: string) => {
     setSearchText(text);
-    // Auto-zoom to results when search is cleared or after typing
     if (text === '' || text.length > 2) {
       setTimeout(zoomToFilteredResults, 500);
     }
   };
 
   const getMarkerColor = (company: Company) => {
-    // Highlight searched companies differently
     if (searchText && company.name.toLowerCase().includes(searchText.toLowerCase())) {
-      return Colors.warning; // Orange for search matches
+      return Colors.warning;
     }
     return company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
   };
 
-  const clearSearch = () => {
+  const clearFilters = () => {
     setSearchText('');
     setFilters({
       capabilities: [],
       distance: 'All',
-      verificationStatus: 'all',
+      verificationStatus: 'All',
     });
     mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
   };
@@ -172,13 +191,22 @@ export default function MapScreen() {
         onFilter={() => setFilterModalVisible(true)}
       />
       
-      {/* Results counter */}
-      {(searchText || filters.capabilities.length > 0) && (
-        <View style={styles.resultsBar}>
-          <Text style={styles.resultsText}>
-            {filteredCompanies.length} companies found
-          </Text>
-          <TouchableOpacity onPress={clearSearch}>
+      {/* Filter indicator bar */}
+      {hasActiveFilters() && (
+        <View style={styles.filterBar}>
+          <View style={styles.filterInfo}>
+            <Text style={styles.filterText}>
+              {filteredCompanies.length} companies
+            </Text>
+            {getActiveFilterCount() > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>
+                  {getActiveFilterCount()} filters
+                </Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity onPress={clearFilters}>
             <Text style={styles.clearText}>Clear</Text>
           </TouchableOpacity>
         </View>
@@ -213,6 +241,12 @@ export default function MapScreen() {
                     <Text key={index} style={styles.calloutSector}>{sector}</Text>
                   ))}
                 </View>
+                {company.verificationStatus === 'verified' && (
+                  <View style={styles.verifiedIndicator}>
+                    <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                )}
               </View>
             </Callout>
           </Marker>
@@ -224,11 +258,14 @@ export default function MapScreen() {
         <View style={styles.noResultsOverlay}>
           <Ionicons name="search" size={48} color={Colors.black50} />
           <Text style={styles.noResultsText}>No companies found</Text>
-          <Text style={styles.noResultsSubText}>Try adjusting your search or filters</Text>
+          <Text style={styles.noResultsSubText}>Try adjusting your filters</Text>
+          <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+            <Text style={styles.clearButtonText}>Clear Filters</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {showSearchArea && (
+      {showSearchArea && !hasActiveFilters() && (
         <TouchableOpacity
           style={styles.searchAreaButton}
           onPress={handleSearchInArea}
@@ -290,14 +327,14 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  resultsBar: {
+  filterBar: {
     position: 'absolute',
     top: 60,
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -309,8 +346,23 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  resultsText: {
+  filterInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterText: {
     fontSize: 14,
+    color: Colors.text,
+  },
+  filterBadge: {
+    backgroundColor: Colors.orange[400],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  filterBadgeText: {
+    fontSize: 12,
     color: Colors.text,
   },
   clearText: {
@@ -336,6 +388,17 @@ const styles = StyleSheet.create({
     color: Colors.black50,
     marginTop: 8,
   },
+  clearButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+  },
+  clearButtonText: {
+    color: Colors.white,
+    fontWeight: '600',
+  },
   callout: {
     width: 200,
   },
@@ -356,6 +419,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+    marginBottom: 4,
   },
   calloutSector: {
     fontSize: 10,
@@ -364,6 +428,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  verifiedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   searchAreaButton: {
     position: 'absolute',

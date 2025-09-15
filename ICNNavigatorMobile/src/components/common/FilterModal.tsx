@@ -9,53 +9,74 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import FilterDropdown from './FilterDropdown';
 import { Colors, Spacing } from '../../constants/colors';
-
-interface FilterModalProps {
-  visible: boolean;
-  onClose: () => void;
-  onApply: (filters: FilterOptions) => void;
-  currentFilters?: FilterOptions;
-}
 
 export interface FilterOptions {
   capabilities: string[];
   distance: string;
-  verificationStatus: 'all' | 'verified' | 'unverified';
+  verificationStatus: string;
 }
 
-const CAPABILITY_TYPES = ['All', 'Service Provider', 'Item Supplier', 'Manufacturer', 'Retailer'];
-const DISTANCES = ['All', '1km', '5km', '10km', '50km'];
+const CAPABILITY_OPTIONS = [
+  'Service Provider',
+  'Item Supplier',
+  'Manufacturer',
+  'Retailer',
+  'Consulting',
+  'Engineering',
+  'Technology',
+  'Construction',
+];
+
+const DISTANCE_OPTIONS = [
+  'within 500m',
+  '1km',
+  '5km',
+  '10km',
+  '25km',
+  '50km',
+];
+
+const VERIFICATION_OPTIONS = [
+  'Verified',
+  'Unverified',
+];
 
 export default function FilterModal({ 
   visible, 
   onClose, 
   onApply,
   currentFilters 
-}: FilterModalProps) {
-  const [selectedCapability, setSelectedCapability] = useState(
-    currentFilters?.capabilities?.[0] || 'All'
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onApply: (filters: FilterOptions) => void;
+  currentFilters?: FilterOptions;
+}) {
+  const [capabilities, setCapabilities] = useState<string[]>(
+    currentFilters?.capabilities || []
   );
-  const [selectedDistance, setSelectedDistance] = useState(
+  const [distance, setDistance] = useState<string>(
     currentFilters?.distance || 'All'
   );
-  const [verificationStatus, setVerificationStatus] = useState<'all' | 'verified' | 'unverified'>(
-    currentFilters?.verificationStatus || 'all'
+  const [verificationStatus, setVerificationStatus] = useState<string>(
+    currentFilters?.verificationStatus || 'All'
   );
 
-  const handleReset = () => {
-    setSelectedCapability('All');
-    setSelectedDistance('All');
-    setVerificationStatus('all');
-  };
-
-  const handleApply = () => {
+  const handleApplyAll = () => {
     onApply({
-      capabilities: selectedCapability === 'All' ? [] : [selectedCapability],
-      distance: selectedDistance,
+      capabilities: capabilities,
+      distance: distance,
       verificationStatus: verificationStatus,
     });
     onClose();
+  };
+
+  const handleReset = () => {
+    setCapabilities([]);
+    setDistance('All');
+    setVerificationStatus('All');
   };
 
   return (
@@ -68,95 +89,59 @@ export default function FilterModal({
       <View style={styles.container}>
         <SafeAreaView style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Filter</Text>
+            <Text style={styles.title}>Filters</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Capability types</Text>
-              <View style={styles.chips}>
-                {CAPABILITY_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[
-                      styles.chip,
-                      selectedCapability === type && styles.chipSelected,
-                    ]}
-                    onPress={() => setSelectedCapability(type)}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        selectedCapability === type && styles.chipTextSelected,
-                      ]}
-                    >
-                      {type}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+          <ScrollView 
+            style={styles.body}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Multi-select for capabilities */}
+            <FilterDropdown
+              title="Capability Filter"
+              options={CAPABILITY_OPTIONS}
+              selected={capabilities}
+              onApply={(selected) => setCapabilities(selected as string[])}
+              showLimit={4}
+              multiSelect={true}
+            />
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Distance</Text>
-              <View style={styles.chips}>
-                {DISTANCES.map((distance) => (
-                  <TouchableOpacity
-                    key={distance}
-                    style={[
-                      styles.chip,
-                      selectedDistance === distance && styles.chipSelected,
-                    ]}
-                    onPress={() => setSelectedDistance(distance)}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        selectedDistance === distance && styles.chipTextSelected,
-                      ]}
-                    >
-                      {distance}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+            {/* Single-select for distance */}
+            <FilterDropdown
+              title="Distance Filter"
+              options={DISTANCE_OPTIONS}
+              selected={distance}
+              onApply={(selected) => setDistance(selected as string)}
+              showLimit={4}
+              multiSelect={false}
+            />
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Verification Status</Text>
-              <View style={styles.chips}>
-                {['all', 'verified', 'unverified'].map((status) => (
-                  <TouchableOpacity
-                    key={status}
-                    style={[
-                      styles.chip,
-                      verificationStatus === status && styles.chipSelected,
-                    ]}
-                    onPress={() => setVerificationStatus(status as any)}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        verificationStatus === status && styles.chipTextSelected,
-                      ]}
-                    >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+            {/* Single-select for verification */}
+            <FilterDropdown
+              title="Verification Status"
+              options={VERIFICATION_OPTIONS}
+              selected={verificationStatus}
+              onApply={(selected) => setVerificationStatus(selected as string)}
+              showLimit={4}
+              multiSelect={false}
+            />
           </ScrollView>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-              <Text style={styles.resetText}>Reset</Text>
+            <TouchableOpacity 
+              style={styles.resetButton} 
+              onPress={handleReset}
+            >
+              <Text style={styles.resetText}>Reset All</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-              <Text style={styles.applyText}>Apply</Text>
+            <TouchableOpacity 
+              style={styles.applyButton} 
+              onPress={handleApplyAll}
+            >
+              <Text style={styles.applyText}>Apply Filters</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -172,7 +157,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   content: {
-    backgroundColor: Colors.white,
+    backgroundColor: '#F5F5F5',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -182,6 +167,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: Spacing.lg,
+    backgroundColor: Colors.white,
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
   },
@@ -190,42 +176,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
   },
-  section: {
+  body: {
     padding: Spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.black20,
-    backgroundColor: Colors.white,
-  },
-  chipSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  chipText: {
-    fontSize: 14,
-    color: Colors.text,
-  },
-  chipTextSelected: {
-    color: Colors.white,
   },
   footer: {
     flexDirection: 'row',
     padding: Spacing.lg,
+    backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.black20,
     gap: Spacing.md,
@@ -233,7 +190,7 @@ const styles = StyleSheet.create({
   resetButton: {
     flex: 1,
     padding: 14,
-    borderRadius: 25,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: Colors.primary,
     alignItems: 'center',
@@ -246,7 +203,7 @@ const styles = StyleSheet.create({
   applyButton: {
     flex: 1,
     padding: 14,
-    borderRadius: 25,
+    borderRadius: 8,
     backgroundColor: Colors.primary,
     alignItems: 'center',
   },
