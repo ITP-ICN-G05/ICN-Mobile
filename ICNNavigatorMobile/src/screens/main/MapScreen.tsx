@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
-import SearchBar from '../../components/common/SearchBar';
+import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import FilterModal, { FilterOptions } from '../../components/common/FilterModal';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
@@ -140,6 +140,25 @@ export default function MapScreen() {
     }, 500);
   };
 
+  // New handler for company selection from dropdown
+  const handleCompanySelection = (company: Company) => {
+    // Zoom to selected company with closer view
+    mapRef.current?.animateToRegion({
+      latitude: company.latitude,
+      longitude: company.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 500);
+    
+    // Show company details
+    setSelectedCompany(company);
+    
+    // Clear search text after short delay
+    setTimeout(() => {
+      setSearchText('');
+    }, 1000);
+  };
+
   const handleRegionChangeComplete = (newRegion: Region) => {
     setRegion(newRegion);
     if (!hasActiveFilters()) {
@@ -184,11 +203,13 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <SearchBar
+      <SearchBarWithDropdown
         value={searchText}
         onChangeText={handleSearchChange}
-        placeholder="Search companies on map..."
+        onSelectCompany={handleCompanySelection}
         onFilter={() => setFilterModalVisible(true)}
+        companies={mockCompanies}
+        placeholder="Search companies on map..."
       />
       
       {/* Filter indicator bar */}
