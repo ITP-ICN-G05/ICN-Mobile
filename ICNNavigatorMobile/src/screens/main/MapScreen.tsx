@@ -21,8 +21,7 @@ export default function MapScreen() {
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [showSearchArea, setShowSearchArea] = useState(false);
 
-
-  // Filter companies based on search text
+  // Filter companies based on search text only
   const filteredCompanies = useMemo(() => {
     let filtered = [...mockCompanies];
 
@@ -164,6 +163,12 @@ export default function MapScreen() {
                     <Text key={index} style={styles.calloutSector}>{sector}</Text>
                   ))}
                 </View>
+                {company.verificationStatus === 'verified' && (
+                  <View style={styles.verifiedIndicator}>
+                    <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                )}
               </View>
             </Callout>
           </Marker>
@@ -171,15 +176,15 @@ export default function MapScreen() {
       </MapView>
 
       {/* No results overlay */}
-      {filteredCompanies.length === 0 && (
+      {filteredCompanies.length === 0 && searchText && (
         <View style={styles.noResultsOverlay}>
           <Ionicons name="search" size={48} color={Colors.black50} />
           <Text style={styles.noResultsText}>No companies found</Text>
-          <Text style={styles.noResultsSubText}>Try adjusting your search or filters</Text>
+          <Text style={styles.noResultsSubText}>Try adjusting your search</Text>
         </View>
       )}
 
-      {showSearchArea && (
+      {showSearchArea && !searchText && (
         <TouchableOpacity
           style={styles.searchAreaButton}
           onPress={handleSearchInArea}
@@ -300,6 +305,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+    marginBottom: 4,
   },
   calloutSector: {
     fontSize: 10,
@@ -308,6 +314,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  verifiedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   searchAreaButton: {
     position: 'absolute',
