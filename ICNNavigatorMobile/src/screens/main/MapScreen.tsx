@@ -147,7 +147,14 @@ export default function MapScreen() {
 
   // Navigate to company detail
   const navigateToDetail = (company: Company) => {
+    console.log('Navigating to detail for:', company.name); // Debug log
     navigation.navigate('CompanyDetail', { company });
+  };
+
+  // Handle callout press (alternative approach)
+  const handleCalloutPress = (company: Company) => {
+    console.log('Callout pressed for:', company.name); // Debug log
+    navigateToDetail(company);
   };
 
   // Handler for company selection from dropdown
@@ -270,30 +277,46 @@ export default function MapScreen() {
               latitude: company.latitude,
               longitude: company.longitude,
             }}
-            onPress={() => handleMarkerPress(company)}
+            onPress={() => {
+              console.log('Marker pressed:', company.name); // Debug log
+              handleMarkerPress(company);
+            }}
+            onCalloutPress={() => {
+              console.log('Callout pressed:', company.name); // Debug log
+              handleCalloutPress(company);
+            }}
             pinColor={getMarkerColor(company)}
+            tracksViewChanges={false}
           >
-            <Callout style={styles.callout}>
-              <TouchableOpacity onPress={() => navigateToDetail(company)}>
-                <View style={styles.calloutContent}>
-                  <Text style={styles.calloutTitle}>{company.name}</Text>
-                  <Text style={styles.calloutAddress}>{company.address}</Text>
-                  <View style={styles.calloutSectors}>
-                    {company.keySectors.map((sector, index) => (
-                      <Text key={index} style={styles.calloutSector}>{sector}</Text>
-                    ))}
+            <Callout 
+              style={styles.callout}
+              onPress={() => {
+                console.log('Callout onPress:', company.name); // Alternative method
+                navigateToDetail(company);
+              }}
+              tooltip={false}
+            >
+              <View style={styles.calloutContent}>
+                <Text style={styles.calloutTitle}>{company.name}</Text>
+                <Text style={styles.calloutAddress}>{company.address}</Text>
+                <View style={styles.calloutSectors}>
+                  {company.keySectors.map((sector, index) => (
+                    <Text key={index} style={styles.calloutSector}>{sector}</Text>
+                  ))}
+                </View>
+                {company.verificationStatus === 'verified' && (
+                  <View style={styles.verifiedIndicator}>
+                    <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
+                    <Text style={styles.verifiedText}>Verified</Text>
                   </View>
-                  {company.verificationStatus === 'verified' && (
-                    <View style={styles.verifiedIndicator}>
-                      <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
-                      <Text style={styles.verifiedText}>Verified</Text>
-                    </View>
-                  )}
-                  <View style={styles.calloutButton}>
-                    <Text style={styles.calloutButtonText}>View Details →</Text>
+                )}
+                <View style={styles.calloutButton}>
+                  <View style={styles.calloutButtonInner}>
+                    <Ionicons name="information-circle-outline" size={14} color={Colors.primary} />
+                    <Text style={styles.calloutButtonText}>Tap to View Details</Text>
                   </View>
                 </View>
-              </TouchableOpacity>
+              </View>
             </Callout>
           </Marker>
         ))}
@@ -497,6 +520,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.black20,
+    alignItems: 'center',
+  },
+  calloutButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.orange[400],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   calloutButtonText: {
     fontSize: 12,
