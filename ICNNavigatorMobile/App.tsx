@@ -6,17 +6,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import MapScreen from './src/screens/main/MapScreen';
+import CompaniesScreen from './src/screens/main/CompaniesScreen';
 import { View, Text } from 'react-native';
 import { Colors } from './src/constants/colors';
-
-// Placeholder screens
-function CompaniesScreen() {
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>Companies Screen</Text>
-    </View>
-  );
-}
 
 function ProfileScreen() {
   return (
