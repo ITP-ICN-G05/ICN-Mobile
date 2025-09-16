@@ -5,6 +5,8 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import AuthNavigator from './AuthNavigator';
 import MainNavigator from './MainNavigator';
+import CompanyDetailScreen from '../screens/main/CompanyDetailScreen';
+
 
 const Stack = createNativeStackNavigator();
 
