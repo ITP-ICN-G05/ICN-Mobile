@@ -2,7 +2,8 @@ import React, { useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
-import SearchBar from '../../components/common/SearchBar';
+import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
+import FilterModal, { FilterOptions } from '../../components/common/FilterModal';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { mockCompanies } from '../../data/mockCompanies';
@@ -20,6 +21,114 @@ export default function MapScreen() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [showSearchArea, setShowSearchArea] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
+  const [filters, setFilters] = useState<FilterOptions>({
+    capabilities: [],
+    distance: 'All',
+    verificationStatus: 'All',
+  });
+
+  // Filter companies based on search text and filters
+  const filteredCompanies = useMemo(() => {
+    let filtered = [...mockCompanies];
+
+    // Apply search text filter
+    if (searchText) {
+      filtered = filtered.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.address.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.keySectors.some(sector => 
+          sector.toLowerCase().includes(searchText.toLowerCase())
+        )
+      );
+    }
+
+    // Apply capability filter (multi-select)
+    if (filters.capabilities.length > 0) {
+      filtered = filtered.filter(company =>
+        filters.capabilities.some(capability => 
+          company.keySectors.includes(capability) ||
+          company.keySectors.some(sector => 
+            sector.toLowerCase().includes(capability.toLowerCase())
+          )
+        )
+      );
+    }
+
+    // Apply verification filter (single-select)
+    if (filters.verificationStatus !== 'All') {
+      const statusToCheck = filters.verificationStatus.toLowerCase();
+      filtered = filtered.filter(company =>
+        company.verificationStatus === statusToCheck
+      );
+    }
+
+    // Apply distance filter (single-select)
+    if (filters.distance !== 'All' && region) {
+      let maxDistance = 50; // default max
+      
+      // Parse distance string
+      if (filters.distance.includes('500m')) {
+        maxDistance = 0.5;
+      } else if (filters.distance.includes('km')) {
+        maxDistance = parseInt(filters.distance);
+      }
+      
+      const kmToDegrees = maxDistance / 111; // Rough conversion
+      
+      filtered = filtered.filter(company => {
+        const latDiff = Math.abs(company.latitude - region.latitude);
+        const lonDiff = Math.abs(company.longitude - region.longitude);
+        const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
+        return distance <= kmToDegrees;
+      });
+    }
+
+    return filtered;
+  }, [searchText, filters, region]);
+
+  const hasActiveFilters = () => {
+    return filters.capabilities.length > 0 || 
+         filters.distance !== 'All' || 
+         filters.verificationStatus !== 'All';
+  };
+
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (filters.capabilities.length > 0) count++;
+    if (filters.distance !== 'All') count++;
+    if (filters.verificationStatus !== 'All') count++;
+    return count;
+  };
+
+  const zoomToFilteredResults = () => {
+    if (filteredCompanies.length === 0) return;
+
+    if (filteredCompanies.length === 1) {
+      mapRef.current?.animateToRegion({
+        latitude: filteredCompanies[0].latitude,
+        longitude: filteredCompanies[0].longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 500);
+    } else {
+      const lats = filteredCompanies.map(c => c.latitude);
+      const lons = filteredCompanies.map(c => c.longitude);
+      
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLon = Math.min(...lons);
+      const maxLon = Math.max(...lons);
+      
+      mapRef.current?.animateToRegion({
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLon + maxLon) / 2,
+        latitudeDelta: (maxLat - minLat) * 1.5,
+        longitudeDelta: (maxLon - minLon) * 1.5,
+      }, 500);
+    }
+  };
 
   // Filter companies based on search text only
   const filteredCompanies = useMemo(() => {
@@ -72,6 +181,7 @@ export default function MapScreen() {
 
   const handleMarkerPress = (company: Company) => {
     setSelectedCompany(company);
+    setIsFromDropdownSelection(false);
     mapRef.current?.animateToRegion({
       latitude: company.latitude,
       longitude: company.longitude,
@@ -80,55 +190,112 @@ export default function MapScreen() {
     }, 500);
   };
 
+  // Handler for company selection from dropdown
+  const handleCompanySelection = (company: Company) => {
+    // Set flag to hide filter bar
+    setIsFromDropdownSelection(true);
+    
+    // Zoom to selected company with closer view
+    mapRef.current?.animateToRegion({
+      latitude: company.latitude,
+      longitude: company.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    }, 500);
+    
+    // Show company details
+    setSelectedCompany(company);
+    
+    // Clear search text after short delay
+    setTimeout(() => {
+      setSearchText('');
+      setIsFromDropdownSelection(false);
+    }, 1500);
+  };
+
   const handleRegionChangeComplete = (newRegion: Region) => {
     setRegion(newRegion);
-    if (!searchText) {
+
+    if (!hasActiveFilters()) {
+
       setShowSearchArea(true);
     }
   };
 
   const handleSearchInArea = () => {
     setShowSearchArea(false);
-    // In real app, this would fetch companies in the new region
+
     console.log('Searching in area:', region);
+  };
+
+  const handleApplyFilters = (newFilters: FilterOptions) => {
+    setFilters(newFilters);
+    setFilterModalVisible(false);
+    setTimeout(zoomToFilteredResults, 300);
   };
 
   const handleSearchChange = (text: string) => {
     setSearchText(text);
-    // Auto-zoom to results when search is cleared or after typing
+    setIsFromDropdownSelection(false);
+
     if (text === '' || text.length > 2) {
       setTimeout(zoomToFilteredResults, 500);
     }
   };
 
   const getMarkerColor = (company: Company) => {
-    // Highlight searched companies differently
+
     if (searchText && company.name.toLowerCase().includes(searchText.toLowerCase())) {
-      return Colors.warning; // Orange for search matches
+      return Colors.warning;
+
     }
     return company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
   };
 
-  const clearSearch = () => {
-    setSearchText('');
+
+  const clearFilters = () => {
+    setIsFromDropdownSelection(false);
+    setFilters({
+      capabilities: [],
+      distance: 'All',
+      verificationStatus: 'All',
+    });
     mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
   };
 
+  // Determine if filter bar should be shown
+  const shouldShowFilterBar = hasActiveFilters() && !isFromDropdownSelection;
+
+
   return (
     <View style={styles.container}>
-      <SearchBar
+      <SearchBarWithDropdown
         value={searchText}
         onChangeText={handleSearchChange}
+
+        onSelectCompany={handleCompanySelection}
+        onFilter={() => setFilterModalVisible(true)}
+        companies={mockCompanies}
         placeholder="Search companies on map..."
       />
       
-      {/* Results counter */}
-      {searchText && (
-        <View style={styles.resultsBar}>
-          <Text style={styles.resultsText}>
-            {filteredCompanies.length} companies found
-          </Text>
-          <TouchableOpacity onPress={clearSearch}>
+      {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
+      {shouldShowFilterBar && (
+        <View style={styles.filterBar}>
+          <View style={styles.filterInfo}>
+            <Text style={styles.filterText}>
+              {filteredCompanies.length} companies
+            </Text>
+            {getActiveFilterCount() > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>
+                  {getActiveFilterCount()} filters
+                </Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity onPress={clearFilters}>
+
             <Text style={styles.clearText}>Clear</Text>
           </TouchableOpacity>
         </View>
@@ -176,15 +343,20 @@ export default function MapScreen() {
       </MapView>
 
       {/* No results overlay */}
-      {filteredCompanies.length === 0 && searchText && (
+
+      {filteredCompanies.length === 0 && (
         <View style={styles.noResultsOverlay}>
           <Ionicons name="search" size={48} color={Colors.black50} />
           <Text style={styles.noResultsText}>No companies found</Text>
-          <Text style={styles.noResultsSubText}>Try adjusting your search</Text>
+          <Text style={styles.noResultsSubText}>Try adjusting your filters</Text>
+          <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+            <Text style={styles.clearButtonText}>Clear Filters</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {showSearchArea && !searchText && (
+      {showSearchArea && !hasActiveFilters() && (
+
         <TouchableOpacity
           style={styles.searchAreaButton}
           onPress={handleSearchInArea}
@@ -228,6 +400,13 @@ export default function MapScreen() {
           )}
         </View>
       )}
+      
+      <FilterModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
+        onApply={handleApplyFilters}
+        currentFilters={filters}
+      />
     </View>
   );
 }
@@ -239,14 +418,18 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  resultsBar: {
+
+  filterBar: {
     position: 'absolute',
-    top: 60,
+    top: 100,  // Changed from 60 to 100 to position it lower
+
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+
+    paddingVertical: 10,
+
     borderRadius: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -258,10 +441,27 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  resultsText: {
+
+  filterInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterText: {
     fontSize: 14,
     color: Colors.text,
   },
+  filterBadge: {
+    backgroundColor: Colors.orange[400],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  filterBadgeText: {
+    fontSize: 12,
+    color: Colors.text,
+  },
+
   clearText: {
     fontSize: 14,
     color: Colors.primary,
@@ -285,6 +485,19 @@ const styles = StyleSheet.create({
     color: Colors.black50,
     marginTop: 8,
   },
+
+  clearButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+  },
+  clearButtonText: {
+    color: Colors.white,
+    fontWeight: '600',
+  },
+
   callout: {
     width: 200,
   },

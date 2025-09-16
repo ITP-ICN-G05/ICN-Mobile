@@ -87,7 +87,7 @@ reinstall:
 # Fix Expo dependencies and versions
 fix-expo:
 	@echo "🔧 Fixing Expo dependencies and versions..."
-	docker-compose exec icn-mobile-dev bash -c "cd ICNNavigatorMobile && npx expo install --fix --legacy-peer-deps"
+	docker-compose exec icn-mobile-dev bash -c "cd ICNNavigatorMobile && npx expo install --fix -- --legacy-peer-deps"
 
 # Clean install with legacy peer deps
 clean-install:
