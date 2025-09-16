@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface SignInFormProps {
   onForgotPassword: () => void;
@@ -24,7 +25,7 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
       {/* Email Input */}
       <View style={styles.inputContainer}>
         <View style={styles.labelContainer}>
-          <Image source={require('../../../assets/icons/Mail.png')} style={styles.icon} />
+          <MaterialIcons name="email" size={16} color="#333" style={styles.icon} />
           <Text style={styles.label}>Email</Text>
         </View>
         <TextInput
@@ -41,7 +42,7 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
       {/* Password Input */}
       <View style={styles.inputContainer}>
         <View style={styles.labelContainer}>
-          <Image source={require('../../../assets/icons/Lock.png')} style={styles.icon} />
+          <MaterialIcons name="lock" size={16} color="#333" style={styles.icon} />
           <Text style={styles.label}>Password</Text>
         </View>
         <View style={styles.passwordContainer}>
@@ -57,12 +58,10 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
             style={styles.eyeIcon}
             onPress={togglePasswordVisibility}
           >
-            <Image 
-              source={showPassword 
-                ? require('../../../assets/icons/Eye.png') 
-                : require('../../../assets/icons/EyeHide.png')
-              } 
-              style={styles.eyeIconImage} 
+            <MaterialIcons 
+              name={showPassword ? "visibility" : "visibility-off"} 
+              size={20} 
+              color="#666" 
             />
           </TouchableOpacity>
         </View>
@@ -95,10 +94,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   icon: {
-    width: 16,
-    height: 16,
     marginRight: 8,
-    tintColor: '#333',
   },
   label: {
     fontSize: 14,
@@ -132,11 +128,6 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     paddingRight: 15,
-  },
-  eyeIconImage: {
-    width: 20,
-    height: 20,
-    tintColor: '#666',
   },
   signInButton: {
     backgroundColor: '#1B3E6F',

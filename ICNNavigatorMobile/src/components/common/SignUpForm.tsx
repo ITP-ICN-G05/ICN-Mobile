@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface SignUpFormProps {
   onAlreadyHaveAccount: () => void;
@@ -31,7 +32,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       {/* User Name Input */}
       <View style={styles.inputContainer}>
         <View style={styles.labelContainer}>
-          <Image source={require('../../../assets/icons/Users.png')} style={styles.icon} />
+          <MaterialIcons name="person" size={16} color="#333" style={styles.icon} />
           <Text style={styles.label}>User Name</Text>
         </View>
         <TextInput
@@ -47,7 +48,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       {/* Email Input */}
       <View style={styles.inputContainer}>
         <View style={styles.labelContainer}>
-          <Image source={require('../../../assets/icons/Mail.png')} style={styles.icon} />
+          <MaterialIcons name="email" size={16} color="#333" style={styles.icon} />
           <Text style={styles.label}>Email</Text>
         </View>
         <TextInput
@@ -64,7 +65,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       {/* Password Input */}
       <View style={styles.inputContainer}>
         <View style={styles.labelContainer}>
-          <Image source={require('../../../assets/icons/Lock.png')} style={styles.icon} />
+          <MaterialIcons name="lock" size={16} color="#333" style={styles.icon} />
           <Text style={styles.label}>Password</Text>
         </View>
         <View style={styles.passwordContainer}>
@@ -80,12 +81,10 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
             style={styles.eyeIcon}
             onPress={togglePasswordVisibility}
           >
-            <Image 
-              source={showPassword 
-                ? require('../../../assets/icons/Eye.png') 
-                : require('../../../assets/icons/EyeHide.png')
-              } 
-              style={styles.eyeIconImage} 
+            <MaterialIcons 
+              name={showPassword ? "visibility" : "visibility-off"} 
+              size={20} 
+              color="#666" 
             />
           </TouchableOpacity>
         </View>
@@ -94,7 +93,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       {/* Confirm Password Input */}
       <View style={styles.inputContainer}>
         <View style={styles.labelContainer}>
-          <Image source={require('../../../assets/icons/Lock.png')} style={styles.icon} />
+          <MaterialIcons name="lock" size={16} color="#333" style={styles.icon} />
           <Text style={styles.label}>Confirm Password</Text>
         </View>
         <View style={styles.passwordContainer}>
@@ -110,12 +109,10 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
             style={styles.eyeIcon}
             onPress={toggleConfirmPasswordVisibility}
           >
-            <Image 
-              source={showConfirmPassword 
-                ? require('../../../assets/icons/Eye.png') 
-                : require('../../../assets/icons/EyeHide.png')
-              } 
-              style={styles.eyeIconImage} 
+            <MaterialIcons 
+              name={showConfirmPassword ? "visibility" : "visibility-off"} 
+              size={20} 
+              color="#666" 
             />
           </TouchableOpacity>
         </View>
@@ -151,10 +148,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   icon: {
-    width: 16,
-    height: 16,
     marginRight: 8,
-    tintColor: '#333',
   },
   label: {
     fontSize: 14,
@@ -188,11 +182,6 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     paddingRight: 15,
-  },
-  eyeIconImage: {
-    width: 20,
-    height: 20,
-    tintColor: '#666',
   },
   signUpButton: {
     backgroundColor: '#1B3E6F',
