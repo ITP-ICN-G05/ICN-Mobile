@@ -18,7 +18,12 @@ export default function CompanyCard({
   isBookmarked = false 
 }: CompanyCardProps) {
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity 
+      style={styles.container} 
+      onPress={onPress} 
+      activeOpacity={0.9}
+      testID="company-card"
+    >
       <View style={styles.header}>
         <View style={styles.avatarContainer}>
           <Text style={styles.avatarText}>
@@ -30,11 +35,16 @@ export default function CompanyCard({
           <Text style={styles.address} numberOfLines={1}>{company.address}</Text>
         </View>
         {onBookmark && (
-          <TouchableOpacity onPress={onBookmark} style={styles.bookmarkButton}>
+          <TouchableOpacity 
+            onPress={onBookmark} 
+            style={styles.bookmarkButton}
+            testID="bookmark-button"
+          >
             <Ionicons 
               name={isBookmarked ? 'bookmark' : 'bookmark-outline'} 
               size={24} 
               color={Colors.primary}
+              testID={isBookmarked ? 'bookmark-icon-filled' : 'bookmark-icon-outline'}
             />
           </TouchableOpacity>
         )}

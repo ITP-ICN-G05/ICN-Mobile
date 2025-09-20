@@ -26,10 +26,17 @@ export default function SearchBar({
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={Colors.black50}
+          testID="search-input"
+          accessibilityLabel="Search input"
         />
       </View>
       {onFilter && (
-        <TouchableOpacity style={styles.filterButton} onPress={onFilter}>
+        <TouchableOpacity 
+          style={styles.filterButton} 
+          onPress={onFilter}
+          testID="filter-button"
+          accessibilityLabel="Filter companies"
+        >
           <Ionicons name="filter" size={24} color={Colors.white} />
         </TouchableOpacity>
       )}
