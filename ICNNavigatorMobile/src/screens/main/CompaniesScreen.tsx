@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import SearchBar from '../../components/common/SearchBar';
 import CompanyCard from '../../components/common/CompanyCard';
 import FilterModal, { FilterOptions } from '../../components/common/FilterModal';
@@ -26,7 +27,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function CompaniesScreen({ navigation }: any) {
+export default function CompaniesScreen() {
+  // Navigation hook
+  const navigation = useNavigation<any>();
+  
   // State management
   const [searchText, setSearchText] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
@@ -142,7 +146,6 @@ export default function CompaniesScreen({ navigation }: any) {
   const handleCompanyPress = (company: Company) => {
     // Navigate to company detail screen
     navigation.navigate('CompanyDetail', { company });
-    console.log('Navigate to company:', company.name);
   };
 
   // Handle refresh

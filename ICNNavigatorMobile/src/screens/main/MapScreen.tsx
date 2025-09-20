@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import FilterModal, { FilterOptions } from '../../components/common/FilterModal';
 import { Colors, Spacing } from '../../constants/colors';
@@ -16,6 +17,9 @@ const MELBOURNE_REGION: Region = {
 };
 
 export default function MapScreen() {
+  // Navigation hook
+  const navigation = useNavigation<any>();
+  
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -141,6 +145,18 @@ export default function MapScreen() {
     }, 500);
   };
 
+  // Navigate to company detail
+  const navigateToDetail = (company: Company) => {
+    console.log('Navigating to detail for:', company.name); // Debug log
+    navigation.navigate('CompanyDetail', { company });
+  };
+
+  // Handle callout press (alternative approach)
+  const handleCalloutPress = (company: Company) => {
+    console.log('Callout pressed for:', company.name); // Debug log
+    navigateToDetail(company);
+  };
+
   // Handler for company selection from dropdown
   const handleCompanySelection = (company: Company) => {
     // Set flag to hide filter bar
@@ -261,10 +277,25 @@ export default function MapScreen() {
               latitude: company.latitude,
               longitude: company.longitude,
             }}
-            onPress={() => handleMarkerPress(company)}
+            onPress={() => {
+              console.log('Marker pressed:', company.name); // Debug log
+              handleMarkerPress(company);
+            }}
+            onCalloutPress={() => {
+              console.log('Callout pressed:', company.name); // Debug log
+              handleCalloutPress(company);
+            }}
             pinColor={getMarkerColor(company)}
+            tracksViewChanges={false}
           >
-            <Callout style={styles.callout}>
+            <Callout 
+              style={styles.callout}
+              onPress={() => {
+                console.log('Callout onPress:', company.name); // Alternative method
+                navigateToDetail(company);
+              }}
+              tooltip={false}
+            >
               <View style={styles.calloutContent}>
                 <Text style={styles.calloutTitle}>{company.name}</Text>
                 <Text style={styles.calloutAddress}>{company.address}</Text>
@@ -279,6 +310,12 @@ export default function MapScreen() {
                     <Text style={styles.verifiedText}>Verified</Text>
                   </View>
                 )}
+                <View style={styles.calloutButton}>
+                  <View style={styles.calloutButtonInner}>
+                    <Ionicons name="information-circle-outline" size={14} color={Colors.primary} />
+                    <Text style={styles.calloutButtonText}>Tap to View Details</Text>
+                  </View>
+                </View>
               </View>
             </Callout>
           </Marker>
@@ -339,6 +376,13 @@ export default function MapScreen() {
               <Text style={styles.verifiedText}>Verified Company</Text>
             </View>
           )}
+          <TouchableOpacity 
+            style={styles.viewDetailsButton}
+            onPress={() => navigateToDetail(selectedCompany)}
+          >
+            <Text style={styles.viewDetailsButtonText}>View Full Details</Text>
+            <Ionicons name="arrow-forward" size={18} color={Colors.white} />
+          </TouchableOpacity>
         </View>
       )}
       
@@ -361,7 +405,7 @@ const styles = StyleSheet.create({
   },
   filterBar: {
     position: 'absolute',
-    top: 100,  // Changed from 60 to 100 to position it lower
+    top: 100,
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
@@ -432,7 +476,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   callout: {
-    width: 200,
+    width: 220,
   },
   calloutContent: {
     padding: 10,
@@ -465,6 +509,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+  },
+  verifiedText: {
+    fontSize: 10,
+    color: Colors.success,
+    marginLeft: 4,
+  },
+  calloutButton: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.black20,
+    alignItems: 'center',
+  },
+  calloutButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.orange[400],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  calloutButtonText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   searchAreaButton: {
     position: 'absolute',
@@ -540,6 +611,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginBottom: 12,
   },
   sectorChip: {
     backgroundColor: Colors.orange[400],
@@ -555,11 +627,21 @@ const styles = StyleSheet.create({
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginBottom: 16,
   },
-  verifiedText: {
-    fontSize: 12,
-    color: Colors.success,
-    marginLeft: 4,
+  viewDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    gap: 8,
+  },
+  viewDetailsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.white,
   },
 });
