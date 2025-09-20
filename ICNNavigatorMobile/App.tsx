@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,9 +12,12 @@ import MapScreen from './src/screens/main/MapScreen';
 import CompaniesScreen from './src/screens/main/CompaniesScreen';
 import CompanyDetailScreen from './src/screens/main/CompanyDetailScreen';
 import ProfileScreen from './src/screens/main/ProfileScreen';
+import PaymentScreen from './src/screens/main/PaymentScreen';
+import LoginSignUpResetScreen from './src/screens/main/LoginSignUpResetScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
 
 // Companies Stack Navigator
 function CompaniesStack({ navigation, route }: any) {
@@ -53,6 +55,27 @@ function MapStack({ navigation, route }: any) {
         options={{ 
           headerShown: false,
           animation: 'slide_from_bottom'
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+// Profile Stack Navigator (includes Payment)
+function ProfileStack({ navigation, route }: any) {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="ProfileMain" 
+        component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Payment" 
+        component={PaymentScreen}
+        options={{ 
+          headerShown: false,
+          animation: 'slide_from_right'
         }}
       />
     </Stack.Navigator>
@@ -109,13 +132,43 @@ function MainTabs() {
       />
       <Tab.Screen 
         name="Profile" 
-        component={ProfileScreen}
-        options={{
-          headerShown: true,
+        component={ProfileStack}
+        options={({ route }) => ({
+          headerShown: getFocusedRouteNameFromRoute(route) !== 'Payment',
           headerTitle: 'Profile',
-        }}
+          tabBarStyle: {
+            display: getFocusedRouteNameFromRoute(route) === 'Payment' ? 'none' : 'flex',
+          },
+        })}
       />
     </Tab.Navigator>
+  );
+}
+
+// Root Navigator (includes Auth and Main)
+function RootNavigator() {
+  // This is where you would check authentication status
+  // For now, we'll show the main tabs directly
+  const isAuthenticated = true; // Replace with actual auth check
+  
+  return (
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      {isAuthenticated ? (
+        <RootStack.Screen name="MainTabs" component={MainTabs} />
+      ) : (
+        <RootStack.Screen name="Auth" component={LoginSignUpResetScreen} />
+      )}
+      {/* Global Payment Modal - can be accessed from anywhere */}
+      <RootStack.Group screenOptions={{ presentation: 'modal' }}>
+        <RootStack.Screen 
+          name="PaymentModal" 
+          component={PaymentScreen}
+          options={{
+            animation: 'slide_from_bottom'
+          }}
+        />
+      </RootStack.Group>
+    </RootStack.Navigator>
   );
 }
 
@@ -124,9 +177,8 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="auto" />
-        <MainTabs />
+        <RootNavigator />
       </NavigationContainer>
     </SafeAreaProvider>
   );
-
 }
