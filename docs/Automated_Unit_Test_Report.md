@@ -21,12 +21,12 @@ This report presents the results of comprehensive automated unit testing impleme
 
 | Metric | Result |
 |--------|--------|
-| **Total Test Suites** | 7 |
-| **Total Test Cases** | 126 |
-| **Passed Tests** | 126 ✅ |
+| **Total Test Suites** | 10 |
+| **Total Test Cases** | 178 |
+| **Passed Tests** | 178 ✅ |
 | **Failed Tests** | 0 ❌ |
 | **Success Rate** | 100% |
-| **Execution Time** | 2.178 seconds |
+| **Execution Time** | 3.694 seconds |
 
 ### 🎯 Test Suite Breakdown
 
@@ -39,6 +39,8 @@ This report presents the results of comprehensive automated unit testing impleme
 | `SignInForm.test.tsx` | 22 | ✅ PASSED | 100% |
 | `SignUpForm.test.tsx` | 25 | ✅ PASSED | 100% |
 | `AuthContainer.test.tsx` | 22 | ✅ PASSED | 100% |
+| `FilterDropdown.test.tsx` | 29 | ✅ PASSED | 100% |
+| `SearchBarWithDropdown.test.tsx` | 23 | ✅ PASSED | 100% |
 
 ---
 
@@ -168,6 +170,48 @@ This report presents the results of comprehensive automated unit testing impleme
 - Form component integration with proper callback handling
 - Complete user authentication flows
 - State persistence across mode transitions
+
+### 6. Filter Component Testing
+
+#### FilterDropdown Component Testing (`FilterDropdown.test.tsx`)
+**✅ 29/29 Tests Passed**
+
+**Test Categories:**
+- **Basic Rendering (4 tests):** Component display, selection states, and multi-select indicators
+- **Dropdown Expansion (3 tests):** Open/close behavior and initial option limits
+- **Show More/Less Functionality (3 tests):** Option pagination and toggle behavior
+- **Single Select Mode (3 tests):** Single option selection and "All" handling
+- **Multi-Select Mode (5 tests):** Multiple option selection, deselection, and state management
+- **Apply Button Behavior (2 tests):** Dropdown closing and callback execution
+- **State Management (2 tests):** Temporary selections and rapid changes
+- **Edge Cases (4 tests):** Empty options, invalid selections, and boundary conditions
+- **Accessibility (2 tests):** Screen reader support and proper element identification
+
+**Key Test Scenarios:**
+- Single vs multi-select mode switching with proper state management
+- Show more/less functionality for large option lists (showLimit behavior)
+- Temporary selection state until Apply button is pressed
+- Multi-select deselection and "All" option clearing
+- Edge case handling for invalid data and empty option arrays
+
+#### SearchBarWithDropdown Component Testing (`SearchBarWithDropdown.test.tsx`)
+**✅ 23/23 Tests Passed**
+
+**Test Categories:**
+- **Basic Rendering (3 tests):** Input display, placeholder text, and value presentation
+- **Search Functionality (2 tests):** Text change callbacks and rapid input handling
+- **Company Selection Callbacks (1 test):** Callback setup verification
+- **Props and Configuration (3 tests):** Required props handling and configuration options
+- **Edge Cases (3 tests):** Long strings, special characters, and null data handling
+- **Accessibility (2 tests):** Keyboard interaction and screen reader support
+- **Company Data Structure (1 test):** Valid company data type compliance
+
+**Key Test Scenarios:**
+- Search input with custom placeholder text and value display
+- Callback integration for text changes and company selection
+- Edge case handling for empty companies array and invalid data
+- Accessibility support for keyboard navigation
+- Props validation and configuration flexibility
 
 ---
 
