@@ -57,6 +57,8 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
           <TouchableOpacity 
             style={styles.eyeIcon}
             onPress={togglePasswordVisibility}
+            testID="password-visibility-toggle"
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
           >
             <MaterialIcons 
               name={showPassword ? "visibility" : "visibility-off"} 

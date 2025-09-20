@@ -91,7 +91,7 @@ export default function FilterModal({
         <SafeAreaView style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Filters</Text>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity onPress={onClose} testID="close-button">
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
           </View>

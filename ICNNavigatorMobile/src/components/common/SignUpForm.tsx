@@ -80,6 +80,8 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           <TouchableOpacity 
             style={styles.eyeIcon}
             onPress={togglePasswordVisibility}
+            testID="password-visibility-toggle"
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
           >
             <MaterialIcons 
               name={showPassword ? "visibility" : "visibility-off"} 
@@ -99,7 +101,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         <View style={styles.passwordContainer}>
           <TextInput
             style={styles.passwordInput}
-            placeholder="Enter your password"
+            placeholder="Re-type your password"
             placeholderTextColor="#999"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
@@ -108,6 +110,8 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           <TouchableOpacity 
             style={styles.eyeIcon}
             onPress={toggleConfirmPasswordVisibility}
+            testID="confirm-password-visibility-toggle"
+            accessibilityLabel={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
           >
             <MaterialIcons 
               name={showConfirmPassword ? "visibility" : "visibility-off"} 

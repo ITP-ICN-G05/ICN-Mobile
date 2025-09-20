@@ -87,6 +87,7 @@ export default function AuthContainer() {
         <TouchableOpacity 
           style={styles.backToSignInContainer}
           onPress={() => setCurrentMode('signin')}
+          testID="back-to-signin-button"
         >
           <Text style={styles.backToSignInText}>← Back to Sign In</Text>
         </TouchableOpacity>
