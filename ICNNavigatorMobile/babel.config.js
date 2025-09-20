@@ -1,7 +1,7 @@
-module.exports = {
-  presets: ['babel-preset-expo'],
-  plugins: [
-    'react-native-worklets/plugin',
-    ...(process.env.JEST ? ['istanbul'] : []), // coverage only in tests
-  ],
+module.exports = function(api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: []
+  };
 };

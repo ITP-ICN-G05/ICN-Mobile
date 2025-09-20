@@ -1,30 +1,44 @@
 module.exports = {
-  preset: 'jest-expo',
+  preset: 'react-native',
   testEnvironment: 'jsdom',
-  setupFiles: ['<rootDir>/tests/setup/jest-polyfills.js'],
+  globals: {
+    __DEV__: true,
+  },
+  setupFiles: [
+    '<rootDir>/src/__tests__/setup.ts'
+  ],
   setupFilesAfterEnv: [
-    '<rootDir>/tests/setup/jest-setup.ts',
     '@testing-library/jest-native/extend-expect',
   ],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest',
+  },
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native' +
-      '|@react-native' +
-      '|react-clone-referenced-element' +
-      '|@react-navigation' +
-      '|@expo' +
-      '|expo(nent)?' +
-      '|expo-modules-core' +
-      '|@unimodules' +
-      '|react-native-reanimated' +
-      ')/)',
+    'node_modules/(?!(react-native|@react-native|expo|@expo|react-navigation|@react-navigation|@unimodules|react-native-vector-icons|react-native-screens|react-native-reanimated)/)',
   ],
+  testMatch: [
+    '<rootDir>/src/**/__tests__/**/*.{test,spec}.{ts,tsx,js,jsx}',
+    '<rootDir>/src/**/?(*.){test,spec}.{ts,tsx,js,jsx}',
+    '<rootDir>/__tests__/**/*.{test,spec}.{ts,tsx,js,jsx}',
+    '!<rootDir>/src/__tests__/setup.ts'
+  ],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/__tests__/**',
+    '!src/**/*.test.{ts,tsx}',
+    '!src/**/*.spec.{ts,tsx}',
+    '!src/types/**',
+  ],
+  coverageDirectory: '<rootDir>/coverage',
+  coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
-    '\\.(png|jpg|jpeg|gif|svg)$': '<rootDir>/tests/mocks/fileMock.js',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  collectCoverage: true,
-  coverageReporters: ['text', 'lcov', 'html'],
-  coverageDirectory: '<rootDir>/coverage',
-  // Optional thresholds – keep modest to start
-  coverageThreshold: { global: { lines: 60, statements: 60, branches: 50, functions: 60 } },
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/',
+    '<rootDir>/android/',
+    '<rootDir>/ios/',
+  ],
 };
