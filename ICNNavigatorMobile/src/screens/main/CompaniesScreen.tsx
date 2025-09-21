@@ -1,3 +1,4 @@
+// src/screens/main/CompaniesScreen.tsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   View, 
@@ -10,17 +11,20 @@ import {
   Animated,
   LayoutAnimation,
   Platform,
-  UIManager
+  UIManager,
+  Alert,
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import SearchBar from '../../components/common/SearchBar';
 import CompanyCard from '../../components/common/CompanyCard';
-import FilterModal, { FilterOptions } from '../../components/common/FilterModal';
+import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { mockCompanies, generateMockCompanies } from '../../data/mockCompanies';
+import { useUserTier } from '../../contexts/UserTierContext';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -30,6 +34,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 export default function CompaniesScreen() {
   // Navigation hook
   const navigation = useNavigation<any>();
+  const { currentTier, features } = useUserTier();
   
   // State management
   const [searchText, setSearchText] = useState('');
@@ -48,14 +53,14 @@ export default function CompaniesScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   
-  // Filter state
-  const [filters, setFilters] = useState<FilterOptions>({
+  // Enhanced filter state
+  const [filters, setFilters] = useState<EnhancedFilterOptions>({
     capabilities: [],
+    sectors: [],
     distance: 'All',
-    verificationStatus: 'All',
   });
 
-  // Filter and sort companies
+  // Filter and sort companies with enhanced filters
   const filteredAndSortedCompanies = useMemo(() => {
     let filtered = [...allCompanies];
 
@@ -82,12 +87,62 @@ export default function CompaniesScreen() {
       );
     }
 
-    // Apply verification filter
-    if (filters.verificationStatus !== 'All') {
-      const statusToCheck = filters.verificationStatus.toLowerCase();
+    // Apply sector filter
+    if (filters.sectors && filters.sectors.length > 0) {
       filtered = filtered.filter(company =>
-        company.verificationStatus === statusToCheck
+        filters.sectors.some(sector =>
+          company.keySectors.some(keySector =>
+            keySector.toLowerCase().includes(sector.toLowerCase())
+          )
+        )
       );
+    }
+
+    // Apply distance filter (would need actual location logic)
+    if (filters.distance !== 'All') {
+      // In a real app, this would calculate actual distances
+      // For now, just mock it
+    }
+
+    // Apply company size filter (Plus tier only)
+    if (filters.companySize && filters.companySize !== 'All' && features.canFilterBySize) {
+      filtered = filtered.filter(company => {
+        // Mock implementation - in real app, check company.companySize
+        // For demo, randomly include some companies
+        return Math.random() > 0.3;
+      });
+    }
+
+    // Apply certification filter (Plus tier only)
+    if (filters.certifications && filters.certifications.length > 0 && features.canFilterByCertifications) {
+      filtered = filtered.filter(company => {
+        // Mock implementation - in real app, check company.certifications
+        return Math.random() > 0.4;
+      });
+    }
+
+    // Apply ownership type filter (Premium tier only)
+    if (filters.ownershipType && filters.ownershipType.length > 0 && features.canFilterByDiversity) {
+      filtered = filtered.filter(company => {
+        // Mock implementation - in real app, check company.ownershipType
+        return Math.random() > 0.5;
+      });
+    }
+
+    // Apply social enterprise filter (Premium tier only)
+    if (filters.socialEnterprise && features.canFilterByDiversity) {
+      filtered = filtered.filter(company => {
+        // Mock implementation - in real app, check company.socialEnterprise
+        return Math.random() > 0.6;
+      });
+    }
+
+    // Apply Australian Disability Enterprise filter (Premium tier only)
+    if (filters.australianDisability && features.canFilterByDiversity) {
+      filtered = filtered.filter(company => {
+        // Mock implementation - in real app, check company.australianDisabilityEnterprise
+        return Math.random() > 0.7;
+      });
     }
 
     // Apply sorting
@@ -103,13 +158,13 @@ export default function CompaniesScreen() {
         });
         break;
       case 'recent':
-        // Sort by verification date or ID (simulating recent activity)
+        // Sort by ID (simulating recent activity)
         filtered.sort((a, b) => parseInt(b.id) - parseInt(a.id));
         break;
     }
 
     return filtered;
-  }, [searchText, filters, sortBy, allCompanies]);
+  }, [searchText, filters, sortBy, allCompanies, features]);
 
   // Bookmarked companies section
   const bookmarkedCompanies = useMemo(() => {
@@ -119,21 +174,73 @@ export default function CompaniesScreen() {
   // Check if filters are active
   const hasActiveFilters = () => {
     return filters.capabilities.length > 0 || 
-           filters.distance !== 'All' || 
-           filters.verificationStatus !== 'All';
+           (filters.sectors && filters.sectors.length > 0) ||
+           filters.distance !== 'All' ||
+           (filters.companySize && filters.companySize !== 'All') ||
+           (filters.certifications && filters.certifications.length > 0) ||
+           (filters.ownershipType && filters.ownershipType.length > 0) ||
+           filters.socialEnterprise ||
+           filters.australianDisability;
   };
 
   // Get active filter count
   const getActiveFilterCount = () => {
     let count = 0;
     if (filters.capabilities.length > 0) count++;
+    if (filters.sectors && filters.sectors.length > 0) count++;
     if (filters.distance !== 'All') count++;
-    if (filters.verificationStatus !== 'All') count++;
+    if (filters.companySize && filters.companySize !== 'All') count++;
+    if (filters.certifications && filters.certifications.length > 0) count++;
+    if (filters.ownershipType && filters.ownershipType.length > 0) count++;
+    if (filters.socialEnterprise) count++;
+    if (filters.australianDisability) count++;
     return count;
+  };
+
+  // Get filter badges for display
+  const getFilterBadges = () => {
+    const badges = [];
+    
+    if (filters.capabilities.length > 0) {
+      badges.push(`${filters.capabilities.length} capabilities`);
+    }
+    if (filters.sectors && filters.sectors.length > 0) {
+      badges.push(`${filters.sectors.length} sectors`);
+    }
+    if (filters.companySize && filters.companySize !== 'All') {
+      badges.push(filters.companySize);
+    }
+    if (filters.certifications && filters.certifications.length > 0) {
+      badges.push('Certified');
+    }
+    if (filters.ownershipType && filters.ownershipType.length > 0) {
+      badges.push('Diverse owned');
+    }
+    if (filters.socialEnterprise) {
+      badges.push('Social enterprise');
+    }
+    if (filters.australianDisability) {
+      badges.push('ADE');
+    }
+    
+    return badges;
   };
 
   // Toggle bookmark
   const toggleBookmark = (id: string) => {
+    // Check bookmark limit for free tier
+    if (currentTier === 'free' && !bookmarkedIds.includes(id) && bookmarkedIds.length >= 10) {
+      Alert.alert(
+        'Bookmark Limit',
+        'Free tier allows up to 10 bookmarks. Upgrade to save more companies.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: handleNavigateToPayment }
+        ]
+      );
+      return;
+    }
+    
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setBookmarkedIds(prev =>
       prev.includes(id) 
@@ -158,7 +265,7 @@ export default function CompaniesScreen() {
   }, []);
 
   // Apply filters
-  const handleApplyFilters = (newFilters: FilterOptions) => {
+  const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
     setFilters(newFilters);
     setFilterModalVisible(false);
   };
@@ -167,8 +274,8 @@ export default function CompaniesScreen() {
   const clearFilters = () => {
     setFilters({
       capabilities: [],
+      sectors: [],
       distance: 'All',
-      verificationStatus: 'All',
     });
   };
 
@@ -178,9 +285,45 @@ export default function CompaniesScreen() {
     setShowSortOptions(!showSortOptions);
   };
 
+  // Navigate to payment
+  const handleNavigateToPayment = () => {
+    navigation.navigate('Payment');
+  };
+
+  // Handle export
+  const handleExport = () => {
+    if (!features.canExportFull && features.exportLimit === 10) {
+      Alert.alert(
+        'Limited Export',
+        `Free tier allows ${features.exportLimit} exports per month. Upgrade for unlimited exports.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: handleNavigateToPayment }
+        ]
+      );
+    } else {
+      Alert.alert('Export', `Exporting ${filteredAndSortedCompanies.length} companies...`);
+    }
+  };
+
   // Render header
   const renderHeader = () => (
     <View style={styles.header}>
+      {/* Tier Indicator */}
+      <View style={styles.tierBar}>
+        <View style={[styles.tierBadge, { backgroundColor: getTierColor() }]}>
+          <Ionicons name={getTierIcon()} size={16} color={Colors.white} />
+          <Text style={styles.tierBarText}>
+            {currentTier.toUpperCase()} TIER
+          </Text>
+        </View>
+        {currentTier !== 'premium' && (
+          <TouchableOpacity onPress={handleNavigateToPayment}>
+            <Text style={styles.upgradeLink}>Upgrade →</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Stats Bar */}
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
@@ -197,7 +340,9 @@ export default function CompaniesScreen() {
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{bookmarkedIds.length}</Text>
-          <Text style={styles.statLabel}>Saved</Text>
+          <Text style={styles.statLabel}>
+            Saved {currentTier === 'free' && '(10 max)'}
+          </Text>
         </View>
       </View>
 
@@ -210,16 +355,22 @@ export default function CompaniesScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.viewToggle} 
-          onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-        >
-          <Ionicons 
-            name={viewMode === 'list' ? 'grid' : 'list'} 
-            size={20} 
-            color={Colors.primary} 
-          />
-        </TouchableOpacity>
+        <View style={styles.controlsRight}>
+          <TouchableOpacity style={styles.exportButton} onPress={handleExport}>
+            <Ionicons name="download-outline" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.viewToggle} 
+            onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+          >
+            <Ionicons 
+              name={viewMode === 'list' ? 'grid' : 'list'} 
+              size={20} 
+              color={Colors.primary} 
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Sort Options Dropdown */}
@@ -259,18 +410,17 @@ export default function CompaniesScreen() {
             <Text style={styles.activeFiltersText}>
               {getActiveFilterCount()} filter{getActiveFilterCount() > 1 ? 's' : ''} active
             </Text>
-            {filters.capabilities.length > 0 && (
-              <View style={styles.filterChip}>
-                <Text style={styles.filterChipText}>
-                  {filters.capabilities.length} capabilities
-                </Text>
-              </View>
-            )}
-            {filters.verificationStatus !== 'All' && (
-              <View style={styles.filterChip}>
-                <Text style={styles.filterChipText}>{filters.verificationStatus}</Text>
-              </View>
-            )}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterBadgesScroll}
+            >
+              {getFilterBadges().map((badge, index) => (
+                <View key={index} style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>{badge}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
           <TouchableOpacity onPress={clearFilters}>
             <Text style={styles.clearFiltersText}>Clear</Text>
@@ -315,6 +465,24 @@ export default function CompaniesScreen() {
       )}
     </View>
   );
+
+  // Get tier color
+  const getTierColor = () => {
+    switch(currentTier) {
+      case 'premium': return Colors.warning;
+      case 'plus': return Colors.primary;
+      default: return Colors.black50;
+    }
+  };
+
+  // Get tier icon
+  const getTierIcon = () => {
+    switch(currentTier) {
+      case 'premium': return 'star';
+      case 'plus': return 'star-half';
+      default: return 'star-outline';
+    }
+  };
 
   // Render empty state
   const renderEmptyState = () => (
@@ -408,11 +576,12 @@ export default function CompaniesScreen() {
         showsVerticalScrollIndicator={false}
       />
       
-      <FilterModal
+      <EnhancedFilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
         onApply={handleApplyFilters}
         currentFilters={filters}
+        onNavigateToPayment={handleNavigateToPayment}
       />
     </View>
   );
@@ -432,6 +601,32 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.white,
     marginBottom: 8,
+  },
+  tierBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Colors.orange[400],
+  },
+  tierBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  tierBarText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.white,
+  },
+  upgradeLink: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
   },
   statsBar: {
     flexDirection: 'row',
@@ -477,6 +672,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
   },
+  controlsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  exportButton: {
+    padding: 4,
+  },
   viewToggle: {
     padding: 4,
   },
@@ -510,21 +713,24 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.orange[400],
   },
   activeFiltersInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     flex: 1,
+    marginRight: 8,
   },
   activeFiltersText: {
     fontSize: 14,
     color: Colors.text,
     fontWeight: '500',
+    marginBottom: 4,
+  },
+  filterBadgesScroll: {
+    flexDirection: 'row',
   },
   filterChip: {
     backgroundColor: Colors.white,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    marginRight: 6,
   },
   filterChipText: {
     fontSize: 12,
@@ -617,7 +823,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: '600',
   },
-  // Grid view styles
   gridCard: {
     flex: 1,
     backgroundColor: Colors.white,
