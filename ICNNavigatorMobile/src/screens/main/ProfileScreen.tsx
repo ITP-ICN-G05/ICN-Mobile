@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing } from '../../constants/colors';
+import { useNavigation } from '@react-navigation/native';
 
 interface ProfileSectionProps {
   title: string;
@@ -98,6 +99,7 @@ export default function ProfileScreen() {
   const [locationServices, setLocationServices] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
+  const navigation = useNavigation<any>();
 
   // Handlers
   const handleEditProfile = () => {
@@ -187,211 +189,203 @@ export default function ProfileScreen() {
   };
 
   const handleUpgrade = () => {
-    Alert.alert(
-      'Upgrade to Premium',
-      'Unlock advanced features:\n• Unlimited searches\n• Advanced filters\n• Export capabilities\n• Priority support',
-      [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Upgrade Now', onPress: () => console.log('Navigate to upgrade screen') },
-      ]
-    );
+    navigation.navigate('Payment');
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* User Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {user.name.split(' ').map(n => n[0]).join('')}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <Ionicons name="camera" size={20} color={Colors.white} />
-            </TouchableOpacity>
+    <ScrollView 
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent}
+    >
+      {/* User Profile Card */}
+      <View style={styles.profileCard}>
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {user.name.split(' ').map(n => n[0]).join('')}
+            </Text>
           </View>
-          
-          <Text style={styles.userName}>{user.name}</Text>
-          <Text style={styles.userRole}>{user.role} at {user.company}</Text>
-          
-          <View style={styles.tierBadge}>
-            <Ionicons name="star" size={16} color={Colors.warning} />
-            <Text style={styles.tierText}>{user.tier} Member</Text>
-          </View>
-
-          <View style={styles.profileStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>47</Text>
-              <Text style={styles.statLabel}>Saved</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>152</Text>
-              <Text style={styles.statLabel}>Searches</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{user.memberSince}</Text>
-              <Text style={styles.statLabel}>Member</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
-            <Text style={styles.editProfileText}>Edit Profile</Text>
+          <TouchableOpacity style={styles.editAvatarButton}>
+            <Ionicons name="camera" size={20} color={Colors.white} />
           </TouchableOpacity>
         </View>
-
-        {/* Account Settings */}
-        <ProfileSection title="Account">
-          <SettingItem
-            icon="mail-outline"
-            title="Email"
-            value={user.email}
-            showArrow={false}
-          />
-          <SettingItem
-            icon="call-outline"
-            title="Phone"
-            value={user.phone}
-            showArrow={false}
-          />
-          <SettingItem
-            icon="key-outline"
-            title="Change Password"
-            onPress={handleChangePassword}
-          />
-          <SettingItem
-            icon="ribbon-outline"
-            title="Subscription"
-            value={
-              <View style={styles.upgradeBadge}>
-                <Text style={styles.upgradeText}>Premium</Text>
-              </View>
-            }
-            onPress={handleUpgrade}
-          />
-        </ProfileSection>
-
-        {/* Preferences */}
-        <ProfileSection title="Preferences">
-          <SettingItem
-            icon="notifications-outline"
-            title="Push Notifications"
-            isSwitch
-            switchValue={notifications}
-            onSwitchChange={setNotifications}
-          />
-          <SettingItem
-            icon="location-outline"
-            title="Location Services"
-            isSwitch
-            switchValue={locationServices}
-            onSwitchChange={setLocationServices}
-          />
-          <SettingItem
-            icon="moon-outline"
-            title="Dark Mode"
-            isSwitch
-            switchValue={darkMode}
-            onSwitchChange={setDarkMode}
-          />
-          <SettingItem
-            icon="sync-outline"
-            title="Auto-Sync Data"
-            isSwitch
-            switchValue={autoSync}
-            onSwitchChange={setAutoSync}
-          />
-        </ProfileSection>
-
-        {/* Data & Privacy */}
-        <ProfileSection title="Data & Privacy">
-          <SettingItem
-            icon="download-outline"
-            title="Export My Data"
-            onPress={handleExportData}
-          />
-          <SettingItem
-            icon="shield-checkmark-outline"
-            title="Privacy Policy"
-            onPress={handlePrivacyPolicy}
-          />
-          <SettingItem
-            icon="document-text-outline"
-            title="Terms of Service"
-            onPress={handleTermsOfService}
-          />
-          <SettingItem
-            icon="trash-outline"
-            title="Delete Account"
-            onPress={handleDeleteAccount}
-            showArrow={false}
-          />
-        </ProfileSection>
-
-        {/* Support */}
-        <ProfileSection title="Support">
-          <SettingItem
-            icon="help-circle-outline"
-            title="Help Center"
-            onPress={() => Linking.openURL('https://icnvictoria.com/help')}
-          />
-          <SettingItem
-            icon="chatbubble-outline"
-            title="Contact Support"
-            onPress={handleContactSupport}
-          />
-          <SettingItem
-            icon="star-outline"
-            title="Rate App"
-            onPress={handleRateApp}
-          />
-          <SettingItem
-            icon="share-outline"
-            title="Share App"
-            onPress={handleShareApp}
-          />
-        </ProfileSection>
-
-        {/* About */}
-        <ProfileSection title="About">
-          <SettingItem
-            icon="information-circle-outline"
-            title="App Version"
-            value="1.0.0"
-            showArrow={false}
-          />
-          <SettingItem
-            icon="business-outline"
-            title="About ICN"
-            onPress={() => Linking.openURL('https://icnvictoria.com/about')}
-          />
-          <SettingItem
-            icon="globe-outline"
-            title="Website"
-            value="icnvictoria.com"
-            onPress={() => Linking.openURL('https://icnvictoria.com')}
-          />
-        </ProfileSection>
-
-        {/* Sign Out Button */}
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
-          <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
+        
+        <Text style={styles.userName}>{user.name}</Text>
+        <Text style={styles.userRole}>{user.role} at {user.company}</Text>
+        
+        <View style={styles.tierBadge}>
+          <Ionicons name="star" size={16} color={Colors.warning} />
+          <Text style={styles.tierText}>{user.tier} Member</Text>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+
+        <View style={styles.profileStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>47</Text>
+            <Text style={styles.statLabel}>Saved</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>152</Text>
+            <Text style={styles.statLabel}>Searches</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{user.memberSince}</Text>
+            <Text style={styles.statLabel}>Member</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
+          <Text style={styles.editProfileText}>Edit Profile</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Account Settings */}
+      <ProfileSection title="Account">
+        <SettingItem
+          icon="mail-outline"
+          title="Email"
+          value={user.email}
+          showArrow={false}
+        />
+        <SettingItem
+          icon="call-outline"
+          title="Phone"
+          value={user.phone}
+          showArrow={false}
+        />
+        <SettingItem
+          icon="key-outline"
+          title="Change Password"
+          onPress={handleChangePassword}
+        />
+        <SettingItem
+          icon="ribbon-outline"
+          title="Subscription"
+          value={
+            <View style={styles.upgradeBadge}>
+              <Text style={styles.upgradeText}>Premium</Text>
+            </View>
+          }
+          onPress={handleUpgrade}
+        />
+      </ProfileSection>
+
+      {/* Preferences */}
+      <ProfileSection title="Preferences">
+        <SettingItem
+          icon="notifications-outline"
+          title="Push Notifications"
+          isSwitch
+          switchValue={notifications}
+          onSwitchChange={setNotifications}
+        />
+        <SettingItem
+          icon="location-outline"
+          title="Location Services"
+          isSwitch
+          switchValue={locationServices}
+          onSwitchChange={setLocationServices}
+        />
+        <SettingItem
+          icon="moon-outline"
+          title="Dark Mode"
+          isSwitch
+          switchValue={darkMode}
+          onSwitchChange={setDarkMode}
+        />
+        <SettingItem
+          icon="sync-outline"
+          title="Auto-Sync Data"
+          isSwitch
+          switchValue={autoSync}
+          onSwitchChange={setAutoSync}
+        />
+      </ProfileSection>
+
+      {/* Data & Privacy */}
+      <ProfileSection title="Data & Privacy">
+        <SettingItem
+          icon="download-outline"
+          title="Export My Data"
+          onPress={handleExportData}
+        />
+        <SettingItem
+          icon="shield-checkmark-outline"
+          title="Privacy Policy"
+          onPress={handlePrivacyPolicy}
+        />
+        <SettingItem
+          icon="document-text-outline"
+          title="Terms of Service"
+          onPress={handleTermsOfService}
+        />
+        <SettingItem
+          icon="trash-outline"
+          title="Delete Account"
+          onPress={handleDeleteAccount}
+          showArrow={false}
+        />
+      </ProfileSection>
+
+      {/* Support */}
+      <ProfileSection title="Support">
+        <SettingItem
+          icon="help-circle-outline"
+          title="Help Center"
+          onPress={() => Linking.openURL('https://icnvictoria.com/help')}
+        />
+        <SettingItem
+          icon="chatbubble-outline"
+          title="Contact Support"
+          onPress={handleContactSupport}
+        />
+        <SettingItem
+          icon="star-outline"
+          title="Rate App"
+          onPress={handleRateApp}
+        />
+        <SettingItem
+          icon="share-outline"
+          title="Share App"
+          onPress={handleShareApp}
+        />
+      </ProfileSection>
+
+      {/* About */}
+      <ProfileSection title="About">
+        <SettingItem
+          icon="information-circle-outline"
+          title="App Version"
+          value="1.0.0"
+          showArrow={false}
+        />
+        <SettingItem
+          icon="business-outline"
+          title="About ICN"
+          onPress={() => Linking.openURL('https://icnvictoria.com/about')}
+        />
+        <SettingItem
+          icon="globe-outline"
+          title="Website"
+          value="icnvictoria.com"
+          onPress={() => Linking.openURL('https://icnvictoria.com')}
+        />
+      </ProfileSection>
+
+      {/* Sign Out Button */}
+      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+        <Text style={styles.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
+        <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -400,8 +394,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 100,
   },
   profileCard: {
     backgroundColor: Colors.white,
