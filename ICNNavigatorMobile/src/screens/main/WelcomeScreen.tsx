@@ -8,12 +8,12 @@ export default function WelcomeScreen() {
   // Animation states
   const [fadeAnim] = useState(new Animated.Value(1));
   const [scaleAnim] = useState(new Animated.Value(1));
-  
+
   // Button pressed state
   const [isButtonPressed, setIsButtonPressed] = useState(false);
   // Page transitioning state (to remove button shadow immediately, avoiding transition conflicts)
   const [isTransitioning, setIsTransitioning] = useState(false);
-  
+
   // Page loading state
   const [isLoading, setIsLoading] = useState(false);
 
@@ -77,7 +77,7 @@ export default function WelcomeScreen() {
       pageTransitions.getAnimatedStyle() // Use extracted animation styles
     ]}>
       <StatusBar style="light" />
-      
+
 
       {/* Top section */}
       <View style={styles.topSection}>
@@ -89,7 +89,7 @@ export default function WelcomeScreen() {
             resizeMode="contain"
           />
         </View>
-        
+
       </View>
 
       {/* ICN Name component - positioned at top left outside bottom section */}
@@ -112,14 +112,14 @@ export default function WelcomeScreen() {
         >
           <Text style={styles.getStartedText}>Get Started Free  →</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
           <Text style={styles.signInText}>
             Already have an account? <Text style={styles.signInLink}>Sign in</Text>
           </Text>
         </TouchableOpacity>
       </View>
-      
+
         {/* Loading indicator - overlay only, no text */}
         {isLoading && (<View style={styles.loadingOverlay} />)}
     </Animated.View>
@@ -266,3 +266,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+	
