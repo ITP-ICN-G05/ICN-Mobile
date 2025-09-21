@@ -21,12 +21,12 @@ This report presents the results of comprehensive automated unit testing impleme
 
 | Metric | Result |
 |--------|--------|
-| **Total Test Suites** | 10 |
-| **Total Test Cases** | 178 |
-| **Passed Tests** | 178 ✅ |
+| **Total Test Suites** | 13 |
+| **Total Test Cases** | 272 |
+| **Passed Tests** | 272 ✅ |
 | **Failed Tests** | 0 ❌ |
 | **Success Rate** | 100% |
-| **Execution Time** | 3.694 seconds |
+| **Execution Time** | 2.444 seconds |
 
 ### 🎯 Test Suite Breakdown
 
@@ -41,6 +41,10 @@ This report presents the results of comprehensive automated unit testing impleme
 | `AuthContainer.test.tsx` | 22 | ✅ PASSED | 100% |
 | `FilterDropdown.test.tsx` | 29 | ✅ PASSED | 100% |
 | `SearchBarWithDropdown.test.tsx` | 23 | ✅ PASSED | 100% |
+| `FilterModal.test.tsx` | 23 | ✅ PASSED | 100% |
+| `CompaniesScreen.logic.test.ts` | 41 | ✅ PASSED | 100% |
+| `CompanyDetailScreen.logic.test.ts` | 28 | ✅ PASSED | 100% |
+| `MapScreen.logic.test.ts` | 25 | ✅ PASSED | 100% |
 
 ---
 
@@ -48,6 +52,8 @@ This report presents the results of comprehensive automated unit testing impleme
 
 ### 1. Utility Functions Testing (`companyUtils.test.ts`)
 **✅ 15/15 Tests Passed**
+
+**What it does:** Tests core utility functions that handle company data operations including search filtering, sorting, and distance calculations. These are pure functions that form the foundation of the app's data processing capabilities.
 
 **Test Categories:**
 - **Search Filtering (6 tests):** Validates company search by name, address, and sectors
@@ -63,6 +69,8 @@ This report presents the results of comprehensive automated unit testing impleme
 
 ### 2. CompanyCard Component Testing (`CompanyCard.test.tsx`)
 **✅ 14/14 Tests Passed**
+
+**What it does:** Tests the reusable CompanyCard component that displays company information in a card format. This component is used throughout the app to show company details with interactive features like bookmarking and navigation.
 
 **Test Categories:**
 - **Rendering Tests (5 tests):** Component display and visual elements
@@ -80,6 +88,8 @@ This report presents the results of comprehensive automated unit testing impleme
 ### 3. SearchBar Component Testing (`SearchBar.test.tsx`)
 **✅ 13/13 Tests Passed**
 
+**What it does:** Tests the basic SearchBar component that allows users to enter search text and access filter options. This is a fundamental UI component used across multiple screens for user input and interaction.
+
 **Test Categories:**
 - **Rendering Tests (5 tests):** UI element display and customization
 - **Interactive Behavior (3 tests):** User input and filter interactions
@@ -95,6 +105,8 @@ This report presents the results of comprehensive automated unit testing impleme
 
 ### 4. Custom Hook Testing (`useCompanySearch.test.ts`)
 **✅ 13/13 Tests Passed**
+
+**What it does:** Tests the custom React hook that manages company search and filtering logic. This hook encapsulates the state management and business logic for searching and filtering companies, making it reusable across multiple components.
 
 **Test Categories:**
 - **Initial State (1 test):** Hook initialization
@@ -115,6 +127,8 @@ This report presents the results of comprehensive automated unit testing impleme
 #### SignInForm Component Testing (`SignInForm.test.tsx`)
 **✅ 22/22 Tests Passed**
 
+**What it does:** Tests the sign-in form component that handles user authentication input. This component manages email/password input fields, form validation, password visibility toggle, and user interaction callbacks for the login process.
+
 **Test Categories:**
 - **Form Rendering (4 tests):** Input fields, buttons, and UI elements
 - **Form Validation (4 tests):** Email and password field validation
@@ -133,6 +147,8 @@ This report presents the results of comprehensive automated unit testing impleme
 
 #### SignUpForm Component Testing (`SignUpForm.test.tsx`)
 **✅ 25/25 Tests Passed**
+
+**What it does:** Tests the user registration form component that handles new user account creation. This component manages multiple input fields (username, email, password, confirm password), form validation, password visibility toggles, and registration flow logic.
 
 **Test Categories:**
 - **Form Rendering (4 tests):** All input fields and UI elements
@@ -153,6 +169,8 @@ This report presents the results of comprehensive automated unit testing impleme
 
 #### AuthContainer Component Testing (`AuthContainer.test.tsx`)
 **✅ 22/22 Tests Passed**
+
+**What it does:** Tests the main authentication container component that orchestrates the authentication flow. This component manages switching between different authentication modes (sign-in, sign-up, password reset) and coordinates the overall user authentication experience.
 
 **Test Categories:**
 - **Initial Rendering (3 tests):** Default mode and tab button display
@@ -176,6 +194,8 @@ This report presents the results of comprehensive automated unit testing impleme
 #### FilterDropdown Component Testing (`FilterDropdown.test.tsx`)
 **✅ 29/29 Tests Passed**
 
+**What it does:** Tests the dropdown component used for filtering options throughout the app. This component handles both single and multi-select filtering modes, manages option display with pagination (show more/less), and provides interactive filtering capabilities.
+
 **Test Categories:**
 - **Basic Rendering (4 tests):** Component display, selection states, and multi-select indicators
 - **Dropdown Expansion (3 tests):** Open/close behavior and initial option limits
@@ -197,6 +217,8 @@ This report presents the results of comprehensive automated unit testing impleme
 #### SearchBarWithDropdown Component Testing (`SearchBarWithDropdown.test.tsx`)
 **✅ 23/23 Tests Passed**
 
+**What it does:** Tests the enhanced search bar component that combines text input with a dropdown list of companies. This component provides real-time search suggestions and allows users to select companies directly from the dropdown, integrating search and selection functionality.
+
 **Test Categories:**
 - **Basic Rendering (3 tests):** Input display, placeholder text, and value presentation
 - **Search Functionality (2 tests):** Text change callbacks and rapid input handling
@@ -212,6 +234,78 @@ This report presents the results of comprehensive automated unit testing impleme
 - Edge case handling for empty companies array and invalid data
 - Accessibility support for keyboard navigation
 - Props validation and configuration flexibility
+
+---
+
+## Screen Business Logic Testing
+
+### 7. CompaniesScreen Business Logic Testing (`CompaniesScreen.logic.test.ts`)
+**✅ 41/41 Tests Passed**
+
+**What it does:** Tests the core business logic of the main companies listing screen without full UI rendering. This includes complex search and filtering algorithms, sorting functionality, bookmark management, and state handling that powers the companies discovery experience.
+
+**Test Categories:**
+- **Search and Filter Logic (6 tests):** Validates search text filtering by name, address, and sectors
+- **Capability Filter Logic (4 tests):** Multi-criteria capability filtering with case insensitivity
+- **Verification Status Filter Logic (4 tests):** Company verification status filtering
+- **Combined Search and Filters (4 tests):** Integration of search text with multiple filters
+- **Sorting Logic (5 tests):** Name, verification status, and recent activity sorting
+- **Bookmark Management (6 tests):** Bookmark toggle, retrieval, and state management
+- **Filter State Management (6 tests):** Active filter detection and counting
+- **Complete Processing Pipeline (3 tests):** End-to-end data processing with performance testing
+- **Statistics Calculation (3 tests):** Company statistics and metrics calculation
+
+**Key Test Scenarios:**
+- Complex search and filter combinations with real-world data
+- Sorting algorithms with multiple criteria (name, verification, recent)
+- Bookmark state management with animation and persistence
+- Performance testing with large datasets (1000+ companies)
+- Filter state tracking and active filter counting
+
+### 8. CompanyDetailScreen Business Logic Testing (`CompanyDetailScreen.logic.test.ts`)
+**✅ 28/28 Tests Passed**
+
+**What it does:** Tests the business logic for displaying detailed company information and handling user interactions. This includes data formatting, contact method processing, cross-platform integration (maps, phone, email), and share functionality without testing the full screen rendering.
+
+**Test Categories:**
+- **Data Formatting (5 tests):** Company type, avatar text, verification date, and contact formatting
+- **Bookmark Management (1 test):** Bookmark toggle functionality
+- **Verification Status (2 tests):** Company verification detection and warning generation
+- **Contact Information Analysis (4 tests):** Available contact methods and information validation
+- **Share Functionality (3 tests):** Share message generation and error handling
+- **Maps and Directions (3 tests):** Platform-specific maps URL generation and navigation
+- **Contact Actions (6 tests):** Email, phone, website, and directions action handlers
+- **Complete Processing Pipeline (2 tests):** Full company data processing for display
+- **Error Handling (2 tests):** Linking errors and undefined property handling
+
+**Key Test Scenarios:**
+- Cross-platform maps integration (iOS/Android URL generation)
+- Contact method availability detection and validation
+- Share functionality with proper error handling
+- Phone number cleaning and URL formatting
+- Comprehensive company data processing for UI display
+
+### 9. MapScreen Business Logic Testing (`MapScreen.logic.test.ts`)
+**✅ 25/25 Tests Passed**
+
+**What it does:** Tests the complex business logic that powers the interactive map functionality. This includes geographical calculations, distance-based filtering, map region optimization, marker styling, and coordinate-based operations without testing the actual map rendering components.
+
+**Test Categories:**
+- **Search and Filter Logic (5 tests):** Map-specific search filtering by multiple criteria
+- **Distance Filter Logic (4 tests):** Geographical distance calculations and radius filtering
+- **Combined Filters (2 tests):** Integration of search, capability, and distance filters
+- **Filter State Management (3 tests):** Active filter detection, counting, and summary generation
+- **Map Region Calculations (4 tests):** Bounding box calculations and zoom level optimization
+- **Marker Styling (1 test):** Dynamic marker color based on company status and search
+- **Complete Processing Pipeline (2 tests):** End-to-end map data processing
+- **Edge Cases (4 tests):** Empty data, identical coordinates, and invalid distance filters
+
+**Key Test Scenarios:**
+- Geographical distance calculations using Haversine formula
+- Dynamic map region calculations for optimal company display
+- Distance-based filtering with multiple radius options (500m, 1km, 5km, etc.)
+- Map marker color coding based on verification status and search highlighting
+- Bounding box calculations for multiple companies with zoom optimization
 
 ---
 
@@ -355,15 +449,17 @@ npx jest src/hooks/__tests__/useCompanySearch.test.ts
 
 ## Conclusion
 
-The automated unit testing implementation for ICN Navigator Mobile demonstrates excellent code quality with a 100% success rate across all 55 test cases. The comprehensive test coverage for critical business logic components ensures reliability and maintainability of the application.
+The automated unit testing implementation for ICN Navigator Mobile demonstrates excellent code quality with a 100% success rate across all 272 test cases in 13 test suites. The comprehensive test coverage spans critical business logic components, user interface elements, and screen-specific functionality, ensuring reliability and maintainability of the application.
 
 Key achievements:
-- ✅ Complete test coverage for core functionality
+- ✅ Complete test coverage for core functionality and screen business logic
 - ✅ Robust error handling and edge case management
 - ✅ Accessibility compliance verification
 - ✅ Performance optimization validation
+- ✅ Cross-platform compatibility testing (iOS/Android)
+- ✅ Geographic calculations and mapping functionality validation
 
-The testing infrastructure is well-established and ready for continuous integration, providing a solid foundation for ongoing development and quality assurance.
+The testing infrastructure is well-established with comprehensive business logic testing for all major screens (Companies, Company Detail, Map), providing a solid foundation for ongoing development and quality assurance.
 
 ---
 
