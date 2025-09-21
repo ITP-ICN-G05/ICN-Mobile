@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -23,8 +23,8 @@ export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const slideAnimation = useRef(new Animated.Value(300)).current; // Animation value for slide-in effect
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
-  const [showSearchArea, setShowSearchArea] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -137,6 +137,14 @@ export default function MapScreen() {
   const handleMarkerPress = (company: Company) => {
     setSelectedCompany(company);
     setIsFromDropdownSelection(false);
+    
+    // Start slide-in animation from bottom
+    Animated.timing(slideAnimation, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
     mapRef.current?.animateToRegion({
       latitude: company.latitude,
       longitude: company.longitude,
@@ -182,15 +190,6 @@ export default function MapScreen() {
 
   const handleRegionChangeComplete = (newRegion: Region) => {
     setRegion(newRegion);
-
-    if (!hasActiveFilters()) {
-      setShowSearchArea(true);
-    }
-  };
-
-  const handleSearchInArea = () => {
-    setShowSearchArea(false);
-    console.log('Searching in area:', region);
   };
 
   const handleApplyFilters = (newFilters: FilterOptions) => {
@@ -230,36 +229,7 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <SearchBarWithDropdown
-        value={searchText}
-        onChangeText={handleSearchChange}
-        onSelectCompany={handleCompanySelection}
-        onFilter={() => setFilterModalVisible(true)}
-        companies={mockCompanies}
-        placeholder="Search companies on map..."
-      />
-      
-      {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
-      {shouldShowFilterBar && (
-        <View style={styles.filterBar}>
-          <View style={styles.filterInfo}>
-            <Text style={styles.filterText}>
-              {filteredCompanies.length} companies
-            </Text>
-            {getActiveFilterCount() > 0 && (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>
-                  {getActiveFilterCount()} filters
-                </Text>
-              </View>
-            )}
-          </View>
-          <TouchableOpacity onPress={clearFilters}>
-            <Text style={styles.clearText}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      
+      {/* Map as background layer, fills entire screen */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -322,6 +292,39 @@ export default function MapScreen() {
         ))}
       </MapView>
 
+      {/* Search bar - floating overlay above map */}
+      <View style={styles.searchOverlay}>
+        <SearchBarWithDropdown
+          value={searchText}
+          onChangeText={handleSearchChange}
+          onSelectCompany={handleCompanySelection}
+          onFilter={undefined} // Remove filter function, handled separately
+          companies={mockCompanies}
+          placeholder="Search companies, locations..."
+        />
+      </View>
+      
+      {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
+      {shouldShowFilterBar && (
+        <View style={styles.filterBar}>
+          <View style={styles.filterInfo}>
+            <Text style={styles.filterText}>
+              {filteredCompanies.length} companies
+            </Text>
+            {getActiveFilterCount() > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>
+                  {getActiveFilterCount()} filters
+                </Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity onPress={clearFilters}>
+            <Text style={styles.clearText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* No results overlay */}
       {filteredCompanies.length === 0 && (
         <View style={styles.noResultsOverlay}>
@@ -334,30 +337,57 @@ export default function MapScreen() {
         </View>
       )}
 
-      {showSearchArea && !hasActiveFilters() && (
-        <TouchableOpacity
-          style={styles.searchAreaButton}
-          onPress={handleSearchInArea}
-        >
-          <Ionicons name="search" size={16} color={Colors.white} />
-          <Text style={styles.searchAreaText}>Search this area</Text>
-        </TouchableOpacity>
-      )}
 
-      <TouchableOpacity
-        style={styles.myLocationButton}
-        onPress={() => {
-          mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
-        }}
-      >
-        <Ionicons name="locate" size={24} color={Colors.primary} />
-      </TouchableOpacity>
+      {/* Right side button container - includes filter and location buttons */}
+      <View style={[
+        styles.rightButtonsContainer,
+        selectedCompany && styles.rightButtonsWithCompanyDetail // Move container up when company detail is shown
+      ]}>
+        {/* Filter button */}
+        <TouchableOpacity
+          style={styles.filterFloatingButton}
+          onPress={() => setFilterModalVisible(true)}
+        >
+          <Ionicons name="filter" size={24} color={Colors.primary} />
+          {getActiveFilterCount() > 0 && (
+            <View style={styles.filterBadgeFloat}>
+              <Text style={styles.filterBadgeFloatText}>{getActiveFilterCount()}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Location button */}
+        <TouchableOpacity
+          style={styles.myLocationButton}
+          onPress={() => {
+            mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
+          }}
+        >
+          <Ionicons name="locate" size={24} color={Colors.primary} />
+        </TouchableOpacity>
+      </View>
 
       {selectedCompany && (
-        <View style={styles.companyDetail}>
+        <Animated.View 
+          style={[
+            styles.companyDetail,
+            {
+              transform: [{ translateY: slideAnimation }] // Apply slide animation transform
+            }
+          ]}
+        >
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={() => setSelectedCompany(null)}
+            onPress={() => {
+              // Start slide-out animation when closing
+              Animated.timing(slideAnimation, {
+                toValue: 300,
+                duration: 250,
+                useNativeDriver: true,
+              }).start(() => {
+                setSelectedCompany(null);
+              });
+            }}
           >
             <Ionicons name="close" size={24} color={Colors.black50} />
           </TouchableOpacity>
@@ -381,9 +411,9 @@ export default function MapScreen() {
             onPress={() => navigateToDetail(selectedCompany)}
           >
             <Text style={styles.viewDetailsButtonText}>View Full Details</Text>
-            <Ionicons name="arrow-forward" size={18} color={Colors.white} />
+            <Ionicons name="arrow-forward" size={20} color="#D67635" />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
       
       <FilterModal
@@ -401,7 +431,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   map: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject, // Map fills entire screen as background layer
+  },
+  searchOverlay: {
+    position: 'absolute', // Search bar as absolute positioned overlay
+    top: 25, // Maintain 25px distance from screen top
+    left: 0,
+    right: 0,
+    zIndex: 1000, // Ensure above map layer
   },
   filterBar: {
     position: 'absolute',
@@ -537,32 +574,54 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  searchAreaButton: {
+  rightButtonsContainer: {
     position: 'absolute',
-    top: 120,
-    alignSelf: 'center',
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flexDirection: 'row',
+    right: 16,
+    bottom: 120, // Base position of container
+    flexDirection: 'column', // Vertical layout
+    gap: 16, // Spacing between buttons
+    zIndex: 1001, // Ensure container is on top layer
+  },
+  rightButtonsWithCompanyDetail: {
+    bottom: 330, // Move entire container up when company detail is active
+  },
+  filterFloatingButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 5,
   },
-  searchAreaText: {
+  filterButtonText: {
     color: Colors.white,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  filterBadgeFloat: {
+    position: 'absolute', // Absolute position at button top-right corner
+    top: -6,
+    right: -6,
+    backgroundColor: '#EF8059', // Orange background
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2, // White border
+    borderColor: Colors.white,
+  },
+  filterBadgeFloatText: {
+    color: Colors.white, // White text color
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   myLocationButton: {
-    position: 'absolute',
-    right: 16,
-    bottom: 100,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -577,18 +636,18 @@ const styles = StyleSheet.create({
   },
   companyDetail: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: 65, // Adjust this value to control upward movement distance
+    left: 0, // Align to screen left edge
+    right: 0, // Align to screen right edge
     backgroundColor: Colors.white,
     padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 20, // Top corners only
+    borderTopRightRadius: 20, // Top corners only
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.15, // Enhanced shadow intensity
+    shadowRadius: 8, // Enhanced shadow range
+    elevation: 8, // Enhanced Android shadow
   },
   closeButton: {
     position: 'absolute',
@@ -633,15 +692,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 8,
+    backgroundColor: '#F5DAB2', // Light orange background
+    borderWidth: 1.5, // Thin border width
+    borderColor: Colors.primary, // Orange border color
+    paddingVertical: 14, // Increased vertical padding
+    paddingHorizontal: 24, // Increased horizontal padding
+    borderRadius: 12, // Rounded corners
+    gap: 10, // Spacing between icon and text
+    marginTop: 16, // Top margin
+    shadowColor: '#EF8059', // Orange shadow color
+    shadowOffset: { width: 0, height: 3 }, // Shadow offset
+    shadowOpacity: 0.2, // Shadow opacity
+    shadowRadius: 6, // Shadow blur radius
+    elevation: 4, // Android shadow elevation
   },
   viewDetailsButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.white,
+    fontSize: 17, // Slightly larger font size
+    fontWeight: '700', // Bold font weight
+    color: '#D67635', // Darker orange color for better contrast
+    letterSpacing: 0.5, // Letter spacing for better readability
   },
 });

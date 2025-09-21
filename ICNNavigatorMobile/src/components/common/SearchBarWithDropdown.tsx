@@ -8,6 +8,7 @@ import {
   FlatList,
   Keyboard,
   Animated,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing } from '../../constants/colors';
@@ -116,7 +117,18 @@ export default function SearchBarWithDropdown({
     <View style={styles.container}>
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color={Colors.black50} />
+          {/* Left side ICN Logo container with icon and separator */}
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+              style={[styles.logoIcon, { tintColor: '#EF8059' }]} // Apply specified color
+              resizeMode="contain"
+            />
+            {/* Separator line directly to the right of icon */}
+            <View style={styles.separatorInContainer} />
+          </View>
+          
+          {/* Middle search input area */}
           <TextInput
             style={styles.input}
             value={value}
@@ -124,11 +136,19 @@ export default function SearchBarWithDropdown({
             placeholder={placeholder}
             placeholderTextColor={Colors.black50}
             onFocus={() => value.length > 0 && showDropdownAnimation()}
+            numberOfLines={1} // Limit to single line
+            ellipsizeMode="tail" // Show ellipsis at the end
           />
-          {value.length > 0 && (
-            <TouchableOpacity onPress={handleClear}>
-              <Ionicons name="close-circle" size={20} color={Colors.black50} />
+          
+          {/* Right side search icon or clear button */}
+          {value.length > 0 ? (
+            <TouchableOpacity onPress={handleClear} style={styles.iconButton}>
+              <Ionicons name="close-circle" size={20} color="#EF8059" />
             </TouchableOpacity>
+          ) : (
+            <View style={styles.iconButton}>
+              <Ionicons name="search" size={20} color="#EF8059" />
+            </View>
           )}
         </View>
         {onFilter && (
@@ -177,40 +197,76 @@ export default function SearchBarWithDropdown({
 const styles = StyleSheet.create({
   container: {
     zIndex: 1000,
+    backgroundColor: 'transparent', // Ensure outermost container is also transparent
   },
   searchContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: 'transparent', // Change to transparent background
     gap: 12,
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 25,
+    backgroundColor: '#F5DAB2', // Use specified fill color
+    borderRadius: 25, // Maintain rounded corners
+    borderWidth: 2, // Add border
+    borderColor: '#EF8059', // Use specified border color
     paddingHorizontal: 16,
-    height: 44,
-    gap: 8,
+    paddingVertical: 12, // Adjust vertical padding
+    height: 48, // Slightly increase height
+    shadowColor: '#000', // 🔥 添加阴影
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  logoContainer: {
+    flexDirection: 'row', // Horizontal layout for icon and separator
+    alignItems: 'center', // Vertical center alignment
+    marginRight: 8, // Reduce container right margin to bring separator closer to text
+  },
+  logoIcon: {
+    width: 24, // ICN logo size
+    height: 24,
+    marginRight: 8, // Icon right margin
+  },
+  separatorInContainer: {
+    width: 2, // Increase separator width to make it thicker
+    height: 20, // Separator height
+    backgroundColor: '#EF8059', // Orange separator
   },
   input: {
-    flex: 1,
+    flex: 1, // Input field takes remaining space
     fontSize: 16,
     color: Colors.text,
+    paddingVertical: 0, // Remove default padding
   },
-  filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.orange[200],
+  iconButton: {
+    width: 24, // Right side icon button area
+    height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
+  },
+  filterButton: {
+    width: 48, // Match search bar height
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EF8059', // Use specified color
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000', // Add shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   dropdown: {
     position: 'absolute',
-    top: 68,
+    top: 72, // Adjust position to accommodate new search bar height
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
