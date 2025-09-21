@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Company } from '../../types';
 import { Colors, Spacing } from '../../constants/colors';
+import { useUserTier } from '../../contexts/UserTierContext';
 
 interface CompanyDetailScreenProps {
   route: any;
@@ -22,6 +23,7 @@ interface CompanyDetailScreenProps {
 export default function CompanyDetailScreen({ route, navigation }: CompanyDetailScreenProps) {
   const { company } = route.params as { company: Company };
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const { features } = useUserTier();
 
   // Handle back navigation
   const handleBack = () => {
@@ -219,6 +221,42 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
             </TouchableOpacity>
           )}
         </View>
+
+        {/* ABN - Plus/Premium only */}
+        {features.canSeeABN && company.abn && (
+          <View style={styles.infoRow}>
+            <Ionicons name="document-text-outline" size={20} color={Colors.black50} />
+            <Text style={styles.infoLabel}>ABN:</Text>
+            <Text style={styles.infoValue}>{company.abn}</Text>
+          </View>
+        )}
+
+        {/* Revenue - Premium only */}
+        {features.canSeeRevenue && company.revenue && (
+          <View style={styles.infoRow}>
+            <Ionicons name="cash-outline" size={20} color={Colors.black50} />
+            <Text style={styles.infoLabel}>Revenue:</Text>
+            <Text style={styles.infoValue}>${company.revenue.toLocaleString()}</Text>
+          </View>
+        )}
+
+        {/* Employee Count - Premium only */}
+        {features.canSeeEmployeeCount && company.employeeCount && (
+          <View style={styles.infoRow}>
+            <Ionicons name="people-outline" size={20} color={Colors.black50} />
+            <Text style={styles.infoLabel}>Employees:</Text>
+            <Text style={styles.infoValue}>{company.employeeCount}</Text>
+          </View>
+        )}
+
+        {/* Local Content % - Premium only */}
+        {features.canSeeLocalContent && company.localContentPercentage && (
+          <View style={styles.infoRow}>
+            <Ionicons name="flag-outline" size={20} color={Colors.black50} />
+            <Text style={styles.infoLabel}>Local Content:</Text>
+            <Text style={styles.infoValue}>{company.localContentPercentage}%</Text>
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>

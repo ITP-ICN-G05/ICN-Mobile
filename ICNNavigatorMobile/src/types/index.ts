@@ -12,6 +12,17 @@ export interface Company {
   phoneNumber?: string;
   email?: string;
   website?: string;
+  
+  // New fields for tier-based filtering
+  companySize?: 'SME' | 'Medium' | 'Large' | 'Enterprise';
+  certifications?: string[];
+  ownershipType?: ('Female-owned' | 'First Nations-owned' | 'Veteran-owned' | 'Minority-owned')[];
+  socialEnterprise?: boolean;
+  australianDisabilityEnterprise?: boolean;
+  revenue?: number;
+  employeeCount?: number;
+  localContentPercentage?: number;
+  abn?: string;
 }
 
 export interface User {
