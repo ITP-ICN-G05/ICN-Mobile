@@ -1,3 +1,4 @@
+// src/screens/main/ProfileScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -10,12 +11,13 @@ import {
   Linking,
   Share,
   Platform,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Colors, Spacing } from '../../constants/colors';
 import { useNavigation } from '@react-navigation/native';
+import { useUserTier, UserTier } from '../../contexts/UserTierContext';
+import SubscriptionCard from '../../components/common/SubscriptionCard';
 
 interface ProfileSectionProps {
   title: string;
@@ -83,15 +85,18 @@ const SettingItem = ({
 );
 
 export default function ProfileScreen() {
+  const navigation = useNavigation<any>();
+  const { currentTier, setCurrentTier, features } = useUserTier();
+
   // User state (would typically come from Redux/context)
   const [user] = useState({
     name: 'John Smith',
-    email: 'john.smith@icnvictoria.com',
+    email: 'john.smith@example.com',
     phone: '+61 400 123 456',
-    company: 'ICN Victoria',
+    company: 'ABC Construction',
     role: 'Project Manager',
     memberSince: '2024',
-    tier: 'Premium',
+    // Tier now comes from context
   });
 
   // Settings state
@@ -99,7 +104,53 @@ export default function ProfileScreen() {
   const [locationServices, setLocationServices] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
-  const navigation = useNavigation<any>();
+  const [showDeveloperMode, setShowDeveloperMode] = useState(true); // Toggle for dev mode
+
+  // Stats based on tier
+  const getStats = () => {
+    switch(currentTier) {
+      case 'premium':
+        return { saved: 'Unlimited', searches: 'Unlimited', exports: 'Unlimited' };
+      case 'plus':
+        return { saved: '50', searches: '500/mo', exports: '50/mo' };
+      default:
+        return { saved: '10', searches: '100/mo', exports: '10/mo' };
+    }
+  };
+
+  const stats = getStats();
+
+  // Get tier display info
+  const getTierInfo = () => {
+    switch(currentTier) {
+      case 'premium':
+        return { 
+          name: 'Premium', 
+          color: Colors.warning,
+          icon: 'star',
+          price: '$19.99/month',
+          nextBilling: '15 Feb 2025'
+        };
+      case 'plus':
+        return { 
+          name: 'Plus', 
+          color: Colors.primary,
+          icon: 'star-half',
+          price: '$9.99/month',
+          nextBilling: '15 Feb 2025'
+        };
+      default:
+        return { 
+          name: 'Free', 
+          color: Colors.black50,
+          icon: 'star-outline',
+          price: null,
+          nextBilling: null
+        };
+    }
+  };
+
+  const tierInfo = getTierInfo();
 
   // Handlers
   const handleEditProfile = () => {
@@ -142,17 +193,25 @@ export default function ProfileScreen() {
   };
 
   const handleExportData = () => {
-    Alert.alert(
-      'Export Data',
-      'Export your saved companies and search history?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Export', 
-          onPress: () => Alert.alert('Success', 'Data exported successfully!')
-        },
-      ]
-    );
+    if (currentTier === 'free' && features.exportLimit <= 10) {
+      Alert.alert(
+        'Limited Exports',
+        `Free tier allows ${features.exportLimit} exports per month. Upgrade to Plus or Premium for more exports.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => navigation.navigate('Payment') }
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Export Data',
+        `Export your saved companies and search history? (${stats.exports} exports available)`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Export', onPress: () => Alert.alert('Success', 'Data exported successfully!') }
+        ]
+      );
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -180,7 +239,6 @@ export default function ProfileScreen() {
           text: 'Sign Out', 
           style: 'destructive',
           onPress: () => {
-            // Implement actual sign out logic here
             Alert.alert('Signed Out', 'You have been signed out successfully.');
           }
         },
@@ -190,6 +248,21 @@ export default function ProfileScreen() {
 
   const handleUpgrade = () => {
     navigation.navigate('Payment');
+  };
+
+  const handleManageSubscription = () => {
+    Alert.alert('Manage Subscription', 'Subscription management coming soon!');
+  };
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Cancel Subscription',
+      'Are you sure? You\'ll lose access to premium features at the end of your billing period.',
+      [
+        { text: 'Keep Subscription', style: 'cancel' },
+        { text: 'Cancel', style: 'destructive', onPress: () => Alert.alert('Cancelled', 'Subscription cancelled') }
+      ]
+    );
   };
 
   return (
@@ -214,19 +287,21 @@ export default function ProfileScreen() {
         <Text style={styles.userName}>{user.name}</Text>
         <Text style={styles.userRole}>{user.role} at {user.company}</Text>
         
-        <View style={styles.tierBadge}>
-          <Ionicons name="star" size={16} color={Colors.warning} />
-          <Text style={styles.tierText}>{user.tier} Member</Text>
+        <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
+          <Ionicons name={tierInfo.icon as any} size={16} color={tierInfo.color} />
+          <Text style={[styles.tierText, { color: tierInfo.color }]}>
+            {tierInfo.name} Member
+          </Text>
         </View>
 
         <View style={styles.profileStats}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>47</Text>
+            <Text style={styles.statNumber}>{stats.saved}</Text>
             <Text style={styles.statLabel}>Saved</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>152</Text>
+            <Text style={styles.statNumber}>{stats.searches}</Text>
             <Text style={styles.statLabel}>Searches</Text>
           </View>
           <View style={styles.statDivider} />
@@ -239,6 +314,102 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
           <Text style={styles.editProfileText}>Edit Profile</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Developer Mode Tier Selector */}
+      {showDeveloperMode && (
+        <ProfileSection title="🔧 Developer Mode (Testing Only)">
+          <View style={styles.devModeContainer}>
+            <Text style={styles.devModeText}>Test different tier features:</Text>
+            <View style={styles.tierButtons}>
+              {(['free', 'plus', 'premium'] as UserTier[]).map(tier => (
+                <TouchableOpacity
+                  key={tier}
+                  style={[
+                    styles.tierButton,
+                    currentTier === tier && styles.tierButtonActive
+                  ]}
+                  onPress={() => setCurrentTier(tier)}
+                >
+                  <Text style={[
+                    styles.tierButtonText,
+                    currentTier === tier && styles.tierButtonTextActive
+                  ]}>
+                    {tier.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            {/* Feature Access Indicators */}
+            <View style={styles.featuresList}>
+              <Text style={styles.featuresTitle}>Current Access:</Text>
+              <View style={styles.featureRow}>
+                <Ionicons 
+                  name={features.canFilterBySize ? "checkmark-circle" : "close-circle"} 
+                  size={16} 
+                  color={features.canFilterBySize ? Colors.success : Colors.error} 
+                />
+                <Text style={styles.featureText}>Company Size Filter</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Ionicons 
+                  name={features.canFilterByDiversity ? "checkmark-circle" : "close-circle"} 
+                  size={16} 
+                  color={features.canFilterByDiversity ? Colors.success : Colors.error} 
+                />
+                <Text style={styles.featureText}>Diversity Filters</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Ionicons 
+                  name={features.canSeeRevenue ? "checkmark-circle" : "close-circle"} 
+                  size={16} 
+                  color={features.canSeeRevenue ? Colors.success : Colors.error} 
+                />
+                <Text style={styles.featureText}>Revenue Data</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Ionicons 
+                  name={features.canCreateFolders ? "checkmark-circle" : "close-circle"} 
+                  size={16} 
+                  color={features.canCreateFolders ? Colors.success : Colors.error} 
+                />
+                <Text style={styles.featureText}>
+                  Bookmark Folders ({features.maxBookmarkFolders} max)
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Ionicons 
+                  name={features.canExportFull ? "checkmark-circle" : "close-circle"} 
+                  size={16} 
+                  color={features.canExportFull ? Colors.success : Colors.error} 
+                />
+                <Text style={styles.featureText}>
+                  Full Export ({features.exportLimit === -1 ? 'Unlimited' : features.exportLimit})
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.hideDevButton}
+              onPress={() => setShowDeveloperMode(false)}
+            >
+              <Text style={styles.hideDevText}>Hide Developer Mode</Text>
+            </TouchableOpacity>
+          </View>
+        </ProfileSection>
+      )}
+
+      {/* Subscription Management */}
+      <View style={{ marginVertical: 8 }}>
+        <SubscriptionCard
+          plan={currentTier as 'free' | 'standard' | 'pro'}
+          renewalDate={tierInfo.nextBilling || undefined}
+          monthlyPrice={currentTier === 'premium' ? 19.99 : currentTier === 'plus' ? 9.99 : undefined}
+          onUpgrade={handleUpgrade}
+          onManage={handleManageSubscription}
+          onCancel={handleCancelSubscription}
+        />
       </View>
 
       {/* Account Settings */}
@@ -264,8 +435,8 @@ export default function ProfileScreen() {
           icon="ribbon-outline"
           title="Subscription"
           value={
-            <View style={styles.upgradeBadge}>
-              <Text style={styles.upgradeText}>Premium</Text>
+            <View style={[styles.upgradeBadge, { backgroundColor: tierInfo.color }]}>
+              <Text style={styles.upgradeText}>{tierInfo.name}</Text>
             </View>
           }
           onPress={handleUpgrade}
@@ -309,6 +480,7 @@ export default function ProfileScreen() {
         <SettingItem
           icon="download-outline"
           title="Export My Data"
+          value={`${stats.exports} left`}
           onPress={handleExportData}
         />
         <SettingItem
@@ -372,6 +544,13 @@ export default function ProfileScreen() {
           value="icnvictoria.com"
           onPress={() => Linking.openURL('https://icnvictoria.com')}
         />
+        {!showDeveloperMode && (
+          <SettingItem
+            icon="code-slash-outline"
+            title="Developer Mode"
+            onPress={() => setShowDeveloperMode(true)}
+          />
+        )}
       </ProfileSection>
 
       {/* Sign Out Button */}
@@ -393,9 +572,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
-  },
-  scrollView: {
-    flex: 1,
   },
   scrollContent: {
     paddingBottom: 100,
@@ -457,7 +633,6 @@ const styles = StyleSheet.create({
   tierBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.orange[400],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -467,7 +642,6 @@ const styles = StyleSheet.create({
   tierText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.text,
   },
   profileStats: {
     flexDirection: 'row',
@@ -566,7 +740,6 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   upgradeBadge: {
-    backgroundColor: Colors.warning,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -575,6 +748,69 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.white,
     fontWeight: '600',
+  },
+  devModeContainer: {
+    padding: 16,
+  },
+  devModeText: {
+    fontSize: 14,
+    color: Colors.black50,
+    marginBottom: 12,
+  },
+  tierButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tierButton: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: Colors.black20,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  tierButtonActive: {
+    backgroundColor: Colors.primary,
+  },
+  tierButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.black50,
+  },
+  tierButtonTextActive: {
+    color: Colors.white,
+  },
+  featuresList: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: Colors.orange[400],
+    borderRadius: 8,
+  },
+  featuresTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  featureText: {
+    fontSize: 13,
+    color: Colors.text,
+  },
+  hideDevButton: {
+    marginTop: 12,
+    padding: 8,
+    alignItems: 'center',
+  },
+  hideDevText: {
+    fontSize: 13,
+    color: Colors.primary,
+    textDecorationLine: 'underline',
   },
   signOutButton: {
     flexDirection: 'row',
