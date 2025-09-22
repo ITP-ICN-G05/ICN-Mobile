@@ -1,4 +1,6 @@
 // src/components/common/EnhancedFilterModal.tsx
+// Version without external slider dependency - uses TextInput instead
+
 import React, { useState } from 'react';
 import {
   View,
@@ -8,6 +10,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -20,6 +23,7 @@ export interface EnhancedFilterOptions {
   capabilities: string[];
   distance: string;
   sectors: string[];
+  componentsItems?: string; // NEW: Text search for components/items
   
   // Plus tier filters
   companySize?: string;
@@ -27,11 +31,11 @@ export interface EnhancedFilterOptions {
   
   // Premium tier filters
   ownershipType?: string[];
-  revenue?: { min: number; max: number };
-  employeeCount?: { min: number; max: number };
+  revenue?: { min: number; max: number }; // NEW: Revenue range
+  employeeCount?: { min: number; max: number }; // NEW: Employee count range
   socialEnterprise?: boolean;
   australianDisability?: boolean;
-  localContentPercentage?: number;
+  localContentPercentage?: number; // NEW: Minimum local content percentage
 }
 
 const CAPABILITY_OPTIONS = [
@@ -57,6 +61,7 @@ const SECTOR_OPTIONS = [
 ];
 
 const SIZE_OPTIONS = [
+  'All',
   'SME (1-50)',
   'Medium (51-200)',
   'Large (201-500)',
@@ -99,6 +104,56 @@ const LockedFeature = ({ featureName, requiredTier, onUpgrade }: LockedFeaturePr
   </TouchableOpacity>
 );
 
+// Helper component for range inputs
+const RangeInput = ({ 
+  label, 
+  minValue, 
+  maxValue, 
+  onMinChange, 
+  onMaxChange,
+  prefix = '',
+  suffix = '',
+  step = 1
+}: {
+  label: string;
+  minValue: string;
+  maxValue: string;
+  onMinChange: (value: string) => void;
+  onMaxChange: (value: string) => void;
+  prefix?: string;
+  suffix?: string;
+  step?: number;
+}) => (
+  <View style={styles.rangeInputContainer}>
+    <Text style={styles.filterLabel}>{label}</Text>
+    <View style={styles.rangeInputRow}>
+      <View style={styles.rangeInputField}>
+        <Text style={styles.rangeLabel}>Min:</Text>
+        <TextInput
+          style={styles.rangeTextInput}
+          value={minValue}
+          onChangeText={onMinChange}
+          keyboardType="numeric"
+          placeholder={`${prefix}0${suffix}`}
+          placeholderTextColor={Colors.black50}
+        />
+      </View>
+      <Text style={styles.rangeSeparator}>-</Text>
+      <View style={styles.rangeInputField}>
+        <Text style={styles.rangeLabel}>Max:</Text>
+        <TextInput
+          style={styles.rangeTextInput}
+          value={maxValue}
+          onChangeText={onMaxChange}
+          keyboardType="numeric"
+          placeholder={`${prefix}Max${suffix}`}
+          placeholderTextColor={Colors.black50}
+        />
+      </View>
+    </View>
+  </View>
+);
+
 export default function EnhancedFilterModal({ 
   visible, 
   onClose, 
@@ -124,6 +179,9 @@ export default function EnhancedFilterModal({
   const [distance, setDistance] = useState<string>(
     currentFilters?.distance || 'All'
   );
+  const [componentsItems, setComponentsItems] = useState<string>(
+    currentFilters?.componentsItems || ''
+  );
   
   // Plus tier filters
   const [companySize, setCompanySize] = useState<string>(
@@ -143,12 +201,34 @@ export default function EnhancedFilterModal({
   const [australianDisability, setAustralianDisability] = useState(
     currentFilters?.australianDisability || false
   );
+  
+  // Revenue range as strings for TextInput
+  const [revenueMinStr, setRevenueMinStr] = useState(
+    currentFilters?.revenue?.min?.toString() || ''
+  );
+  const [revenueMaxStr, setRevenueMaxStr] = useState(
+    currentFilters?.revenue?.max?.toString() || ''
+  );
+  
+  // Employee count as strings for TextInput
+  const [employeeMinStr, setEmployeeMinStr] = useState(
+    currentFilters?.employeeCount?.min?.toString() || ''
+  );
+  const [employeeMaxStr, setEmployeeMaxStr] = useState(
+    currentFilters?.employeeCount?.max?.toString() || ''
+  );
+  
+  // Local content percentage as string
+  const [localContentStr, setLocalContentStr] = useState(
+    currentFilters?.localContentPercentage?.toString() || ''
+  );
 
   const handleApplyAll = () => {
     const filters: EnhancedFilterOptions = {
       capabilities,
       sectors,
       distance,
+      componentsItems: componentsItems.trim() || undefined,
     };
 
     // Only include Plus/Premium filters if user has access
@@ -161,6 +241,28 @@ export default function EnhancedFilterModal({
       filters.ownershipType = ownershipType;
       filters.socialEnterprise = socialEnterprise;
       filters.australianDisability = australianDisability;
+    }
+
+    if (features.canFilterByRevenue) {
+      // Parse and validate revenue range
+      const minRev = parseInt(revenueMinStr) || 0;
+      const maxRev = parseInt(revenueMaxStr) || 10000000;
+      if (minRev > 0 || maxRev < 10000000) {
+        filters.revenue = { min: minRev, max: maxRev };
+      }
+      
+      // Parse and validate employee count
+      const minEmp = parseInt(employeeMinStr) || 0;
+      const maxEmp = parseInt(employeeMaxStr) || 1000;
+      if (minEmp > 0 || maxEmp < 1000) {
+        filters.employeeCount = { min: minEmp, max: maxEmp };
+      }
+      
+      // Parse and validate local content percentage
+      const localContent = parseInt(localContentStr) || 0;
+      if (localContent > 0) {
+        filters.localContentPercentage = Math.min(100, Math.max(0, localContent));
+      }
     }
 
     onApply(filters);
@@ -188,11 +290,17 @@ export default function EnhancedFilterModal({
     setCapabilities([]);
     setSectors([]);
     setDistance('All');
+    setComponentsItems('');
     setCompanySize('All');
     setCertifications([]);
     setOwnershipType([]);
     setSocialEnterprise(false);
     setAustralianDisability(false);
+    setRevenueMinStr('');
+    setRevenueMaxStr('');
+    setEmployeeMinStr('');
+    setEmployeeMaxStr('');
+    setLocalContentStr('');
   };
 
   // Wrapper functions to handle the onApply callbacks properly
@@ -218,6 +326,13 @@ export default function EnhancedFilterModal({
 
   const handleOwnershipTypeChange = (selected: string | string[]) => {
     setOwnershipType(Array.isArray(selected) ? selected : [selected]);
+  };
+
+  // Validation for numeric inputs
+  const handleNumericInput = (text: string, setter: (value: string) => void) => {
+    // Allow only numbers
+    const cleaned = text.replace(/[^0-9]/g, '');
+    setter(cleaned);
   };
 
   return (
@@ -246,6 +361,18 @@ export default function EnhancedFilterModal({
             {/* Basic Filters - Available to all */}
             <Text style={styles.sectionTitle}>Basic Filters</Text>
             
+            {/* Components/Items Search - NEW */}
+            <View style={styles.searchSection}>
+              <Text style={styles.filterLabel}>Components/Items Search</Text>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search for specific components or items..."
+                value={componentsItems}
+                onChangeText={setComponentsItems}
+                placeholderTextColor={Colors.black50}
+              />
+            </View>
+
             <FilterDropdown
               title="Capability Types"
               options={CAPABILITY_OPTIONS}
@@ -351,6 +478,61 @@ export default function EnhancedFilterModal({
                 onUpgrade={() => handleUpgradePrompt('premium')}
               />
             )}
+
+            {/* Premium Financial Filters - NEW */}
+            <Text style={styles.sectionTitle}>Financial & Scale Filters</Text>
+            
+            {features.canFilterByRevenue ? (
+              <View style={styles.financialFiltersContainer}>
+                {/* Revenue Range Filter */}
+                <RangeInput
+                  label="Annual Revenue Range (AUD)"
+                  minValue={revenueMinStr}
+                  maxValue={revenueMaxStr}
+                  onMinChange={(text) => handleNumericInput(text, setRevenueMinStr)}
+                  onMaxChange={(text) => handleNumericInput(text, setRevenueMaxStr)}
+                  prefix="$"
+                />
+
+                {/* Employee Count Range Filter */}
+                <RangeInput
+                  label="Employee Count"
+                  minValue={employeeMinStr}
+                  maxValue={employeeMaxStr}
+                  onMinChange={(text) => handleNumericInput(text, setEmployeeMinStr)}
+                  onMaxChange={(text) => handleNumericInput(text, setEmployeeMaxStr)}
+                />
+
+                {/* Local Content Percentage Filter */}
+                <View style={styles.singleInputContainer}>
+                  <Text style={styles.filterLabel}>Minimum Local Content %</Text>
+                  <View style={styles.percentageInputRow}>
+                    <TextInput
+                      style={styles.percentageInput}
+                      value={localContentStr}
+                      onChangeText={(text) => {
+                        const cleaned = text.replace(/[^0-9]/g, '');
+                        if (cleaned === '' || parseInt(cleaned) <= 100) {
+                          setLocalContentStr(cleaned);
+                        }
+                      }}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor={Colors.black50}
+                      maxLength={3}
+                    />
+                    <Text style={styles.percentageSymbol}>%</Text>
+                  </View>
+                  <Text style={styles.inputHint}>Enter minimum percentage (0-100)</Text>
+                </View>
+              </View>
+            ) : (
+              <LockedFeature 
+                featureName="Financial & Scale Filters"
+                requiredTier="premium"
+                onUpgrade={() => handleUpgradePrompt('premium')}
+              />
+            )}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -419,6 +601,96 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginTop: 16,
     marginBottom: 12,
+  },
+  searchSection: {
+    marginBottom: 16,
+  },
+  filterLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  searchInput: {
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.black20,
+  },
+  financialFiltersContainer: {
+    gap: 16,
+  },
+  rangeInputContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    padding: 16,
+  },
+  rangeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rangeInputField: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rangeLabel: {
+    fontSize: 14,
+    color: Colors.black50,
+    width: 35,
+  },
+  rangeTextInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.black20,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: Colors.orange[400],
+  },
+  rangeSeparator: {
+    fontSize: 16,
+    color: Colors.black50,
+  },
+  singleInputContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    padding: 16,
+  },
+  percentageInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  percentageInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.black20,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: Colors.orange[400],
+  },
+  percentageSymbol: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '500',
+    width: 30,
+  },
+  inputHint: {
+    fontSize: 12,
+    color: Colors.black50,
+    marginTop: 6,
+    fontStyle: 'italic',
   },
   lockedFeature: {
     backgroundColor: Colors.white,

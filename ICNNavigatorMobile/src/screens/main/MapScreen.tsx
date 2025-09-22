@@ -1,4 +1,3 @@
-// src/screens/main/MapScreen.tsx
 import React, { useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
@@ -53,6 +52,18 @@ export default function MapScreen() {
       );
     }
 
+    // Apply components/items search filter (NEW)
+    if (filters.componentsItems) {
+      const searchTerm = filters.componentsItems.toLowerCase();
+      filtered = filtered.filter(company =>
+        company.keySectors.some(sector => 
+          sector.toLowerCase().includes(searchTerm)
+        ) ||
+        // In a real app, you'd search through actual components/items data
+        company.name.toLowerCase().includes(searchTerm)
+      );
+    }
+
     // Apply capability filter (multi-select)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
@@ -100,42 +111,76 @@ export default function MapScreen() {
     // Apply company size filter (Plus tier only)
     if (filters.companySize && filters.companySize !== 'All' && features.canFilterBySize) {
       filtered = filtered.filter(company => {
-        // Mock implementation - in real app, check company.companySize
-        // For demo, randomly include some companies
-        return Math.random() > 0.3;
+        switch(filters.companySize) {
+          case 'SME (1-50)':
+            return !company.employeeCount || company.employeeCount <= 50;
+          case 'Medium (51-200)':
+            return company.employeeCount && company.employeeCount > 50 && company.employeeCount <= 200;
+          case 'Large (201-500)':
+            return company.employeeCount && company.employeeCount > 200 && company.employeeCount <= 500;
+          case 'Enterprise (500+)':
+            return company.employeeCount && company.employeeCount > 500;
+          default:
+            return true;
+        }
       });
     }
 
     // Apply certification filter (Plus tier only)
-    if (filters.certifications && filters.certifications.length > 0 && features.canFilterByCertifications) {
-      filtered = filtered.filter(company => {
-        // Mock implementation - in real app, check company.certifications
-        return Math.random() > 0.4;
-      });
+    if (filters.certifications?.length && features.canFilterByCertifications) {
+      filtered = filtered.filter(company =>
+        company.certifications?.some(cert => 
+          filters.certifications?.includes(cert)
+        )
+      );
     }
 
     // Apply ownership type filter (Premium tier only)
-    if (filters.ownershipType && filters.ownershipType.length > 0 && features.canFilterByDiversity) {
-      filtered = filtered.filter(company => {
-        // Mock implementation - in real app, check company.ownershipType
-        return Math.random() > 0.5;
-      });
+    if (filters.ownershipType?.length && features.canFilterByDiversity) {
+      filtered = filtered.filter(company =>
+        company.ownershipType?.some(ownership =>
+          filters.ownershipType?.includes(ownership)
+        )
+      );
     }
 
     // Apply social enterprise filter (Premium tier only)
     if (filters.socialEnterprise && features.canFilterByDiversity) {
-      filtered = filtered.filter(company => {
-        // Mock implementation - in real app, check company.socialEnterprise
-        return Math.random() > 0.6;
-      });
+      filtered = filtered.filter(company => company.socialEnterprise === true);
     }
 
     // Apply Australian Disability Enterprise filter (Premium tier only)
     if (filters.australianDisability && features.canFilterByDiversity) {
-      filtered = filtered.filter(company => {
-        // Mock implementation - in real app, check company.australianDisabilityEnterprise
-        return Math.random() > 0.7;
-      });
+      filtered = filtered.filter(company => company.australianDisabilityEnterprise === true);
+    }
+
+    // Apply revenue filter (Premium tier only) - NEW
+    if (filters.revenue && features.canFilterByRevenue) {
+      const { min = 0, max = 10000000 } = filters.revenue;
+      filtered = filtered.filter(company =>
+        company.revenue !== undefined && 
+        company.revenue >= min && 
+        company.revenue <= max
+      );
+    }
+
+    // Apply employee count filter (Premium tier only) - NEW
+    if (filters.employeeCount && features.canFilterByRevenue) {
+      const { min = 0, max = 1000 } = filters.employeeCount;
+      filtered = filtered.filter(company =>
+        company.employeeCount !== undefined && 
+        company.employeeCount >= min && 
+        company.employeeCount <= max
+      );
+    }
+
+    // Apply local content percentage filter (Premium tier only) - NEW
+    if (filters.localContentPercentage && filters.localContentPercentage > 0 && features.canFilterByRevenue) {
+      const minLocalContent = filters.localContentPercentage;
+      filtered = filtered.filter(company =>
+        company.localContentPercentage !== undefined && 
+        company.localContentPercentage >= minLocalContent
+      );
     }
 
     return filtered;
@@ -145,11 +190,15 @@ export default function MapScreen() {
     return filters.capabilities.length > 0 || 
            (filters.sectors && filters.sectors.length > 0) ||
            filters.distance !== 'All' ||
+           (filters.componentsItems && filters.componentsItems.length > 0) ||
            (filters.companySize && filters.companySize !== 'All') ||
            (filters.certifications && filters.certifications.length > 0) ||
            (filters.ownershipType && filters.ownershipType.length > 0) ||
            filters.socialEnterprise ||
-           filters.australianDisability;
+           filters.australianDisability ||
+           (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) ||
+           (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) ||
+           (filters.localContentPercentage && filters.localContentPercentage > 0);
   };
 
   const getActiveFilterCount = () => {
@@ -157,11 +206,15 @@ export default function MapScreen() {
     if (filters.capabilities.length > 0) count++;
     if (filters.sectors && filters.sectors.length > 0) count++;
     if (filters.distance !== 'All') count++;
+    if (filters.componentsItems && filters.componentsItems.length > 0) count++;
     if (filters.companySize && filters.companySize !== 'All') count++;
     if (filters.certifications && filters.certifications.length > 0) count++;
     if (filters.ownershipType && filters.ownershipType.length > 0) count++;
     if (filters.socialEnterprise) count++;
     if (filters.australianDisability) count++;
+    if (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) count++;
+    if (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) count++;
+    if (filters.localContentPercentage && filters.localContentPercentage > 0) count++;
     return count;
   };
 
