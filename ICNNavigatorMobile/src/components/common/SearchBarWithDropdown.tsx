@@ -121,7 +121,7 @@ export default function SearchBarWithDropdown({
           <View style={styles.logoContainer}>
             <Image 
               source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
-              style={[styles.logoIcon, { tintColor: '#EF8059' }]} // Apply specified color
+              style={styles.logoIcon} // Use original logo colors
               resizeMode="contain"
             />
             {/* Separator line directly to the right of icon */}
@@ -137,7 +137,6 @@ export default function SearchBarWithDropdown({
             placeholderTextColor={Colors.black50}
             onFocus={() => value.length > 0 && showDropdownAnimation()}
             numberOfLines={1} // Limit to single line
-            ellipsizeMode="tail" // Show ellipsis at the end
           />
           
           {/* Right side search icon or clear button */}
@@ -217,7 +216,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12, // Adjust vertical padding
     height: 48, // Slightly increase height
-    shadowColor: '#000', // 🔥 添加阴影
+    shadowColor: '#000', // Add shadow effect
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
