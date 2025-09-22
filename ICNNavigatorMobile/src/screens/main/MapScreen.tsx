@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -457,6 +457,15 @@ export default function MapScreen() {
         </View>
       )}
 
+      {/* Logo watermark in bottom left corner of visible map area */}
+      <View style={[styles.logoWatermark, { bottom: insets.bottom + 100 }]}>
+        <Image 
+          source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')} 
+          style={styles.watermarkLogo}
+          resizeMode="contain"
+        />
+      </View>
+
 
       {/* Right side button container - includes filter and location buttons */}
       <View style={[
@@ -832,5 +841,16 @@ const styles = StyleSheet.create({
     fontWeight: '700', // Bold font weight
     color: '#D67635', // Darker orange color for better contrast
     letterSpacing: 0.5, // Letter spacing for better readability
+  },
+  logoWatermark: {
+    position: 'absolute',
+    left: 16,
+    // bottom is set dynamically using safe area insets
+    zIndex: 100,
+    opacity: 0.8,
+  },
+  watermarkLogo: {
+    width: 90,
+    height: 36,
   },
 });
