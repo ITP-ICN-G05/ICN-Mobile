@@ -1,6 +1,4 @@
 // src/components/common/EnhancedFilterModal.tsx
-// Version without external slider dependency - uses TextInput instead
-
 import React, { useState } from 'react';
 import {
   View,
@@ -14,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+
 import FilterDropdown from './FilterDropdown';
 import { Colors, Spacing } from '../../constants/colors';
 import { useUserTier } from '../../contexts/UserTierContext';
@@ -61,7 +60,6 @@ const SECTOR_OPTIONS = [
 ];
 
 const SIZE_OPTIONS = [
-  'All',
   'SME (1-50)',
   'Medium (51-200)',
   'Large (201-500)',
@@ -102,56 +100,6 @@ const LockedFeature = ({ featureName, requiredTier, onUpgrade }: LockedFeaturePr
     </View>
     <Text style={styles.upgradeHint}>Tap to upgrade</Text>
   </TouchableOpacity>
-);
-
-// Helper component for range inputs
-const RangeInput = ({ 
-  label, 
-  minValue, 
-  maxValue, 
-  onMinChange, 
-  onMaxChange,
-  prefix = '',
-  suffix = '',
-  step = 1
-}: {
-  label: string;
-  minValue: string;
-  maxValue: string;
-  onMinChange: (value: string) => void;
-  onMaxChange: (value: string) => void;
-  prefix?: string;
-  suffix?: string;
-  step?: number;
-}) => (
-  <View style={styles.rangeInputContainer}>
-    <Text style={styles.filterLabel}>{label}</Text>
-    <View style={styles.rangeInputRow}>
-      <View style={styles.rangeInputField}>
-        <Text style={styles.rangeLabel}>Min:</Text>
-        <TextInput
-          style={styles.rangeTextInput}
-          value={minValue}
-          onChangeText={onMinChange}
-          keyboardType="numeric"
-          placeholder={`${prefix}0${suffix}`}
-          placeholderTextColor={Colors.black50}
-        />
-      </View>
-      <Text style={styles.rangeSeparator}>-</Text>
-      <View style={styles.rangeInputField}>
-        <Text style={styles.rangeLabel}>Max:</Text>
-        <TextInput
-          style={styles.rangeTextInput}
-          value={maxValue}
-          onChangeText={onMaxChange}
-          keyboardType="numeric"
-          placeholder={`${prefix}Max${suffix}`}
-          placeholderTextColor={Colors.black50}
-        />
-      </View>
-    </View>
-  </View>
 );
 
 export default function EnhancedFilterModal({ 
@@ -201,26 +149,20 @@ export default function EnhancedFilterModal({
   const [australianDisability, setAustralianDisability] = useState(
     currentFilters?.australianDisability || false
   );
-  
-  // Revenue range as strings for TextInput
-  const [revenueMinStr, setRevenueMinStr] = useState(
-    currentFilters?.revenue?.min?.toString() || ''
+  const [revenueMin, setRevenueMin] = useState(
+    currentFilters?.revenue?.min || 0
   );
-  const [revenueMaxStr, setRevenueMaxStr] = useState(
-    currentFilters?.revenue?.max?.toString() || ''
+  const [revenueMax, setRevenueMax] = useState(
+    currentFilters?.revenue?.max || 10000000
   );
-  
-  // Employee count as strings for TextInput
-  const [employeeMinStr, setEmployeeMinStr] = useState(
-    currentFilters?.employeeCount?.min?.toString() || ''
+  const [employeeMin, setEmployeeMin] = useState(
+    currentFilters?.employeeCount?.min || 0
   );
-  const [employeeMaxStr, setEmployeeMaxStr] = useState(
-    currentFilters?.employeeCount?.max?.toString() || ''
+  const [employeeMax, setEmployeeMax] = useState(
+    currentFilters?.employeeCount?.max || 1000
   );
-  
-  // Local content percentage as string
-  const [localContentStr, setLocalContentStr] = useState(
-    currentFilters?.localContentPercentage?.toString() || ''
+  const [localContentPercentage, setLocalContentPercentage] = useState(
+    currentFilters?.localContentPercentage || 0
   );
 
   const handleApplyAll = () => {
@@ -244,25 +186,9 @@ export default function EnhancedFilterModal({
     }
 
     if (features.canFilterByRevenue) {
-      // Parse and validate revenue range
-      const minRev = parseInt(revenueMinStr) || 0;
-      const maxRev = parseInt(revenueMaxStr) || 10000000;
-      if (minRev > 0 || maxRev < 10000000) {
-        filters.revenue = { min: minRev, max: maxRev };
-      }
-      
-      // Parse and validate employee count
-      const minEmp = parseInt(employeeMinStr) || 0;
-      const maxEmp = parseInt(employeeMaxStr) || 1000;
-      if (minEmp > 0 || maxEmp < 1000) {
-        filters.employeeCount = { min: minEmp, max: maxEmp };
-      }
-      
-      // Parse and validate local content percentage
-      const localContent = parseInt(localContentStr) || 0;
-      if (localContent > 0) {
-        filters.localContentPercentage = Math.min(100, Math.max(0, localContent));
-      }
+      filters.revenue = { min: revenueMin, max: revenueMax };
+      filters.employeeCount = { min: employeeMin, max: employeeMax };
+      filters.localContentPercentage = localContentPercentage;
     }
 
     onApply(filters);
@@ -296,11 +222,11 @@ export default function EnhancedFilterModal({
     setOwnershipType([]);
     setSocialEnterprise(false);
     setAustralianDisability(false);
-    setRevenueMinStr('');
-    setRevenueMaxStr('');
-    setEmployeeMinStr('');
-    setEmployeeMaxStr('');
-    setLocalContentStr('');
+    setRevenueMin(0);
+    setRevenueMax(10000000);
+    setEmployeeMin(0);
+    setEmployeeMax(1000);
+    setLocalContentPercentage(0);
   };
 
   // Wrapper functions to handle the onApply callbacks properly
@@ -328,11 +254,13 @@ export default function EnhancedFilterModal({
     setOwnershipType(Array.isArray(selected) ? selected : [selected]);
   };
 
-  // Validation for numeric inputs
-  const handleNumericInput = (text: string, setter: (value: string) => void) => {
-    // Allow only numbers
-    const cleaned = text.replace(/[^0-9]/g, '');
-    setter(cleaned);
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}M`;
+    } else if (value >= 1000) {
+      return `$${(value / 1000).toFixed(0)}K`;
+    }
+    return `$${value}`;
   };
 
   return (
@@ -483,49 +411,192 @@ export default function EnhancedFilterModal({
             <Text style={styles.sectionTitle}>Financial & Scale Filters</Text>
             
             {features.canFilterByRevenue ? (
-              <View style={styles.financialFiltersContainer}>
+              <>
                 {/* Revenue Range Filter */}
-                <RangeInput
-                  label="Annual Revenue Range (AUD)"
-                  minValue={revenueMinStr}
-                  maxValue={revenueMaxStr}
-                  onMinChange={(text) => handleNumericInput(text, setRevenueMinStr)}
-                  onMaxChange={(text) => handleNumericInput(text, setRevenueMaxStr)}
-                  prefix="$"
-                />
+                <View style={styles.rangeSection}>
+                  <Text style={styles.filterLabel}>Annual Revenue Range (AUD)</Text>
+                  <View style={styles.rangeInputContainer}>
+                    <View style={styles.rangeInputWrapper}>
+                      <Text style={styles.rangeInputLabel}>Min:</Text>
+                      <TextInput
+                        style={styles.rangeInput}
+                        placeholder="$0"
+                        value={revenueMin ? `${revenueMin.toLocaleString()}` : ''}
+                        onChangeText={(text) => {
+                          const numValue = parseInt(text.replace(/[^0-9]/g, '') || '0');
+                          setRevenueMin(numValue);
+                        }}
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.black50}
+                      />
+                    </View>
+                    <Text style={styles.rangeSeparator}>-</Text>
+                    <View style={styles.rangeInputWrapper}>
+                      <Text style={styles.rangeInputLabel}>Max:</Text>
+                      <TextInput
+                        style={styles.rangeInput}
+                        placeholder="$10,000,000"
+                        value={revenueMax ? `${revenueMax.toLocaleString()}` : ''}
+                        onChangeText={(text) => {
+                          const numValue = parseInt(text.replace(/[^0-9]/g, '') || '10000000');
+                          setRevenueMax(numValue);
+                        }}
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.black50}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.quickSelectContainer}>
+                    <Text style={styles.quickSelectLabel}>Quick select:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setRevenueMin(0); setRevenueMax(1000000); }}
+                      >
+                        <Text style={styles.quickSelectText}>$0 - $1M</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setRevenueMin(1000000); setRevenueMax(5000000); }}
+                      >
+                        <Text style={styles.quickSelectText}>$1M - $5M</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setRevenueMin(5000000); setRevenueMax(10000000); }}
+                      >
+                        <Text style={styles.quickSelectText}>$5M - $10M</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setRevenueMin(10000000); setRevenueMax(50000000); }}
+                      >
+                        <Text style={styles.quickSelectText}>$10M+</Text>
+                      </TouchableOpacity>
+                    </ScrollView>
+                  </View>
+                </View>
 
                 {/* Employee Count Range Filter */}
-                <RangeInput
-                  label="Employee Count"
-                  minValue={employeeMinStr}
-                  maxValue={employeeMaxStr}
-                  onMinChange={(text) => handleNumericInput(text, setEmployeeMinStr)}
-                  onMaxChange={(text) => handleNumericInput(text, setEmployeeMaxStr)}
-                />
+                <View style={styles.rangeSection}>
+                  <Text style={styles.filterLabel}>Employee Count Range</Text>
+                  <View style={styles.rangeInputContainer}>
+                    <View style={styles.rangeInputWrapper}>
+                      <Text style={styles.rangeInputLabel}>Min:</Text>
+                      <TextInput
+                        style={styles.rangeInput}
+                        placeholder="0"
+                        value={employeeMin ? employeeMin.toString() : ''}
+                        onChangeText={(text) => {
+                          const numValue = parseInt(text.replace(/[^0-9]/g, '') || '0');
+                          setEmployeeMin(numValue);
+                        }}
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.black50}
+                      />
+                    </View>
+                    <Text style={styles.rangeSeparator}>-</Text>
+                    <View style={styles.rangeInputWrapper}>
+                      <Text style={styles.rangeInputLabel}>Max:</Text>
+                      <TextInput
+                        style={styles.rangeInput}
+                        placeholder="1000+"
+                        value={employeeMax ? employeeMax.toString() : ''}
+                        onChangeText={(text) => {
+                          const numValue = parseInt(text.replace(/[^0-9]/g, '') || '1000');
+                          setEmployeeMax(numValue);
+                        }}
+                        keyboardType="numeric"
+                        placeholderTextColor={Colors.black50}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.quickSelectContainer}>
+                    <Text style={styles.quickSelectLabel}>Quick select:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setEmployeeMin(1); setEmployeeMax(50); }}
+                      >
+                        <Text style={styles.quickSelectText}>1-50 (SME)</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setEmployeeMin(51); setEmployeeMax(200); }}
+                      >
+                        <Text style={styles.quickSelectText}>51-200</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setEmployeeMin(201); setEmployeeMax(500); }}
+                      >
+                        <Text style={styles.quickSelectText}>201-500</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => { setEmployeeMin(501); setEmployeeMax(10000); }}
+                      >
+                        <Text style={styles.quickSelectText}>500+</Text>
+                      </TouchableOpacity>
+                    </ScrollView>
+                  </View>
+                </View>
 
                 {/* Local Content Percentage Filter */}
-                <View style={styles.singleInputContainer}>
+                <View style={styles.rangeSection}>
                   <Text style={styles.filterLabel}>Minimum Local Content %</Text>
-                  <View style={styles.percentageInputRow}>
+                  <View style={styles.percentageInputContainer}>
                     <TextInput
                       style={styles.percentageInput}
-                      value={localContentStr}
+                      placeholder="0"
+                      value={localContentPercentage ? localContentPercentage.toString() : ''}
                       onChangeText={(text) => {
-                        const cleaned = text.replace(/[^0-9]/g, '');
-                        if (cleaned === '' || parseInt(cleaned) <= 100) {
-                          setLocalContentStr(cleaned);
-                        }
+                        const numValue = parseInt(text.replace(/[^0-9]/g, '') || '0');
+                        setLocalContentPercentage(Math.min(100, Math.max(0, numValue)));
                       }}
                       keyboardType="numeric"
-                      placeholder="0"
                       placeholderTextColor={Colors.black50}
                       maxLength={3}
                     />
                     <Text style={styles.percentageSymbol}>%</Text>
                   </View>
-                  <Text style={styles.inputHint}>Enter minimum percentage (0-100)</Text>
+                  <View style={styles.quickSelectContainer}>
+                    <Text style={styles.quickSelectLabel}>Quick select:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => setLocalContentPercentage(0)}
+                      >
+                        <Text style={styles.quickSelectText}>Any</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => setLocalContentPercentage(25)}
+                      >
+                        <Text style={styles.quickSelectText}>25%+</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => setLocalContentPercentage(50)}
+                      >
+                        <Text style={styles.quickSelectText}>50%+</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => setLocalContentPercentage(75)}
+                      >
+                        <Text style={styles.quickSelectText}>75%+</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.quickSelectButton}
+                        onPress={() => setLocalContentPercentage(100)}
+                      >
+                        <Text style={styles.quickSelectText}>100%</Text>
+                      </TouchableOpacity>
+                    </ScrollView>
+                  </View>
                 </View>
-              </View>
+              </>
             ) : (
               <LockedFeature 
                 featureName="Financial & Scale Filters"
@@ -620,77 +691,86 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.black20,
   },
-  financialFiltersContainer: {
-    gap: 16,
-  },
-  rangeInputContainer: {
+  rangeSection: {
     backgroundColor: Colors.white,
     borderRadius: 8,
     padding: 16,
+    marginBottom: 12,
   },
-  rangeInputRow: {
+  rangeInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
-  rangeInputField: {
+  rangeInputWrapper: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
-  rangeLabel: {
+  rangeInputLabel: {
     fontSize: 14,
     color: Colors.black50,
+    marginRight: 8,
     width: 35,
   },
-  rangeTextInput: {
+  rangeInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.black20,
-    borderRadius: 6,
+    backgroundColor: Colors.orange[400],
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     fontSize: 15,
     color: Colors.text,
-    backgroundColor: Colors.orange[400],
+    borderWidth: 1,
+    borderColor: Colors.black20,
   },
   rangeSeparator: {
     fontSize: 16,
     color: Colors.black50,
+    marginHorizontal: 8,
   },
-  singleInputContainer: {
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-    padding: 16,
+  quickSelectContainer: {
+    marginTop: 12,
   },
-  percentageInputRow: {
+  quickSelectLabel: {
+    fontSize: 12,
+    color: Colors.black50,
+    marginBottom: 8,
+  },
+  quickSelectButton: {
+    backgroundColor: Colors.orange[400],
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  quickSelectText: {
+    fontSize: 13,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  percentageInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginTop: 12,
   },
   percentageInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.black20,
-    borderRadius: 6,
+    width: 80,
+    backgroundColor: Colors.orange[400],
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     fontSize: 15,
     color: Colors.text,
-    backgroundColor: Colors.orange[400],
+    borderWidth: 1,
+    borderColor: Colors.black20,
+    textAlign: 'center',
   },
   percentageSymbol: {
     fontSize: 16,
     color: Colors.text,
-    fontWeight: '500',
-    width: 30,
-  },
-  inputHint: {
-    fontSize: 12,
-    color: Colors.black50,
-    marginTop: 6,
-    fontStyle: 'italic',
+    marginLeft: 8,
   },
   lockedFeature: {
     backgroundColor: Colors.white,

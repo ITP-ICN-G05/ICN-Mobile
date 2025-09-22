@@ -15,7 +15,7 @@ interface FilterDropdownProps {
   selected: string | string[];
   onApply: (selected: string | string[]) => void;
   showLimit?: number;
-  multiSelect?: boolean; // Add this prop
+  multiSelect?: boolean;
 }
 
 export default function FilterDropdown({
@@ -24,7 +24,7 @@ export default function FilterDropdown({
   selected,
   onApply,
   showLimit = 4,
-  multiSelect = false, // Default to single select
+  multiSelect = false,
 }: FilterDropdownProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -32,8 +32,10 @@ export default function FilterDropdown({
   // Handle both string and array types
   const [tempSelected, setTempSelected] = useState<string | string[]>(selected);
 
-  const visibleOptions = showMore ? options : options.slice(0, showLimit);
-  const hasMore = options.length > showLimit;
+  // Filter out "All" from options if it exists, as we'll add it separately
+  const filteredOptions = options.filter(opt => opt !== 'All');
+  const visibleOptions = showMore ? filteredOptions : filteredOptions.slice(0, showLimit);
+  const hasMore = filteredOptions.length > showLimit;
 
   const isOptionSelected = (option: string) => {
     if (multiSelect) {
@@ -106,7 +108,7 @@ export default function FilterDropdown({
 
       {isExpanded && (
         <View style={styles.optionsList}>
-          {/* All option */}
+          {/* All option - always show this first */}
           <TouchableOpacity
             style={styles.optionItem}
             onPress={handleSelectAll}
@@ -126,7 +128,7 @@ export default function FilterDropdown({
             <Text style={styles.optionText}>All</Text>
           </TouchableOpacity>
 
-          {/* Individual options */}
+          {/* Individual options (excluding "All") */}
           {visibleOptions.map((option) => (
             <TouchableOpacity
               key={option}
