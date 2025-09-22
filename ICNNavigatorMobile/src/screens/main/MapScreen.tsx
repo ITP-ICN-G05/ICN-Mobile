@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +20,9 @@ const MELBOURNE_REGION: Region = {
 export default function MapScreen() {
   // Navigation hook
   const navigation = useNavigation<any>();
+  
+  // Safe area insets for different devices
+  const insets = useSafeAreaInsets();
   
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
@@ -293,7 +297,7 @@ export default function MapScreen() {
       </MapView>
 
       {/* Search bar - floating overlay above map */}
-      <View style={styles.searchOverlay}>
+      <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
         <SearchBarWithDropdown
           value={searchText}
           onChangeText={handleSearchChange}
@@ -306,7 +310,7 @@ export default function MapScreen() {
       
       {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
       {shouldShowFilterBar && (
-        <View style={styles.filterBar}>
+        <View style={[styles.filterBar, { top: insets.top + 80 }]}>
           <View style={styles.filterInfo}>
             <Text style={styles.filterText}>
               {filteredCompanies.length} companies
@@ -435,14 +439,14 @@ const styles = StyleSheet.create({
   },
   searchOverlay: {
     position: 'absolute', // Search bar as absolute positioned overlay
-    top: 25, // Maintain 25px distance from screen top
+    // top is now set dynamically using safe area insets
     left: 0,
     right: 0,
     zIndex: 1000, // Ensure above map layer
   },
   filterBar: {
     position: 'absolute',
-    top: 100,
+    // top is now set dynamically using safe area insets
     left: 16,
     right: 16,
     backgroundColor: Colors.white,

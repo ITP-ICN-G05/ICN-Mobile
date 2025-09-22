@@ -111,9 +111,13 @@ export default function BottomTabNavigator() {
         
         // Header styles
         headerStyle: {
-          backgroundColor: Colors.primary,
+          backgroundColor: '#F8B657', // Top navigation bar background color
         },
-        headerTintColor: Colors.white,
+        headerTintColor: '#FFFFFF', // White text is clearer on orange-yellow background
+        headerTitleStyle: {
+          fontSize: 20, // Increase font size
+          fontWeight: '700', // Bold font
+        },
       })}
     >
       <Tab.Screen 
