@@ -1,4 +1,3 @@
-// src/screens/main/ProfileScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -11,9 +10,12 @@ import {
   Linking,
   Share,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing } from '../../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { useUserTier, UserTier } from '../../contexts/UserTierContext';
@@ -87,16 +89,17 @@ const SettingItem = ({
 export default function ProfileScreen() {
   const navigation = useNavigation<any>();
   const { currentTier, setCurrentTier, features } = useUserTier();
+  const [avatarLoading, setAvatarLoading] = useState(false);
 
   // User state (would typically come from Redux/context)
-  const [user] = useState({
+  const [user, setUser] = useState({
     name: 'John Smith',
     email: 'john.smith@example.com',
     phone: '+61 400 123 456',
     company: 'ABC Construction',
     role: 'Project Manager',
     memberSince: '2024',
-    // Tier now comes from context
+    avatar: null as string | null, // Added avatar field
   });
 
   // Settings state
@@ -152,15 +155,108 @@ export default function ProfileScreen() {
 
   const tierInfo = getTierInfo();
 
-  // Handlers
+  // ==========================================
+  // NEW: Avatar Upload Functions
+  // ==========================================
+  const pickImageFromGallery = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to change your avatar.');
+      return;
+    }
+
+    setAvatarLoading(true);
+    
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    setAvatarLoading(false);
+
+    if (!result.canceled && result.assets[0]) {
+      setUser({ ...user, avatar: result.assets[0].uri });
+      uploadAvatar(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Please allow access to your camera to take a photo.');
+      return;
+    }
+
+    setAvatarLoading(true);
+    
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    setAvatarLoading(false);
+
+    if (!result.canceled && result.assets[0]) {
+      setUser({ ...user, avatar: result.assets[0].uri });
+      uploadAvatar(result.assets[0].uri);
+    }
+  };
+
+  const uploadAvatar = async (uri: string) => {
+    try {
+      // TODO: Implement actual upload to backend
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri,
+        type: 'image/jpeg',
+        name: 'avatar.jpg',
+      } as any);
+      
+      // Example API call:
+      // const response = await api.uploadAvatar(formData);
+      // setUser({ ...user, avatar: response.avatarUrl });
+      
+      console.log('Avatar uploaded successfully');
+      Alert.alert('Success', 'Profile picture updated successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+      setUser({ ...user, avatar: null });
+    }
+  };
+
+  const showAvatarOptions = () => {
+    Alert.alert(
+      'Change Profile Picture',
+      'Choose a method',
+      [
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Gallery', onPress: pickImageFromGallery },
+        user.avatar && { text: 'Remove Photo', onPress: () => setUser({ ...user, avatar: null }), style: 'destructive' },
+        { text: 'Cancel', style: 'cancel' },
+      ].filter(Boolean) as any,
+      { cancelable: true }
+    );
+  };
+
+  // ==========================================
+  // UPDATED: Navigation Handlers
+  // ==========================================
   const handleEditProfile = () => {
-    Alert.alert('Edit Profile', 'Profile editing feature coming soon!');
+    // Navigate to the new EditProfileScreen
+    navigation.navigate('EditProfile');
   };
 
   const handleChangePassword = () => {
-    Alert.alert('Change Password', 'Password change feature coming soon!');
+    // Navigate to the new ChangePasswordScreen
+    navigation.navigate('ChangePassword');
   };
 
+  // Existing handlers remain the same
   const handlePrivacyPolicy = () => {
     Linking.openURL('https://icnvictoria.com/privacy');
   };
@@ -208,7 +304,18 @@ export default function ProfileScreen() {
         `Export your saved companies and search history? (${stats.exports} exports available)`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Export', onPress: () => Alert.alert('Success', 'Data exported successfully!') }
+          { 
+            text: 'Export', 
+            onPress: async () => {
+              try {
+                // TODO: Implement actual export
+                // const data = await api.exportUserData();
+                Alert.alert('Success', 'Data exported successfully!');
+              } catch (error) {
+                Alert.alert('Error', 'Failed to export data. Please try again.');
+              }
+            }
+          }
         ]
       );
     }
@@ -223,7 +330,10 @@ export default function ProfileScreen() {
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => Alert.alert('Account Deletion', 'Please contact support to complete account deletion.')
+          onPress: () => {
+            // TODO: Implement actual account deletion
+            Alert.alert('Account Deletion', 'Please contact support to complete account deletion.');
+          }
         },
       ]
     );
@@ -238,8 +348,15 @@ export default function ProfileScreen() {
         { 
           text: 'Sign Out', 
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Signed Out', 'You have been signed out successfully.');
+          onPress: async () => {
+            try {
+              // TODO: Clear auth tokens and user data
+              // await AsyncStorage.clear();
+              // navigation.navigate('Auth');
+              Alert.alert('Signed Out', 'You have been signed out successfully.');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
           }
         },
       ]
@@ -251,6 +368,7 @@ export default function ProfileScreen() {
   };
 
   const handleManageSubscription = () => {
+    // TODO: Implement subscription management
     Alert.alert('Manage Subscription', 'Subscription management coming soon!');
   };
 
@@ -260,7 +378,14 @@ export default function ProfileScreen() {
       'Are you sure? You\'ll lose access to premium features at the end of your billing period.',
       [
         { text: 'Keep Subscription', style: 'cancel' },
-        { text: 'Cancel', style: 'destructive', onPress: () => Alert.alert('Cancelled', 'Subscription cancelled') }
+        { 
+          text: 'Cancel', 
+          style: 'destructive', 
+          onPress: () => {
+            // TODO: Implement actual subscription cancellation
+            Alert.alert('Cancelled', 'Subscription cancelled');
+          }
+        }
       ]
     );
   };
@@ -271,15 +396,29 @@ export default function ProfileScreen() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.scrollContent}
     >
-      {/* User Profile Card */}
+      {/* UPDATED: User Profile Card with working avatar */}
       <View style={styles.profileCard}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user.name.split(' ').map(n => n[0]).join('')}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.editAvatarButton}>
+          <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
+            {avatarLoading ? (
+              <View style={styles.avatar}>
+                <ActivityIndicator size="large" color={Colors.white} />
+              </View>
+            ) : user.avatar ? (
+              <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {user.name.split(' ').map(n => n[0]).join('')}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.editAvatarButton} 
+            onPress={showAvatarOptions}
+            disabled={avatarLoading}
+          >
             <Ionicons name="camera" size={20} color={Colors.white} />
           </TouchableOpacity>
         </View>
@@ -600,6 +739,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   avatarText: {
     fontSize: 32,

@@ -1,4 +1,3 @@
-// src/screens/main/CompaniesScreen.tsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   View, 
