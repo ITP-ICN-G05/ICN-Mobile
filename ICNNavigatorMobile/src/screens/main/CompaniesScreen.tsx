@@ -26,6 +26,22 @@ import { Company } from '../../types';
 import { mockCompanies, generateMockCompanies } from '../../data/mockCompanies';
 import { useUserTier } from '../../contexts/UserTierContext';
 
+// Local color definitions
+const Colors = {
+  white: '#FFFFFF',
+  background: '#FFFFFF',
+  text: '#111111',
+  primary: '#F99F1C',
+  success: '#B6D289',
+  black50: '#808080',
+  black20: '#CCCCCC',
+  orange400: '#FEECD2',
+  orange500: '#FFE0B2',
+  avatarBg: '#E0E0E0', // Gray avatar background
+  headerBg: '#FFFFFF', // Statistics area background color changed to white
+  searchBg: '#FFFFFF', // Search bar background color changed to white
+};
+
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -423,22 +439,18 @@ export default function CompaniesScreen() {
           </Text>
         </TouchableOpacity>
 
-        <View style={styles.controlsRight}>
-          <TouchableOpacity style={styles.exportButton} onPress={handleExport}>
-            <Ionicons name="download-outline" size={20} color={Colors.primary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.viewToggle} 
-            onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-          >
-            <Ionicons 
-              name={viewMode === 'list' ? 'grid' : 'list'} 
-              size={20} 
-              color={Colors.primary} 
-            />
-          </TouchableOpacity>
-        </View>
+
+        <TouchableOpacity 
+          style={styles.viewToggle} 
+          onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+        >
+          <Ionicons 
+            name={viewMode === 'list' ? 'grid' : 'list'} 
+            size={20} 
+            color={Colors.black50} 
+          />
+        </TouchableOpacity>
+
       </View>
 
       {/* Sort Options Dropdown */}
@@ -500,7 +512,7 @@ export default function CompaniesScreen() {
       {bookmarkedCompanies.length > 0 && (
         <View style={styles.bookmarkedSection}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="bookmark" size={18} color={Colors.primary} />
+            <Ionicons name="bookmark" size={18} color={Colors.black50} />
             <Text style={styles.sectionTitle}>Saved Companies</Text>
             <Text style={styles.sectionCount}>({bookmarkedCompanies.length})</Text>
           </View>
@@ -584,11 +596,6 @@ export default function CompaniesScreen() {
       </View>
       <Text style={styles.gridName} numberOfLines={2}>{item.name}</Text>
       <Text style={styles.gridAddress} numberOfLines={1}>{item.address}</Text>
-      {item.verificationStatus === 'verified' && (
-        <View style={styles.gridVerified}>
-          <Ionicons name="checkmark-circle" size={12} color={Colors.success} />
-        </View>
-      )}
       <TouchableOpacity 
         style={styles.gridBookmark}
         onPress={() => toggleBookmark(item.id)}
@@ -596,7 +603,7 @@ export default function CompaniesScreen() {
         <Ionicons 
           name={bookmarkedIds.includes(item.id) ? 'bookmark' : 'bookmark-outline'} 
           size={16} 
-          color={Colors.primary}
+          color={Colors.black50}
         />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -658,7 +665,7 @@ export default function CompaniesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: Colors.background,
   },
   listContent: {
     paddingBottom: 20,
@@ -667,7 +674,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.headerBg,
     marginBottom: 8,
   },
   tierBar: {
@@ -710,7 +717,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.primary,
+    color: '#F7B85C', // Warm light orange
   },
   statLabel: {
     fontSize: 12,
@@ -752,7 +759,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   sortOptions: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
   },
@@ -763,7 +770,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.black20,
   },
   sortOptionActive: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: Colors.orange500,
   },
   sortOptionText: {
     fontSize: 14,
@@ -778,7 +785,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.orange[400],
+    backgroundColor: Colors.orange500,
   },
   activeFiltersInfo: {
     flex: 1,
@@ -811,7 +818,7 @@ const styles = StyleSheet.create({
   },
   bookmarkedSection: {
     paddingVertical: 12,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
   },
@@ -835,18 +842,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   bookmarkedCard: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: Colors.white,
     padding: 12,
     borderRadius: 12,
     marginRight: 12,
     alignItems: 'center',
     minWidth: 100,
+    borderWidth: 1,
+    borderColor: Colors.black20,
   },
   bookmarkedAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.avatarBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -854,7 +863,7 @@ const styles = StyleSheet.create({
   bookmarkedAvatarText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.text,
   },
   bookmarkedName: {
     fontSize: 12,
@@ -908,7 +917,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Colors.orange[300],
+    backgroundColor: Colors.avatarBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -916,7 +925,7 @@ const styles = StyleSheet.create({
   gridAvatarText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.text,
   },
   gridName: {
     fontSize: 14,
@@ -932,17 +941,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-  gridVerified: {
+  gridBookmark: {
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    padding: 2,
-  },
-  gridBookmark: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
+    padding: 4,
   },
 });
