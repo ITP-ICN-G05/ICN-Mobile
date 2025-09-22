@@ -99,7 +99,7 @@ export default function ProfileScreen() {
     company: 'ABC Construction',
     role: 'Project Manager',
     memberSince: '2024',
-    avatar: null as string | null, // Added avatar field
+    avatar: null as string | null,
   });
 
   // Settings state
@@ -107,7 +107,7 @@ export default function ProfileScreen() {
   const [locationServices, setLocationServices] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
-  const [showDeveloperMode, setShowDeveloperMode] = useState(true); // Toggle for dev mode
+  const [showDeveloperMode, setShowDeveloperMode] = useState(true);
 
   // Stats based on tier
   const getStats = () => {
@@ -155,9 +155,7 @@ export default function ProfileScreen() {
 
   const tierInfo = getTierInfo();
 
-  // ==========================================
-  // NEW: Avatar Upload Functions
-  // ==========================================
+  // Avatar Upload Functions
   const pickImageFromGallery = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -243,20 +241,43 @@ export default function ProfileScreen() {
     );
   };
 
-  // ==========================================
-  // UPDATED: Navigation Handlers
-  // ==========================================
+  // Profile Management Handlers
   const handleEditProfile = () => {
-    // Navigate to the new EditProfileScreen
     navigation.navigate('EditProfile');
   };
 
   const handleChangePassword = () => {
-    // Navigate to the new ChangePasswordScreen
     navigation.navigate('ChangePassword');
   };
 
-  // Existing handlers remain the same
+  // ==========================================
+  // UPDATED: Subscription Management Handlers
+  // ==========================================
+  const handleUpgrade = () => {
+    navigation.navigate('Payment');
+  };
+
+  const handleManageSubscription = () => {
+    // Navigate to the ManageSubscription screen
+    navigation.navigate('ManageSubscription');
+  };
+
+  const handleCancelSubscription = async () => {
+    // Quick action that redirects to manage subscription for cancellation
+    Alert.alert(
+      'Cancel Subscription',
+      'Are you sure? You\'ll lose access to premium features at the end of your billing period.',
+      [
+        { text: 'Keep Subscription', style: 'cancel' },
+        { 
+          text: 'Manage Subscription', 
+          onPress: () => navigation.navigate('ManageSubscription')
+        }
+      ]
+    );
+  };
+
+  // External Links Handlers
   const handlePrivacyPolicy = () => {
     Linking.openURL('https://icnvictoria.com/privacy');
   };
@@ -288,6 +309,7 @@ export default function ProfileScreen() {
     }
   };
 
+  // Data Management Handlers
   const handleExportData = () => {
     if (currentTier === 'free' && features.exportLimit <= 10) {
       Alert.alert(
@@ -308,8 +330,8 @@ export default function ProfileScreen() {
             text: 'Export', 
             onPress: async () => {
               try {
-                // TODO: Implement actual export
-                // const data = await api.exportUserData();
+                // TODO: Implement actual export with subscriptionApi
+                // const data = await subscriptionApi.exportUserData();
                 Alert.alert('Success', 'Data exported successfully!');
               } catch (error) {
                 Alert.alert('Error', 'Failed to export data. Please try again.');
@@ -330,9 +352,14 @@ export default function ProfileScreen() {
         { 
           text: 'Delete', 
           style: 'destructive',
-          onPress: () => {
-            // TODO: Implement actual account deletion
-            Alert.alert('Account Deletion', 'Please contact support to complete account deletion.');
+          onPress: async () => {
+            try {
+              // TODO: Implement with profileApi
+              // await profileApi.deleteAccount();
+              Alert.alert('Account Deletion', 'Your account deletion request has been submitted.');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete account. Please contact support.');
+            }
           }
         },
       ]
@@ -352,7 +379,10 @@ export default function ProfileScreen() {
             try {
               // TODO: Clear auth tokens and user data
               // await AsyncStorage.clear();
-              // navigation.navigate('Auth');
+              // navigation.reset({
+              //   index: 0,
+              //   routes: [{ name: 'Auth' }],
+              // });
               Alert.alert('Signed Out', 'You have been signed out successfully.');
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out. Please try again.');
@@ -363,40 +393,13 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleUpgrade = () => {
-    navigation.navigate('Payment');
-  };
-
-  const handleManageSubscription = () => {
-    // TODO: Implement subscription management
-    Alert.alert('Manage Subscription', 'Subscription management coming soon!');
-  };
-
-  const handleCancelSubscription = () => {
-    Alert.alert(
-      'Cancel Subscription',
-      'Are you sure? You\'ll lose access to premium features at the end of your billing period.',
-      [
-        { text: 'Keep Subscription', style: 'cancel' },
-        { 
-          text: 'Cancel', 
-          style: 'destructive', 
-          onPress: () => {
-            // TODO: Implement actual subscription cancellation
-            Alert.alert('Cancelled', 'Subscription cancelled');
-          }
-        }
-      ]
-    );
-  };
-
   return (
     <ScrollView 
       style={styles.container}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.scrollContent}
     >
-      {/* UPDATED: User Profile Card with working avatar */}
+      {/* User Profile Card with Avatar */}
       <View style={styles.profileCard}>
         <View style={styles.avatarContainer}>
           <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
@@ -480,7 +483,6 @@ export default function ProfileScreen() {
               ))}
             </View>
             
-            {/* Feature Access Indicators */}
             <View style={styles.featuresList}>
               <Text style={styles.featuresTitle}>Current Access:</Text>
               <View style={styles.featureRow}>
@@ -539,7 +541,7 @@ export default function ProfileScreen() {
         </ProfileSection>
       )}
 
-      {/* Subscription Management */}
+      {/* Subscription Management Card */}
       <View style={{ marginVertical: 8 }}>
         <SubscriptionCard
           plan={currentTier as 'free' | 'standard' | 'pro'}

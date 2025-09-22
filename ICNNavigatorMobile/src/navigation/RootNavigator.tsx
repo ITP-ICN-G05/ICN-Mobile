@@ -3,13 +3,18 @@ import { createStackNavigator } from '@react-navigation/stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import EditProfileScreen from '../screens/main/EditProfileScreen';
 import ChangePasswordScreen from '../screens/main/ChangePasswordScreen';
+import PaymentScreen from '../screens/subscription/PaymentScreen';
+import ManageSubscriptionScreen from '../screens/subscription/ManageSubscriptionScreen';
 import { Colors } from '../constants/colors';
 
 export type RootStackParamList = {
   MainTabs: undefined;
   EditProfile: undefined;
   ChangePassword: undefined;
-  Payment: undefined; // Add this if you have a Payment screen
+  Payment: undefined;
+  ManageSubscription: undefined;
+  UpdatePayment: undefined;
+  ComparePlans: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -38,6 +43,8 @@ export default function RootNavigator() {
         component={BottomTabNavigator} 
         options={{ headerShown: false }}
       />
+      
+      {/* Profile Screens */}
       <Stack.Screen 
         name="EditProfile" 
         component={EditProfileScreen}
@@ -54,15 +61,24 @@ export default function RootNavigator() {
           presentation: 'card'
         }}
       />
-      {/* Add Payment screen if you have it */}
-      {/* <Stack.Screen 
+      
+      {/* Subscription Screens */}
+      <Stack.Screen 
         name="Payment" 
         component={PaymentScreen}
         options={{ 
-          title: 'Subscription',
+          title: 'Choose Your Plan',
+          presentation: 'modal'
+        }}
+      />
+      <Stack.Screen 
+        name="ManageSubscription" 
+        component={ManageSubscriptionScreen}
+        options={{ 
+          title: 'Manage Subscription',
           presentation: 'card'
         }}
-      /> */}
+      />
     </Stack.Navigator>
   );
 }
