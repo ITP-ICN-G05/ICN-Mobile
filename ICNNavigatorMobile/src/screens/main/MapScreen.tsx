@@ -5,10 +5,11 @@ import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
-import FilterModal, { FilterOptions } from '../../components/common/FilterModal';
+import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { mockCompanies } from '../../data/mockCompanies';
+import { useUserTier } from '../../contexts/UserTierContext';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -20,6 +21,7 @@ const MELBOURNE_REGION: Region = {
 export default function MapScreen() {
   // Navigation hook
   const navigation = useNavigation<any>();
+  const { currentTier, features } = useUserTier();
   
   // Safe area insets for different devices
   const insets = useSafeAreaInsets();
@@ -31,10 +33,12 @@ export default function MapScreen() {
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
-  const [filters, setFilters] = useState<FilterOptions>({
+  
+  // Update filter state to use EnhancedFilterOptions
+  const [filters, setFilters] = useState<EnhancedFilterOptions>({
     capabilities: [],
+    sectors: [],
     distance: 'All',
-    verificationStatus: 'All',
   });
 
   // Filter companies based on search text and filters
@@ -52,6 +56,18 @@ export default function MapScreen() {
       );
     }
 
+    // Apply components/items search filter (NEW)
+    if (filters.componentsItems) {
+      const searchTerm = filters.componentsItems.toLowerCase();
+      filtered = filtered.filter(company =>
+        company.keySectors.some(sector => 
+          sector.toLowerCase().includes(searchTerm)
+        ) ||
+        // In a real app, you'd search through actual components/items data
+        company.name.toLowerCase().includes(searchTerm)
+      );
+    }
+
     // Apply capability filter (multi-select)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
@@ -64,11 +80,14 @@ export default function MapScreen() {
       );
     }
 
-    // Apply verification filter (single-select)
-    if (filters.verificationStatus !== 'All') {
-      const statusToCheck = filters.verificationStatus.toLowerCase();
+    // Apply sector filter
+    if (filters.sectors && filters.sectors.length > 0) {
       filtered = filtered.filter(company =>
-        company.verificationStatus === statusToCheck
+        filters.sectors.some(sector =>
+          company.keySectors.some(keySector =>
+            keySector.toLowerCase().includes(sector.toLowerCase())
+          )
+        )
       );
     }
 
@@ -93,20 +112,113 @@ export default function MapScreen() {
       });
     }
 
+    // Apply company size filter (Plus tier only)
+    if (filters.companySize && filters.companySize !== 'All' && features.canFilterBySize) {
+      filtered = filtered.filter(company => {
+        switch(filters.companySize) {
+          case 'SME (1-50)':
+            return !company.employeeCount || company.employeeCount <= 50;
+          case 'Medium (51-200)':
+            return company.employeeCount && company.employeeCount > 50 && company.employeeCount <= 200;
+          case 'Large (201-500)':
+            return company.employeeCount && company.employeeCount > 200 && company.employeeCount <= 500;
+          case 'Enterprise (500+)':
+            return company.employeeCount && company.employeeCount > 500;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply certification filter (Plus tier only)
+    if (filters.certifications?.length && features.canFilterByCertifications) {
+      filtered = filtered.filter(company =>
+        company.certifications?.some(cert => 
+          filters.certifications?.includes(cert)
+        )
+      );
+    }
+
+    // Apply ownership type filter (Premium tier only)
+    if (filters.ownershipType?.length && features.canFilterByDiversity) {
+      filtered = filtered.filter(company =>
+        company.ownershipType?.some(ownership =>
+          filters.ownershipType?.includes(ownership)
+        )
+      );
+    }
+
+    // Apply social enterprise filter (Premium tier only)
+    if (filters.socialEnterprise && features.canFilterByDiversity) {
+      filtered = filtered.filter(company => company.socialEnterprise === true);
+    }
+
+    // Apply Australian Disability Enterprise filter (Premium tier only)
+    if (filters.australianDisability && features.canFilterByDiversity) {
+      filtered = filtered.filter(company => company.australianDisabilityEnterprise === true);
+    }
+
+    // Apply revenue filter (Premium tier only) - NEW
+    if (filters.revenue && features.canFilterByRevenue) {
+      const { min = 0, max = 10000000 } = filters.revenue;
+      filtered = filtered.filter(company =>
+        company.revenue !== undefined && 
+        company.revenue >= min && 
+        company.revenue <= max
+      );
+    }
+
+    // Apply employee count filter (Premium tier only) - NEW
+    if (filters.employeeCount && features.canFilterByRevenue) {
+      const { min = 0, max = 1000 } = filters.employeeCount;
+      filtered = filtered.filter(company =>
+        company.employeeCount !== undefined && 
+        company.employeeCount >= min && 
+        company.employeeCount <= max
+      );
+    }
+
+    // Apply local content percentage filter (Premium tier only) - NEW
+    if (filters.localContentPercentage && filters.localContentPercentage > 0 && features.canFilterByRevenue) {
+      const minLocalContent = filters.localContentPercentage;
+      filtered = filtered.filter(company =>
+        company.localContentPercentage !== undefined && 
+        company.localContentPercentage >= minLocalContent
+      );
+    }
+
     return filtered;
-  }, [searchText, filters, region]);
+  }, [searchText, filters, region, features]);
 
   const hasActiveFilters = () => {
     return filters.capabilities.length > 0 || 
-         filters.distance !== 'All' || 
-         filters.verificationStatus !== 'All';
+           (filters.sectors && filters.sectors.length > 0) ||
+           filters.distance !== 'All' ||
+           (filters.componentsItems && filters.componentsItems.length > 0) ||
+           (filters.companySize && filters.companySize !== 'All') ||
+           (filters.certifications && filters.certifications.length > 0) ||
+           (filters.ownershipType && filters.ownershipType.length > 0) ||
+           filters.socialEnterprise ||
+           filters.australianDisability ||
+           (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) ||
+           (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) ||
+           (filters.localContentPercentage && filters.localContentPercentage > 0);
   };
 
   const getActiveFilterCount = () => {
     let count = 0;
     if (filters.capabilities.length > 0) count++;
+    if (filters.sectors && filters.sectors.length > 0) count++;
     if (filters.distance !== 'All') count++;
-    if (filters.verificationStatus !== 'All') count++;
+    if (filters.componentsItems && filters.componentsItems.length > 0) count++;
+    if (filters.companySize && filters.companySize !== 'All') count++;
+    if (filters.certifications && filters.certifications.length > 0) count++;
+    if (filters.ownershipType && filters.ownershipType.length > 0) count++;
+    if (filters.socialEnterprise) count++;
+    if (filters.australianDisability) count++;
+    if (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) count++;
+    if (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) count++;
+    if (filters.localContentPercentage && filters.localContentPercentage > 0) count++;
     return count;
   };
 
@@ -196,7 +308,7 @@ export default function MapScreen() {
     setRegion(newRegion);
   };
 
-  const handleApplyFilters = (newFilters: FilterOptions) => {
+  const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
     setFilters(newFilters);
     setFilterModalVisible(false);
     setTimeout(zoomToFilteredResults, 300);
@@ -222,10 +334,14 @@ export default function MapScreen() {
     setIsFromDropdownSelection(false);
     setFilters({
       capabilities: [],
+      sectors: [],
       distance: 'All',
-      verificationStatus: 'All',
     });
     mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
+  };
+
+  const handleNavigateToPayment = () => {
+    navigation.navigate('Payment');
   };
 
   // Determine if filter bar should be shown
@@ -420,11 +536,12 @@ export default function MapScreen() {
         </Animated.View>
       )}
       
-      <FilterModal
+      <EnhancedFilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
         onApply={handleApplyFilters}
         currentFilters={filters}
+        onNavigateToPayment={handleNavigateToPayment}
       />
     </View>
   );
