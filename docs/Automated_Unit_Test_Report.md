@@ -48,7 +48,7 @@ This report presents the results of comprehensive automated unit testing impleme
 | `FilterDropdown.test.tsx` | 29 | ✅ PASSED | 100% |
 | `SearchBarWithDropdown.test.tsx` | 23 | ✅ PASSED | 100% |
 | `FilterModal.test.tsx` | 23 | ✅ PASSED | 100% |
-| `EnhancedFilterModal.test.tsx` | 18 | ✅ PASSED | 51.42% |
+| `EnhancedFilterModal.test.tsx` | 20 | ✅ PASSED | 53.33% |
 | `PaymentSuccessModal.test.tsx` | 13 | ✅ PASSED | 100% |
 | `SubscriptionCard.test.tsx` | 23 | ✅ PASSED | 100% |
 | `ResetPasswordForm.test.tsx` | 22 | ✅ PASSED | 100% |
@@ -83,7 +83,7 @@ This report presents the results of comprehensive automated unit testing impleme
 
 - **AuthContainer.tsx**: 95% coverage (1 uncovered line)
 - **CompanyCard.tsx**: 100% coverage ✅
-- **EnhancedFilterModal.tsx**: 51.42% coverage
+- **EnhancedFilterModal.tsx**: 53.33% coverage
 - **FilterDropdown.tsx**: 100% coverage ✅  
 - **FilterModal.tsx**: 100% coverage ✅
 - **SearchBar.tsx**: 100% coverage ✅

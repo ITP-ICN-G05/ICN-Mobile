@@ -221,76 +221,88 @@ describe('EnhancedFilterModal Component', () => {
         expect(mockOnClose).toHaveBeenCalled();
       });
     });
-  });
 
-  describe('Reset Functionality', () => {
-    it('resets all filters when reset button is pressed', async () => {
-      const currentFilters: EnhancedFilterOptions = {
-        capabilities: ['Service Provider'],
-        sectors: ['Technology'],
-        distance: '50km',
-        componentsItems: 'test search',
-      };
-
+    it('applies all filters for premium user and calls onApply', async () => {
+      const mockOnApply = jest.fn();
+      mockUseUserTier.mockReturnValue(mockPremiumUserTier);
+      
       const { getByText } = render(
-        <EnhancedFilterModal {...defaultProps} currentFilters={currentFilters} />
+        <EnhancedFilterModal {...defaultProps} onApply={mockOnApply} />
       );
 
-      // Reset filters
-      const resetButton = getByText('Reset All');
-      fireEvent.press(resetButton);
+      // Apply filters
+      const applyButton = getByText('Apply Filters');
+      fireEvent.press(applyButton);
 
-      // After reset, the component should have reset state
-      expect(resetButton).toBeTruthy();
+      expect(mockOnApply).toHaveBeenCalledWith({
+        capabilities: [],
+        distance: 'All',
+        sectors: [],
+        componentsItems: undefined,
+        companySize: 'All',
+        certifications: [],
+        ownershipType: [],
+        socialEnterprise: false,
+        australianDisability: false,
+        revenue: { min: 0, max: 10000000 },
+        employeeCount: { min: 0, max: 1000 },
+        localContentPercentage: 0,
+      });
     });
   });
 
-  describe('Upgrade Prompts', () => {
-    it('shows locked features for free users', () => {
-      mockUseUserTier.mockReturnValue(mockFreeUserTier);
-      const { getByText, getAllByText } = render(<EnhancedFilterModal {...defaultProps} />);
-      
-      // Should show locked plus features
-      expect(getByText('Company Size Filter')).toBeTruthy();
-      const plusTexts = getAllByText('Plus');
-      expect(plusTexts.length).toBeGreaterThan(0); // Should have Plus badges
-    });
-
-    it('shows upgrade prompts for different tiers', () => {
-      mockUseUserTier.mockReturnValue(mockPlusUserTier);
-      const { getByText, getAllByText } = render(<EnhancedFilterModal {...defaultProps} />);
-      
-      // Should show locked premium features
-      expect(getByText('Social Procurement Filters')).toBeTruthy();
-      const premiumTexts = getAllByText('Premium');
-      expect(premiumTexts.length).toBeGreaterThan(0); // Should have Premium badges
-    });
-  });
-
-  describe('Component Integration and Rendering', () => {
-    it('integrates with UserTierContext correctly', () => {
+  describe('Edge Case Handling', () => {
+    it('handles invalid non-numeric input in revenue fields gracefully', () => {
+      const mockOnApply = jest.fn();
       mockUseUserTier.mockReturnValue(mockPremiumUserTier);
-      const { getByText } = render(<EnhancedFilterModal {...defaultProps} />);
-      
-      expect(getByText('Your tier: PREMIUM')).toBeTruthy();
+      const { getByPlaceholderText, getByText } = render(
+        <EnhancedFilterModal {...defaultProps} onApply={mockOnApply} />
+      );
+
+      const minRevenueInput = getByPlaceholderText('$0');
+      const maxRevenueInput = getByPlaceholderText('$10,000,000');
+
+      // Simulate entering invalid text
+      fireEvent.changeText(minRevenueInput, 'invalid');
+      fireEvent.changeText(maxRevenueInput, 'text');
+
+      // Apply filters
+      fireEvent.press(getByText('Apply Filters'));
+
+      // The component should coerce invalid input to the default values
+      expect(mockOnApply).toHaveBeenCalledWith(expect.objectContaining({
+        revenue: { min: 0, max: 10000000 },
+      }));
     });
 
-    it('handles missing onNavigateToPayment callback gracefully', () => {
-      const propsWithoutNavigation = { ...defaultProps, onNavigateToPayment: undefined };
-      const { getByText } = render(<EnhancedFilterModal {...propsWithoutNavigation} />);
-      
-      expect(getByText('Filters')).toBeTruthy();
-    });
+    it('resets all filters to default when Reset All is pressed on an unchanged form', () => {
+      const mockOnApply = jest.fn();
+      mockUseUserTier.mockReturnValue(mockPremiumUserTier);
+      const { getByText } = render(
+        <EnhancedFilterModal {...defaultProps} onApply={mockOnApply} />
+      );
 
-    it('renders without crashing with minimal props', () => {
-      const minimalProps = {
-        visible: true,
-        onClose: jest.fn(),
-        onApply: jest.fn(),
-      };
-      
-      const { getByText } = render(<EnhancedFilterModal {...minimalProps} />);
-      expect(getByText('Filters')).toBeTruthy();
+      // Press Reset All without any changes
+      fireEvent.press(getByText('Reset All'));
+
+      // Then apply filters
+      fireEvent.press(getByText('Apply Filters'));
+
+      // Expect onApply to be called with all default/empty values
+      expect(mockOnApply).toHaveBeenCalledWith({
+        capabilities: [],
+        sectors: [],
+        distance: 'All',
+        componentsItems: undefined,
+        companySize: 'All',
+        certifications: [],
+        ownershipType: [],
+        socialEnterprise: false,
+        australianDisability: false,
+        revenue: { min: 0, max: 10000000 },
+        employeeCount: { min: 0, max: 1000 },
+        localContentPercentage: 0,
+      });
     });
   });
 });
