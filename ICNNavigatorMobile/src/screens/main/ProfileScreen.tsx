@@ -17,10 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing } from '../../constants/colors';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { useUserTier, UserTier } from '../../contexts/UserTierContext';
 import { useSubscription } from '../../hooks/useSubscription';
 import SubscriptionCard from '../../components/common/SubscriptionCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AuthService from '../../services/authService';
+import DataExportService from '../../services/dataExportService';
 
 interface ProfileSectionProps {
   title: string;
@@ -96,6 +99,7 @@ export default function ProfileScreen() {
     refreshSubscription 
   } = useSubscription();
   const [avatarLoading, setAvatarLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // User state (would typically come from Redux/context)
   const [user, setUser] = useState({
@@ -122,7 +126,7 @@ export default function ProfileScreen() {
     return unsubscribe;
   }, [navigation, refreshSubscription]);
 
-  // Stats based on tier - should use actual currentTier, not change it
+  // Stats based on tier
   const getStats = () => {
     const tier = subscription?.tier || currentTier;
     switch(tier) {
@@ -161,12 +165,10 @@ export default function ProfileScreen() {
     const getPrice = () => {
       if (!subscription.amount) return null;
       
-        // Check if subscription has billingPeriod field first
       if (subscription.billingPeriod) {
         return `${subscription.amount.toFixed(2)}/${subscription.billingPeriod === 'yearly' ? 'year' : 'month'}`;
       }
       
-      // Fallback logic: yearly plans are typically >$50
       const isYearly = subscription.amount >= 50;
       return `${subscription.amount.toFixed(2)}/${isYearly ? 'year' : 'month'}`;
     };
@@ -253,7 +255,6 @@ export default function ProfileScreen() {
 
   const uploadAvatar = async (uri: string) => {
     try {
-      // TODO: Implement actual upload to backend
       const formData = new FormData();
       formData.append('avatar', {
         uri,
@@ -302,8 +303,6 @@ export default function ProfileScreen() {
   };
 
   const handleCancelSubscription = async () => {
-    // Direct cancellation for SubscriptionCard button
-    // This immediately downgrades to free tier without any dialog
     await cancelSubscription();
   };
 
@@ -339,60 +338,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // Data Management Handlers
-  const handleExportData = () => {
-    if (currentTier === 'free' && features.exportLimit <= 10) {
-      Alert.alert(
-        'Limited Exports',
-        `Free tier allows ${features.exportLimit} exports per month. Upgrade to Plus or Premium for more exports.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => navigation.navigate('Payment') }
-        ]
-      );
-    } else {
-      Alert.alert(
-        'Export Data',
-        `Export your saved companies and search history? (${stats.exports} exports available)`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Export', 
-            onPress: async () => {
-              try {
-                // TODO: Implement actual export with subscriptionApi
-                Alert.alert('Success', 'Data exported successfully!');
-              } catch (error) {
-                Alert.alert('Error', 'Failed to export data. Please try again.');
-              }
-            }
-          }
-        ]
-      );
-    }
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              Alert.alert('Account Deletion', 'Your account deletion request has been submitted.');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete account. Please contact support.');
-            }
-          }
-        },
-      ]
-    );
-  };
-
+  // UPDATED: Sign Out Handler with actual functionality
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -404,9 +350,23 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              Alert.alert('Signed Out', 'You have been signed out successfully.');
+              setIsLoading(true);
+              
+              await AuthService.signOut();
+              
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                })
+              );
             } catch (error) {
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
+              setIsLoading(false);
+              Alert.alert(
+                'Error', 
+                'Failed to sign out. Please try again.',
+                [{ text: 'OK' }]
+              );
             }
           }
         },
@@ -414,237 +374,375 @@ export default function ProfileScreen() {
     );
   };
 
+  // UPDATED: Delete Account Handler with password verification
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Continue', 
+          style: 'destructive',
+          onPress: () => {
+            Alert.prompt(
+              'Verify Your Identity',
+              'Please enter your password to confirm account deletion:',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async (password?: string) => {
+                    if (!password) {
+                      Alert.alert('Error', 'Password is required');
+                      return;
+                    }
+
+                    try {
+                      setIsLoading(true);
+                      
+                      await AuthService.deleteAccount(password);
+                      
+                      navigation.dispatch(
+                        CommonActions.reset({
+                          index: 0,
+                          routes: [{ name: 'Onboarding' }],
+                        })
+                      );
+                      
+                      Alert.alert(
+                        'Account Deleted',
+                        'Your account has been successfully deleted.',
+                        [{ text: 'OK' }]
+                      );
+                    } catch (error: any) {
+                      setIsLoading(false);
+                      Alert.alert(
+                        'Deletion Failed',
+                        error.message || 'Unable to delete account. Please contact support.',
+                        [
+                          { text: 'OK', style: 'cancel' },
+                          { 
+                            text: 'Contact Support', 
+                            onPress: () => Linking.openURL('mailto:support@icnvictoria.com')
+                          }
+                        ]
+                      );
+                    }
+                  }
+                }
+              ],
+              'secure-text',
+              '',
+              'default'
+            );
+          }
+        },
+      ]
+    );
+  };
+
+  // UPDATED: Export Data Handler with format selection
+  const handleExportData = () => {
+    if (currentTier === 'free' && features.exportLimit <= 0) {
+      Alert.alert(
+        'Export Limit Reached',
+        `You've used all your free exports this month. Upgrade to Plus or Premium for more.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => navigation.navigate('Payment') }
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Export Your Data',
+      'Choose export format:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'JSON Format',
+          onPress: async () => {
+            await performDataExport('json');
+          }
+        },
+        {
+          text: 'CSV Format',
+          onPress: async () => {
+            await performDataExport('csv');
+          }
+        },
+      ]
+    );
+  };
+
+  const performDataExport = async (format: 'json' | 'csv') => {
+    try {
+      setIsLoading(true);
+      
+      await DataExportService.exportUserData(format);
+      
+      if (currentTier !== 'premium') {
+        await DataExportService.updateExportCount();
+      }
+      
+      setIsLoading(false);
+      
+      Alert.alert(
+        'Export Complete',
+        'Your data has been exported successfully.',
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      setIsLoading(false);
+      Alert.alert(
+        'Export Failed',
+        error.message || 'Unable to export data. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   return (
-    <ScrollView 
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-    >
-      {/* User Profile Card with Avatar */}
-      <View style={styles.profileCard}>
-        <View style={styles.avatarContainer}>
-          <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
-            {avatarLoading ? (
-              <View style={styles.avatar}>
-                <ActivityIndicator size="large" color={Colors.white} />
-              </View>
-            ) : user.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {user.name.split(' ').map(n => n[0]).join('')}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.editAvatarButton} 
-            onPress={showAvatarOptions}
-            disabled={avatarLoading}
-          >
-            <Ionicons name="camera" size={20} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
-        
-        <Text style={styles.userName}>{user.name}</Text>
-        <Text style={styles.userRole}>{user.role} at {user.company}</Text>
-        
-        <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
-          <Ionicons name={tierInfo.icon as any} size={16} color={tierInfo.color} />
-          <Text style={[styles.tierText, { color: tierInfo.color }]}>
-            {tierInfo.name} Member
-          </Text>
-        </View>
-
-        <View style={styles.profileStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.saved}</Text>
-            <Text style={styles.statLabel}>Saved</Text>
+    <>
+      <ScrollView 
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* User Profile Card with Avatar */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatarContainer}>
+            <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
+              {avatarLoading ? (
+                <View style={styles.avatar}>
+                  <ActivityIndicator size="large" color={Colors.white} />
+                </View>
+              ) : user.avatar ? (
+                <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {user.name.split(' ').map(n => n[0]).join('')}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.editAvatarButton} 
+              onPress={showAvatarOptions}
+              disabled={avatarLoading}
+            >
+              <Ionicons name="camera" size={20} color={Colors.white} />
+            </TouchableOpacity>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.searches}</Text>
-            <Text style={styles.statLabel}>Searches</Text>
+          
+          <Text style={styles.userName}>{user.name}</Text>
+          <Text style={styles.userRole}>{user.role} at {user.company}</Text>
+          
+          <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
+            <Ionicons name={tierInfo.icon as any} size={16} color={tierInfo.color} />
+            <Text style={[styles.tierText, { color: tierInfo.color }]}>
+              {tierInfo.name} Member
+            </Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{user.memberSince}</Text>
-            <Text style={styles.statLabel}>Member</Text>
-          </View>
-        </View>
 
-        <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
-          <Text style={styles.editProfileText}>Edit Profile</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Subscription Management Card */}
-      <View style={{ marginVertical: 8 }}>
-        <SubscriptionCard
-          plan={(subscription?.tier || currentTier) as 'free' | 'plus' | 'premium'}
-          renewalDate={tierInfo.nextBilling || undefined}
-          monthlyPrice={
-            // Only pass actual monthly amounts, not yearly amounts
-            subscription?.billingPeriod === 'monthly' ? subscription.amount : undefined
-          }
-          onUpgrade={() => {
-            // Smart navigation based on current tier
-            const targetPlan = currentTier === 'free' ? 'plus' : 'premium';
-            navigation.navigate('Payment', { selectedPlan: targetPlan });
-          }}
-          onManage={handleManageSubscription}
-          onCancel={handleCancelSubscription}
-        />
-      </View>
-
-      {/* Rest of the sections remain the same... */}
-      {/* Account Settings */}
-      <ProfileSection title="Account">
-        <SettingItem
-          icon="mail-outline"
-          title="Email"
-          value={user.email}
-          showArrow={false}
-        />
-        <SettingItem
-          icon="call-outline"
-          title="Phone"
-          value={user.phone}
-          showArrow={false}
-        />
-        <SettingItem
-          icon="key-outline"
-          title="Change Password"
-          onPress={handleChangePassword}
-        />
-        <SettingItem
-          icon="ribbon-outline"
-          title="Subscription"
-          value={
-            <View style={[styles.upgradeBadge, { backgroundColor: tierInfo.color }]}>
-              <Text style={styles.upgradeText}>{tierInfo.name}</Text>
+          <View style={styles.profileStats}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats.saved}</Text>
+              <Text style={styles.statLabel}>Saved</Text>
             </View>
-          }
-          onPress={handleUpgrade}
-        />
-      </ProfileSection>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats.searches}</Text>
+              <Text style={styles.statLabel}>Searches</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{user.memberSince}</Text>
+              <Text style={styles.statLabel}>Member</Text>
+            </View>
+          </View>
 
-      {/* Preferences */}
-      <ProfileSection title="Preferences">
-        <SettingItem
-          icon="notifications-outline"
-          title="Push Notifications"
-          isSwitch
-          switchValue={notifications}
-          onSwitchChange={setNotifications}
-        />
-        <SettingItem
-          icon="location-outline"
-          title="Location Services"
-          isSwitch
-          switchValue={locationServices}
-          onSwitchChange={setLocationServices}
-        />
-        <SettingItem
-          icon="moon-outline"
-          title="Dark Mode"
-          isSwitch
-          switchValue={darkMode}
-          onSwitchChange={setDarkMode}
-        />
-        <SettingItem
-          icon="sync-outline"
-          title="Auto-Sync Data"
-          isSwitch
-          switchValue={autoSync}
-          onSwitchChange={setAutoSync}
-        />
-      </ProfileSection>
+          <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Data & Privacy */}
-      <ProfileSection title="Data & Privacy">
-        <SettingItem
-          icon="download-outline"
-          title="Export My Data"
-          value={`${stats.exports} left`}
-          onPress={handleExportData}
-        />
-        <SettingItem
-          icon="shield-checkmark-outline"
-          title="Privacy Policy"
-          onPress={handlePrivacyPolicy}
-        />
-        <SettingItem
-          icon="document-text-outline"
-          title="Terms of Service"
-          onPress={handleTermsOfService}
-        />
-        <SettingItem
-          icon="trash-outline"
-          title="Delete Account"
-          onPress={handleDeleteAccount}
-          showArrow={false}
-        />
-      </ProfileSection>
+        {/* Subscription Management Card */}
+        <View style={{ marginVertical: 8 }}>
+          <SubscriptionCard
+            plan={(subscription?.tier || currentTier) as 'free' | 'plus' | 'premium'}
+            renewalDate={tierInfo.nextBilling || undefined}
+            monthlyPrice={
+              subscription?.billingPeriod === 'monthly' ? subscription.amount : undefined
+            }
+            onUpgrade={() => {
+              const targetPlan = currentTier === 'free' ? 'plus' : 'premium';
+              navigation.navigate('Payment', { selectedPlan: targetPlan });
+            }}
+            onManage={handleManageSubscription}
+            onCancel={handleCancelSubscription}
+          />
+        </View>
 
-      {/* Support */}
-      <ProfileSection title="Support">
-        <SettingItem
-          icon="help-circle-outline"
-          title="Help Center"
-          onPress={() => Linking.openURL('https://icnvictoria.com/help')}
-        />
-        <SettingItem
-          icon="chatbubble-outline"
-          title="Contact Support"
-          onPress={handleContactSupport}
-        />
-        <SettingItem
-          icon="star-outline"
-          title="Rate App"
-          onPress={handleRateApp}
-        />
-        <SettingItem
-          icon="share-outline"
-          title="Share App"
-          onPress={handleShareApp}
-        />
-      </ProfileSection>
+        {/* Account Settings */}
+        <ProfileSection title="Account">
+          <SettingItem
+            icon="mail-outline"
+            title="Email"
+            value={user.email}
+            showArrow={false}
+          />
+          <SettingItem
+            icon="call-outline"
+            title="Phone"
+            value={user.phone}
+            showArrow={false}
+          />
+          <SettingItem
+            icon="key-outline"
+            title="Change Password"
+            onPress={handleChangePassword}
+          />
+          <SettingItem
+            icon="ribbon-outline"
+            title="Subscription"
+            value={
+              <View style={[styles.upgradeBadge, { backgroundColor: tierInfo.color }]}>
+                <Text style={styles.upgradeText}>{tierInfo.name}</Text>
+              </View>
+            }
+            onPress={handleUpgrade}
+          />
+        </ProfileSection>
 
-      {/* About */}
-      <ProfileSection title="About">
-        <SettingItem
-          icon="information-circle-outline"
-          title="App Version"
-          value="1.0.0"
-          showArrow={false}
-        />
-        <SettingItem
-          icon="business-outline"
-          title="About ICN"
-          onPress={() => Linking.openURL('https://icnvictoria.com/about')}
-        />
-        <SettingItem
-          icon="globe-outline"
-          title="Website"
-          value="icnvictoria.com"
-          onPress={() => Linking.openURL('https://icnvictoria.com')}
-        />
-      </ProfileSection>
+        {/* Preferences */}
+        <ProfileSection title="Preferences">
+          <SettingItem
+            icon="notifications-outline"
+            title="Push Notifications"
+            isSwitch
+            switchValue={notifications}
+            onSwitchChange={setNotifications}
+          />
+          <SettingItem
+            icon="location-outline"
+            title="Location Services"
+            isSwitch
+            switchValue={locationServices}
+            onSwitchChange={setLocationServices}
+          />
+          <SettingItem
+            icon="moon-outline"
+            title="Dark Mode"
+            isSwitch
+            switchValue={darkMode}
+            onSwitchChange={setDarkMode}
+          />
+          <SettingItem
+            icon="sync-outline"
+            title="Auto-Sync Data"
+            isSwitch
+            switchValue={autoSync}
+            onSwitchChange={setAutoSync}
+          />
+        </ProfileSection>
 
-      {/* Sign Out Button */}
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-        <Text style={styles.signOutText}>Sign Out</Text>
-      </TouchableOpacity>
+        {/* Data & Privacy */}
+        <ProfileSection title="Data & Privacy">
+          <SettingItem
+            icon="download-outline"
+            title="Export My Data"
+            value={`${stats.exports} left`}
+            onPress={handleExportData}
+          />
+          <SettingItem
+            icon="shield-checkmark-outline"
+            title="Privacy Policy"
+            onPress={handlePrivacyPolicy}
+          />
+          <SettingItem
+            icon="document-text-outline"
+            title="Terms of Service"
+            onPress={handleTermsOfService}
+          />
+          <SettingItem
+            icon="trash-outline"
+            title="Delete Account"
+            onPress={handleDeleteAccount}
+            showArrow={false}
+          />
+        </ProfileSection>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
-        <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
-      </View>
-    </ScrollView>
+        {/* Support */}
+        <ProfileSection title="Support">
+          <SettingItem
+            icon="help-circle-outline"
+            title="Help Center"
+            onPress={() => Linking.openURL('https://icnvictoria.com/help')}
+          />
+          <SettingItem
+            icon="chatbubble-outline"
+            title="Contact Support"
+            onPress={handleContactSupport}
+          />
+          <SettingItem
+            icon="star-outline"
+            title="Rate App"
+            onPress={handleRateApp}
+          />
+          <SettingItem
+            icon="share-outline"
+            title="Share App"
+            onPress={handleShareApp}
+          />
+        </ProfileSection>
+
+        {/* About */}
+        <ProfileSection title="About">
+          <SettingItem
+            icon="information-circle-outline"
+            title="App Version"
+            value="1.0.0"
+            showArrow={false}
+          />
+          <SettingItem
+            icon="business-outline"
+            title="About ICN"
+            onPress={() => Linking.openURL('https://icnvictoria.com/about')}
+          />
+          <SettingItem
+            icon="globe-outline"
+            title="Website"
+            value="icnvictoria.com"
+            onPress={() => Linking.openURL('https://icnvictoria.com')}
+          />
+        </ProfileSection>
+
+        {/* Sign Out Button */}
+        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
+          <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
+        </View>
+      </ScrollView>
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Processing...</Text>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -834,69 +932,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: '600',
   },
-  devModeContainer: {
-    padding: 16,
-  },
-  devModeText: {
-    fontSize: 14,
-    color: Colors.black50,
-    marginBottom: 12,
-  },
-  tierButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  tierButton: {
-    flex: 1,
-    paddingVertical: 10,
-    backgroundColor: Colors.black20,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  tierButtonActive: {
-    backgroundColor: Colors.primary,
-  },
-  tierButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.black50,
-  },
-  tierButtonTextActive: {
-    color: Colors.white,
-  },
-  featuresList: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: Colors.orange[400],
-    borderRadius: 8,
-  },
-  featuresTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  featureText: {
-    fontSize: 13,
-    color: Colors.text,
-  },
-  hideDevButton: {
-    marginTop: 12,
-    padding: 8,
-    alignItems: 'center',
-  },
-  hideDevText: {
-    fontSize: 13,
-    color: Colors.primary,
-    textDecorationLine: 'underline',
-  },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -928,5 +963,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.black50,
     marginTop: 4,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingText: {
+    color: Colors.white,
+    marginTop: 10,
+    fontSize: 16,
   },
 });
