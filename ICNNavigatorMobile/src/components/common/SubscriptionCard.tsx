@@ -115,7 +115,7 @@ export default function SubscriptionCard({
             </TouchableOpacity>
           </>
         )}
-        // In the actions section, update the price display logic
+        {/* In the actions section, update the price display logic */}
         {plan !== 'free' && (
           <View>
             {monthlyPrice ? (

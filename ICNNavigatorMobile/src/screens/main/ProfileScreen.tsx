@@ -20,6 +20,8 @@ import { Colors, Spacing } from '../../constants/colors';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { useUserTier, UserTier } from '../../contexts/UserTierContext';
 import { useSubscription } from '../../hooks/useSubscription';
+import { useUser } from '../../contexts/UserContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import SubscriptionCard from '../../components/common/SubscriptionCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../../services/authService';
@@ -46,6 +48,7 @@ interface SettingItemProps {
   isSwitch?: boolean;
   switchValue?: boolean;
   onSwitchChange?: (value: boolean) => void;
+  disabled?: boolean;
 }
 
 const SettingItem = ({
@@ -57,11 +60,12 @@ const SettingItem = ({
   isSwitch = false,
   switchValue,
   onSwitchChange,
+  disabled = false,
 }: SettingItemProps) => (
   <TouchableOpacity
-    style={styles.settingItem}
+    style={[styles.settingItem, disabled && styles.settingItemDisabled]}
     onPress={isSwitch ? undefined : onPress}
-    disabled={isSwitch}
+    disabled={isSwitch || disabled}
     activeOpacity={isSwitch ? 1 : 0.7}
   >
     <View style={styles.settingLeft}>
@@ -81,6 +85,7 @@ const SettingItem = ({
           onValueChange={onSwitchChange}
           trackColor={{ false: Colors.black20, true: Colors.primary }}
           thumbColor={switchValue ? Colors.white : Colors.black50}
+          disabled={disabled}
         />
       )}
       {showArrow && !isSwitch && (
@@ -98,33 +103,29 @@ export default function ProfileScreen() {
     cancelSubscription, 
     refreshSubscription 
   } = useSubscription();
+  
+  // Use contexts for user data and settings
+  const { user, isLoading: userLoading, updateUser, refreshUser, clearUser } = useUser();
+  const { settings, updateSetting, syncSettings } = useSettings();
+  
   const [avatarLoading, setAvatarLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  // User state (would typically come from Redux/context)
-  const [user, setUser] = useState({
-    name: 'John Smith',
-    email: 'john.smith@example.com',
-    phone: '+61 400 123 456',
-    company: 'ABC Construction',
-    role: 'Project Manager',
-    memberSince: '2024',
-    avatar: null as string | null,
+  const [settingsLoading, setSettingsLoading] = useState({
+    notifications: false,
+    locationServices: false,
+    darkMode: false,
+    autoSync: false,
   });
 
-  // Settings state
-  const [notifications, setNotifications] = useState(true);
-  const [locationServices, setLocationServices] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-  const [autoSync, setAutoSync] = useState(true);
-
-  // Refresh subscription data when screen focuses
+  // Refresh data when screen focuses
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       refreshSubscription();
+      refreshUser();
+      syncSettings();
     });
     return unsubscribe;
-  }, [navigation, refreshSubscription]);
+  }, [navigation, refreshSubscription, refreshUser, syncSettings]);
 
   // Stats based on tier
   const getStats = () => {
@@ -224,8 +225,7 @@ export default function ProfileScreen() {
     setAvatarLoading(false);
 
     if (!result.canceled && result.assets[0]) {
-      setUser({ ...user, avatar: result.assets[0].uri });
-      uploadAvatar(result.assets[0].uri);
+      await uploadAvatar(result.assets[0].uri);
     }
   };
 
@@ -248,8 +248,7 @@ export default function ProfileScreen() {
     setAvatarLoading(false);
 
     if (!result.canceled && result.assets[0]) {
-      setUser({ ...user, avatar: result.assets[0].uri });
-      uploadAvatar(result.assets[0].uri);
+      await uploadAvatar(result.assets[0].uri);
     }
   };
 
@@ -262,22 +261,42 @@ export default function ProfileScreen() {
         name: 'avatar.jpg',
       } as any);
       
-      console.log('Avatar uploaded successfully');
-      Alert.alert('Success', 'Profile picture updated successfully!');
+      const token = await AsyncStorage.getItem('@auth_token');
+      const response = await fetch('https://api.icnvictoria.com/user/avatar', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const { avatarUrl } = await response.json();
+        await updateUser({ avatar: avatarUrl });
+        Alert.alert('Success', 'Profile picture updated successfully!');
+      } else {
+        throw new Error('Upload failed');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
-      setUser({ ...user, avatar: null });
+      // Don't clear avatar on error - keep the local preview
     }
   };
 
   const showAvatarOptions = () => {
+    if (!user) return;
+    
     Alert.alert(
       'Change Profile Picture',
       'Choose a method',
       [
         { text: 'Take Photo', onPress: takePhoto },
         { text: 'Choose from Gallery', onPress: pickImageFromGallery },
-        user.avatar && { text: 'Remove Photo', onPress: () => setUser({ ...user, avatar: null }), style: 'destructive' },
+        user.avatar && { 
+          text: 'Remove Photo', 
+          onPress: async () => await updateUser({ avatar: null }), 
+          style: 'destructive' 
+        },
         { text: 'Cancel', style: 'cancel' },
       ].filter(Boolean) as any,
       { cancelable: true }
@@ -304,6 +323,24 @@ export default function ProfileScreen() {
 
   const handleCancelSubscription = async () => {
     await cancelSubscription();
+  };
+
+  // Settings handlers with loading states
+  const handleSettingChange = async (
+    key: keyof typeof settings, 
+    value: boolean
+  ) => {
+    setSettingsLoading(prev => ({ ...prev, [key]: true }));
+    try {
+      await updateSetting(key, value);
+    } catch (error) {
+      Alert.alert(
+        'Settings Error', 
+        `Failed to update ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}. Please try again.`
+      );
+    } finally {
+      setSettingsLoading(prev => ({ ...prev, [key]: false }));
+    }
   };
 
   // External Links Handlers
@@ -338,7 +375,7 @@ export default function ProfileScreen() {
     }
   };
 
-  // UPDATED: Sign Out Handler with actual functionality
+  // Sign Out Handler
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -353,6 +390,7 @@ export default function ProfileScreen() {
               setIsLoading(true);
               
               await AuthService.signOut();
+              clearUser(); // Clear user context
               
               navigation.dispatch(
                 CommonActions.reset({
@@ -374,7 +412,7 @@ export default function ProfileScreen() {
     );
   };
 
-  // UPDATED: Delete Account Handler with password verification
+  // Delete Account Handler
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
@@ -403,6 +441,7 @@ export default function ProfileScreen() {
                       setIsLoading(true);
                       
                       await AuthService.deleteAccount(password);
+                      clearUser(); // Clear user context
                       
                       navigation.dispatch(
                         CommonActions.reset({
@@ -443,7 +482,7 @@ export default function ProfileScreen() {
     );
   };
 
-  // UPDATED: Export Data Handler with format selection
+  // Export Data Handler
   const handleExportData = () => {
     if (currentTier === 'free' && features.exportLimit <= 0) {
       Alert.alert(
@@ -464,15 +503,11 @@ export default function ProfileScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'JSON Format',
-          onPress: async () => {
-            await performDataExport('json');
-          }
+          onPress: async () => await performDataExport('json')
         },
         {
           text: 'CSV Format',
-          onPress: async () => {
-            await performDataExport('csv');
-          }
+          onPress: async () => await performDataExport('csv')
         },
       ]
     );
@@ -505,6 +540,29 @@ export default function ProfileScreen() {
     }
   };
 
+  // Show loading state while user data loads
+  if (userLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingMessage}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  // Handle case where user is not logged in
+  if (!user) {
+    return (
+      <View style={[styles.container, styles.errorContainer]}>
+        <Ionicons name="alert-circle-outline" size={48} color={Colors.black50} />
+        <Text style={styles.errorMessage}>Unable to load profile</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={refreshUser}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <>
       <ScrollView 
@@ -525,7 +583,7 @@ export default function ProfileScreen() {
               ) : (
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>
-                    {user.name.split(' ').map(n => n[0]).join('')}
+                  {user.name.split(' ').map((n: string) => n[0]).join('')}
                   </Text>
                 </View>
               )}
@@ -619,35 +677,39 @@ export default function ProfileScreen() {
           />
         </ProfileSection>
 
-        {/* Preferences */}
+        {/* Preferences - Now using context */}
         <ProfileSection title="Preferences">
           <SettingItem
             icon="notifications-outline"
             title="Push Notifications"
             isSwitch
-            switchValue={notifications}
-            onSwitchChange={setNotifications}
+            switchValue={settings.notifications}
+            onSwitchChange={(value) => handleSettingChange('notifications', value)}
+            disabled={settingsLoading.notifications}
           />
           <SettingItem
             icon="location-outline"
             title="Location Services"
             isSwitch
-            switchValue={locationServices}
-            onSwitchChange={setLocationServices}
+            switchValue={settings.locationServices}
+            onSwitchChange={(value) => handleSettingChange('locationServices', value)}
+            disabled={settingsLoading.locationServices}
           />
           <SettingItem
             icon="moon-outline"
             title="Dark Mode"
             isSwitch
-            switchValue={darkMode}
-            onSwitchChange={setDarkMode}
+            switchValue={settings.darkMode}
+            onSwitchChange={(value) => handleSettingChange('darkMode', value)}
+            disabled={settingsLoading.darkMode}
           />
           <SettingItem
             icon="sync-outline"
             title="Auto-Sync Data"
             isSwitch
-            switchValue={autoSync}
-            onSwitchChange={setAutoSync}
+            switchValue={settings.autoSync}
+            onSwitchChange={(value) => handleSettingChange('autoSync', value)}
+            disabled={settingsLoading.autoSync}
           />
         </ProfileSection>
 
@@ -753,6 +815,36 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingMessage: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.black50,
+  },
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorMessage: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.black50,
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
   profileCard: {
     backgroundColor: Colors.white,
@@ -892,6 +984,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
+  },
+  settingItemDisabled: {
+    opacity: 0.6,
   },
   settingLeft: {
     flexDirection: 'row',
