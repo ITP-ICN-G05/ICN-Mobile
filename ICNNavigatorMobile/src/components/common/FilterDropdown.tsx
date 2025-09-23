@@ -184,13 +184,15 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   dropdown: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: '#FAE4C5',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   dropdownExpanded: {
     borderBottomLeftRadius: 0,
@@ -226,8 +228,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: '#F7B85C',
+    borderColor: '#F7B85C',
   },
   radio: {
     width: 20,
@@ -240,13 +242,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioSelected: {
-    borderColor: Colors.primary,
+    borderColor: '#F7B85C',
   },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#F7B85C',
   },
   optionText: {
     fontSize: 15,
@@ -261,7 +263,7 @@ const styles = StyleSheet.create({
     color: Colors.black50,
   },
   applyButton: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: '#F7B85CE6', // Added transparency (90% opacity)
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -270,6 +272,6 @@ const styles = StyleSheet.create({
   applyText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: '#FFFFFF', // Changed to white
   },
 });

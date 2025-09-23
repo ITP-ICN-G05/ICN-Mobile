@@ -26,20 +26,13 @@ import { Company } from '../../types';
 import { mockCompanies, generateMockCompanies } from '../../data/mockCompanies';
 import { useUserTier } from '../../contexts/UserTierContext';
 
-// Local color definitions
-const Colors = {
-  white: '#FFFFFF',
-  background: '#FFFFFF',
-  text: '#111111',
-  primary: '#F99F1C',
-  success: '#B6D289',
-  black50: '#808080',
-  black20: '#CCCCCC',
-  orange400: '#FEECD2',
-  orange500: '#FFE0B2',
+// Extended local colors (adding to the imported Colors)
+const LocalColors = {
+  ...Colors,
   avatarBg: '#E0E0E0', // Gray avatar background
   headerBg: '#FFFFFF', // Statistics area background color changed to white
   searchBg: '#FFFFFF', // Search bar background color changed to white
+  statNumber: '#F7B85C', // Warm light orange for statistics
 };
 
 // Enable LayoutAnimation on Android
@@ -674,7 +667,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    backgroundColor: Colors.headerBg,
+    backgroundColor: LocalColors.headerBg,
     marginBottom: 8,
   },
   tierBar: {
@@ -717,7 +710,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#F7B85C', // Warm light orange
+    color: LocalColors.statNumber,
   },
   statLabel: {
     fontSize: 12,
@@ -759,7 +752,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   sortOptions: {
-    backgroundColor: Colors.headerBg,
+    backgroundColor: LocalColors.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
   },
@@ -770,7 +763,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.black20,
   },
   sortOptionActive: {
-    backgroundColor: Colors.orange500,
+    backgroundColor: Colors.orange[400],
   },
   sortOptionText: {
     fontSize: 14,
@@ -785,7 +778,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.orange500,
+    backgroundColor: Colors.orange[400],
   },
   activeFiltersInfo: {
     flex: 1,
@@ -818,7 +811,7 @@ const styles = StyleSheet.create({
   },
   bookmarkedSection: {
     paddingVertical: 12,
-    backgroundColor: Colors.headerBg,
+    backgroundColor: LocalColors.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
   },
@@ -855,7 +848,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.avatarBg,
+    backgroundColor: LocalColors.avatarBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -917,7 +910,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Colors.avatarBg,
+    backgroundColor: LocalColors.avatarBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,

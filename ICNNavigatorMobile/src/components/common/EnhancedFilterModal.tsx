@@ -22,7 +22,6 @@ export interface EnhancedFilterOptions {
   capabilities: string[];
   distance: string;
   sectors: string[];
-  componentsItems?: string; // NEW: Text search for components/items
   
   // Plus tier filters
   companySize?: string;
@@ -127,9 +126,6 @@ export default function EnhancedFilterModal({
   const [distance, setDistance] = useState<string>(
     currentFilters?.distance || 'All'
   );
-  const [componentsItems, setComponentsItems] = useState<string>(
-    currentFilters?.componentsItems || ''
-  );
   
   // Plus tier filters
   const [companySize, setCompanySize] = useState<string>(
@@ -170,7 +166,6 @@ export default function EnhancedFilterModal({
       capabilities,
       sectors,
       distance,
-      componentsItems: componentsItems.trim() || undefined,
     };
 
     // Only include Plus/Premium filters if user has access
@@ -216,7 +211,6 @@ export default function EnhancedFilterModal({
     setCapabilities([]);
     setSectors([]);
     setDistance('All');
-    setComponentsItems('');
     setCompanySize('All');
     setCertifications([]);
     setOwnershipType([]);
@@ -274,9 +268,6 @@ export default function EnhancedFilterModal({
         <SafeAreaView style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Filters</Text>
-            <View style={styles.tierIndicator}>
-              <Text style={styles.tierText}>Your tier: {currentTier.toUpperCase()}</Text>
-            </View>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
@@ -288,18 +279,6 @@ export default function EnhancedFilterModal({
           >
             {/* Basic Filters - Available to all */}
             <Text style={styles.sectionTitle}>Basic Filters</Text>
-            
-            {/* Components/Items Search - NEW */}
-            <View style={styles.searchSection}>
-              <Text style={styles.filterLabel}>Components/Items Search</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search for specific components or items..."
-                value={componentsItems}
-                onChangeText={setComponentsItems}
-                placeholderTextColor={Colors.black50}
-              />
-            </View>
 
             <FilterDropdown
               title="Capability Types"
@@ -652,17 +631,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
   },
-  tierIndicator: {
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  tierText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.text,
-  },
   body: {
     padding: Spacing.lg,
   },
@@ -673,23 +641,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 12,
   },
-  searchSection: {
-    marginBottom: 16,
-  },
   filterLabel: {
     fontSize: 15,
     fontWeight: '500',
     color: Colors.text,
     marginBottom: 8,
-  },
-  searchInput: {
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-    color: Colors.text,
-    borderWidth: 1,
-    borderColor: Colors.black20,
   },
   rangeSection: {
     backgroundColor: Colors.white,
@@ -792,7 +748,7 @@ const styles = StyleSheet.create({
     color: Colors.black50,
   },
   tierBadge: {
-    backgroundColor: Colors.warning,
+    backgroundColor: '#F7B85C',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -804,7 +760,7 @@ const styles = StyleSheet.create({
   },
   upgradeHint: {
     fontSize: 12,
-    color: Colors.primary,
+    color: '#FCCF8E',
     marginTop: 8,
     fontStyle: 'italic',
   },
@@ -839,32 +795,47 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     backgroundColor: Colors.white,
     borderTopWidth: 1,
-    borderTopColor: Colors.black20,
+    borderTopColor: '#E0E0E0',
     gap: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 4,
   },
   resetButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: Colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: Colors.white,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   resetText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primary,
+    color: '#808080',
   },
   applyButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#F7B85C',
     alignItems: 'center',
   },
   applyText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
     color: Colors.white,
   },
 });
