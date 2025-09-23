@@ -1,5 +1,4 @@
-// src/screens/main/ProfileScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +10,22 @@ import {
   Linking,
   Share,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing } from '../../constants/colors';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { useUserTier, UserTier } from '../../contexts/UserTierContext';
+import { useSubscription } from '../../hooks/useSubscription';
+import { useUser } from '../../contexts/UserContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import SubscriptionCard from '../../components/common/SubscriptionCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import AuthService from '../../services/authService';
+import DataExportService from '../../services/dataExportService';
 
 interface ProfileSectionProps {
   title: string;
@@ -40,6 +48,7 @@ interface SettingItemProps {
   isSwitch?: boolean;
   switchValue?: boolean;
   onSwitchChange?: (value: boolean) => void;
+  disabled?: boolean;
 }
 
 const SettingItem = ({
@@ -51,11 +60,12 @@ const SettingItem = ({
   isSwitch = false,
   switchValue,
   onSwitchChange,
+  disabled = false,
 }: SettingItemProps) => (
   <TouchableOpacity
-    style={styles.settingItem}
+    style={[styles.settingItem, disabled && styles.settingItemDisabled]}
     onPress={isSwitch ? undefined : onPress}
-    disabled={isSwitch}
+    disabled={isSwitch || disabled}
     activeOpacity={isSwitch ? 1 : 0.7}
   >
     <View style={styles.settingLeft}>
@@ -75,6 +85,7 @@ const SettingItem = ({
           onValueChange={onSwitchChange}
           trackColor={{ false: Colors.black20, true: Colors.primary }}
           thumbColor={switchValue ? Colors.white : Colors.black50}
+          disabled={disabled}
         />
       )}
       {showArrow && !isSwitch && (
@@ -87,57 +98,98 @@ const SettingItem = ({
 export default function ProfileScreen() {
   const navigation = useNavigation<any>();
   const { currentTier, setCurrentTier, features } = useUserTier();
-
-  // User state (would typically come from Redux/context)
-  const [user] = useState({
-    name: 'John Smith',
-    email: 'john.smith@example.com',
-    phone: '+61 400 123 456',
-    company: 'ABC Construction',
-    role: 'Project Manager',
-    memberSince: '2024',
-    // Tier now comes from context
+  const { 
+    subscription, 
+    cancelSubscription, 
+    refreshSubscription 
+  } = useSubscription();
+  
+  // Use contexts for user data and settings
+  const { user, isLoading: userLoading, updateUser, refreshUser, clearUser } = useUser();
+  const { settings, updateSetting, syncSettings } = useSettings();
+  
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState({
+    notifications: false,
+    locationServices: false,
+    darkMode: false,
+    autoSync: false,
   });
 
-  // Settings state
-  const [notifications, setNotifications] = useState(true);
-  const [locationServices, setLocationServices] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
-  const [autoSync, setAutoSync] = useState(true);
-  const [showDeveloperMode, setShowDeveloperMode] = useState(true); // Toggle for dev mode
+  // Refresh data when screen focuses
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshSubscription();
+      refreshUser();
+      syncSettings();
+    });
+    return unsubscribe;
+  }, [navigation, refreshSubscription, refreshUser, syncSettings]);
 
   // Stats based on tier
   const getStats = () => {
-    switch(currentTier) {
+    const tier = subscription?.tier || currentTier;
+    switch(tier) {
       case 'premium':
         return { saved: 'Unlimited', searches: 'Unlimited', exports: 'Unlimited' };
       case 'plus':
         return { saved: '50', searches: '500/mo', exports: '50/mo' };
       default:
-        return { saved: '10', searches: '100/mo', exports: '10/mo' };
+        return { saved: '10', searches: '100/mo', exports: '2/mo' };
     }
   };
 
   const stats = getStats();
 
-  // Get tier display info
+  // Get tier display info from actual subscription
   const getTierInfo = () => {
-    switch(currentTier) {
+    if (!subscription) {
+      return { 
+        name: 'Free', 
+        color: Colors.black50,
+        icon: 'star-outline',
+        price: null,
+        nextBilling: null
+      };
+    }
+
+    const formatDate = (dateString: string | undefined) => {
+      if (!dateString) return null;
+      return new Date(dateString).toLocaleDateString('en-US', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    };
+
+    const getPrice = () => {
+      if (!subscription.amount) return null;
+      
+      if (subscription.billingPeriod) {
+        return `${subscription.amount.toFixed(2)}/${subscription.billingPeriod === 'yearly' ? 'year' : 'month'}`;
+      }
+      
+      const isYearly = subscription.amount >= 50;
+      return `${subscription.amount.toFixed(2)}/${isYearly ? 'year' : 'month'}`;
+    };
+
+    switch(subscription.tier) {
       case 'premium':
         return { 
           name: 'Premium', 
           color: Colors.warning,
           icon: 'star',
-          price: '$19.99/month',
-          nextBilling: '15 Feb 2025'
+          price: getPrice(),
+          nextBilling: formatDate(subscription.nextBillingDate)
         };
       case 'plus':
         return { 
           name: 'Plus', 
           color: Colors.primary,
           icon: 'star-half',
-          price: '$9.99/month',
-          nextBilling: '15 Feb 2025'
+          price: getPrice(),
+          nextBilling: formatDate(subscription.nextBillingDate)
         };
       default:
         return { 
@@ -152,15 +204,146 @@ export default function ProfileScreen() {
 
   const tierInfo = getTierInfo();
 
-  // Handlers
+  // Avatar Upload Functions
+  const pickImageFromGallery = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to change your avatar.');
+      return;
+    }
+
+    setAvatarLoading(true);
+    
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    setAvatarLoading(false);
+
+    if (!result.canceled && result.assets[0]) {
+      await uploadAvatar(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Please allow access to your camera to take a photo.');
+      return;
+    }
+
+    setAvatarLoading(true);
+    
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    setAvatarLoading(false);
+
+    if (!result.canceled && result.assets[0]) {
+      await uploadAvatar(result.assets[0].uri);
+    }
+  };
+
+  const uploadAvatar = async (uri: string) => {
+    try {
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri,
+        type: 'image/jpeg',
+        name: 'avatar.jpg',
+      } as any);
+      
+      const token = await AsyncStorage.getItem('@auth_token');
+      const response = await fetch('https://api.icnvictoria.com/user/avatar', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const { avatarUrl } = await response.json();
+        await updateUser({ avatar: avatarUrl });
+        Alert.alert('Success', 'Profile picture updated successfully!');
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+      // Don't clear avatar on error - keep the local preview
+    }
+  };
+
+  const showAvatarOptions = () => {
+    if (!user) return;
+    
+    Alert.alert(
+      'Change Profile Picture',
+      'Choose a method',
+      [
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Gallery', onPress: pickImageFromGallery },
+        user.avatar && { 
+          text: 'Remove Photo', 
+          onPress: async () => await updateUser({ avatar: null }), 
+          style: 'destructive' 
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ].filter(Boolean) as any,
+      { cancelable: true }
+    );
+  };
+
+  // Profile Management Handlers
   const handleEditProfile = () => {
-    Alert.alert('Edit Profile', 'Profile editing feature coming soon!');
+    navigation.navigate('EditProfile');
   };
 
   const handleChangePassword = () => {
-    Alert.alert('Change Password', 'Password change feature coming soon!');
+    navigation.navigate('ChangePassword');
   };
 
+  // Subscription Management Handlers
+  const handleUpgrade = () => {
+    navigation.navigate('Payment');
+  };
+
+  const handleManageSubscription = () => {
+    navigation.navigate('ManageSubscription');
+  };
+
+  const handleCancelSubscription = async () => {
+    await cancelSubscription();
+  };
+
+  // Settings handlers with loading states
+  const handleSettingChange = async (
+    key: keyof typeof settings, 
+    value: boolean
+  ) => {
+    setSettingsLoading(prev => ({ ...prev, [key]: true }));
+    try {
+      await updateSetting(key, value);
+    } catch (error) {
+      Alert.alert(
+        'Settings Error', 
+        `Failed to update ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}. Please try again.`
+      );
+    } finally {
+      setSettingsLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  // External Links Handlers
   const handlePrivacyPolicy = () => {
     Linking.openURL('https://icnvictoria.com/privacy');
   };
@@ -192,43 +375,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleExportData = () => {
-    if (currentTier === 'free' && features.exportLimit <= 10) {
-      Alert.alert(
-        'Limited Exports',
-        `Free tier allows ${features.exportLimit} exports per month. Upgrade to Plus or Premium for more exports.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => navigation.navigate('Payment') }
-        ]
-      );
-    } else {
-      Alert.alert(
-        'Export Data',
-        `Export your saved companies and search history? (${stats.exports} exports available)`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Export', onPress: () => Alert.alert('Success', 'Data exported successfully!') }
-        ]
-      );
-    }
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => Alert.alert('Account Deletion', 'Please contact support to complete account deletion.')
-        },
-      ]
-    );
-  };
-
+  // Sign Out Handler
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -238,333 +385,426 @@ export default function ProfileScreen() {
         { 
           text: 'Sign Out', 
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Signed Out', 'You have been signed out successfully.');
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              
+              await AuthService.signOut();
+              clearUser(); // Clear user context
+              
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                })
+              );
+            } catch (error) {
+              setIsLoading(false);
+              Alert.alert(
+                'Error', 
+                'Failed to sign out. Please try again.',
+                [{ text: 'OK' }]
+              );
+            }
           }
         },
       ]
     );
   };
 
-  const handleUpgrade = () => {
-    navigation.navigate('Payment');
-  };
-
-  const handleManageSubscription = () => {
-    Alert.alert('Manage Subscription', 'Subscription management coming soon!');
-  };
-
-  const handleCancelSubscription = () => {
+  // Delete Account Handler
+  const handleDeleteAccount = () => {
     Alert.alert(
-      'Cancel Subscription',
-      'Are you sure? You\'ll lose access to premium features at the end of your billing period.',
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone.',
       [
-        { text: 'Keep Subscription', style: 'cancel' },
-        { text: 'Cancel', style: 'destructive', onPress: () => Alert.alert('Cancelled', 'Subscription cancelled') }
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Continue', 
+          style: 'destructive',
+          onPress: () => {
+            Alert.prompt(
+              'Verify Your Identity',
+              'Please enter your password to confirm account deletion:',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async (password?: string) => {
+                    if (!password) {
+                      Alert.alert('Error', 'Password is required');
+                      return;
+                    }
+
+                    try {
+                      setIsLoading(true);
+                      
+                      await AuthService.deleteAccount(password);
+                      clearUser(); // Clear user context
+                      
+                      navigation.dispatch(
+                        CommonActions.reset({
+                          index: 0,
+                          routes: [{ name: 'Onboarding' }],
+                        })
+                      );
+                      
+                      Alert.alert(
+                        'Account Deleted',
+                        'Your account has been successfully deleted.',
+                        [{ text: 'OK' }]
+                      );
+                    } catch (error: any) {
+                      setIsLoading(false);
+                      Alert.alert(
+                        'Deletion Failed',
+                        error.message || 'Unable to delete account. Please contact support.',
+                        [
+                          { text: 'OK', style: 'cancel' },
+                          { 
+                            text: 'Contact Support', 
+                            onPress: () => Linking.openURL('mailto:support@icnvictoria.com')
+                          }
+                        ]
+                      );
+                    }
+                  }
+                }
+              ],
+              'secure-text',
+              '',
+              'default'
+            );
+          }
+        },
       ]
     );
   };
 
-  return (
-    <ScrollView 
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-    >
-      {/* User Profile Card */}
-      <View style={styles.profileCard}>
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user.name.split(' ').map(n => n[0]).join('')}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.editAvatarButton}>
-            <Ionicons name="camera" size={20} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
-        
-        <Text style={styles.userName}>{user.name}</Text>
-        <Text style={styles.userRole}>{user.role} at {user.company}</Text>
-        
-        <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
-          <Ionicons name={tierInfo.icon as any} size={16} color={tierInfo.color} />
-          <Text style={[styles.tierText, { color: tierInfo.color }]}>
-            {tierInfo.name} Member
-          </Text>
-        </View>
+  // Export Data Handler
+  const handleExportData = () => {
+    if (currentTier === 'free' && features.exportLimit <= 0) {
+      Alert.alert(
+        'Export Limit Reached',
+        `You've used all your free exports this month. Upgrade to Plus or Premium for more.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => navigation.navigate('Payment') }
+        ]
+      );
+      return;
+    }
 
-        <View style={styles.profileStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.saved}</Text>
-            <Text style={styles.statLabel}>Saved</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stats.searches}</Text>
-            <Text style={styles.statLabel}>Searches</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{user.memberSince}</Text>
-            <Text style={styles.statLabel}>Member</Text>
-          </View>
-        </View>
+    Alert.alert(
+      'Export Your Data',
+      'Choose export format:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'JSON Format',
+          onPress: async () => await performDataExport('json')
+        },
+        {
+          text: 'CSV Format',
+          onPress: async () => await performDataExport('csv')
+        },
+      ]
+    );
+  };
 
-        <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
-          <Text style={styles.editProfileText}>Edit Profile</Text>
+  const performDataExport = async (format: 'json' | 'csv') => {
+    try {
+      setIsLoading(true);
+      
+      await DataExportService.exportUserData(format);
+      
+      if (currentTier !== 'premium') {
+        await DataExportService.updateExportCount();
+      }
+      
+      setIsLoading(false);
+      
+      Alert.alert(
+        'Export Complete',
+        'Your data has been exported successfully.',
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      setIsLoading(false);
+      Alert.alert(
+        'Export Failed',
+        error.message || 'Unable to export data. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  // Show loading state while user data loads
+  if (userLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingMessage}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  // Handle case where user is not logged in
+  if (!user) {
+    return (
+      <View style={[styles.container, styles.errorContainer]}>
+        <Ionicons name="alert-circle-outline" size={48} color={Colors.black50} />
+        <Text style={styles.errorMessage}>Unable to load profile</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={refreshUser}>
+          <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
+    );
+  }
 
-      {/* Developer Mode Tier Selector */}
-      {showDeveloperMode && (
-        <ProfileSection title="🔧 Developer Mode (Testing Only)">
-          <View style={styles.devModeContainer}>
-            <Text style={styles.devModeText}>Test different tier features:</Text>
-            <View style={styles.tierButtons}>
-              {(['free', 'plus', 'premium'] as UserTier[]).map(tier => (
-                <TouchableOpacity
-                  key={tier}
-                  style={[
-                    styles.tierButton,
-                    currentTier === tier && styles.tierButtonActive
-                  ]}
-                  onPress={() => setCurrentTier(tier)}
-                >
-                  <Text style={[
-                    styles.tierButtonText,
-                    currentTier === tier && styles.tierButtonTextActive
-                  ]}>
-                    {tier.toUpperCase()}
+  return (
+    <>
+      <ScrollView 
+        style={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* User Profile Card with Avatar */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatarContainer}>
+            <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
+              {avatarLoading ? (
+                <View style={styles.avatar}>
+                  <ActivityIndicator size="large" color={Colors.white} />
+                </View>
+              ) : user.avatar ? (
+                <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                  {user.name.split(' ').map((n: string) => n[0]).join('')}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            
-            {/* Feature Access Indicators */}
-            <View style={styles.featuresList}>
-              <Text style={styles.featuresTitle}>Current Access:</Text>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canFilterBySize ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canFilterBySize ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>Company Size Filter</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canFilterByDiversity ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canFilterByDiversity ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>Diversity Filters</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canSeeRevenue ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canSeeRevenue ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>Revenue Data</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canCreateFolders ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canCreateFolders ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>
-                  Bookmark Folders ({features.maxBookmarkFolders} max)
-                </Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canExportFull ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canExportFull ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>
-                  Full Export ({features.exportLimit === -1 ? 'Unlimited' : features.exportLimit})
-                </Text>
-              </View>
-            </View>
-
+                </View>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.hideDevButton}
-              onPress={() => setShowDeveloperMode(false)}
+              style={styles.editAvatarButton} 
+              onPress={showAvatarOptions}
+              disabled={avatarLoading}
             >
-              <Text style={styles.hideDevText}>Hide Developer Mode</Text>
+              <Ionicons name="camera" size={20} color={Colors.white} />
             </TouchableOpacity>
           </View>
-        </ProfileSection>
-      )}
+          
+          <Text style={styles.userName}>{user.name}</Text>
+          <Text style={styles.userRole}>{user.role} at {user.company}</Text>
+          
+          <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
+            <Ionicons name={tierInfo.icon as any} size={16} color={tierInfo.color} />
+            <Text style={[styles.tierText, { color: tierInfo.color }]}>
+              {tierInfo.name} Member
+            </Text>
+          </View>
 
-      {/* Subscription Management */}
-      <View style={{ marginVertical: 8 }}>
-        <SubscriptionCard
-          plan={currentTier as 'free' | 'standard' | 'pro'}
-          renewalDate={tierInfo.nextBilling || undefined}
-          monthlyPrice={currentTier === 'premium' ? 19.99 : currentTier === 'plus' ? 9.99 : undefined}
-          onUpgrade={handleUpgrade}
-          onManage={handleManageSubscription}
-          onCancel={handleCancelSubscription}
-        />
-      </View>
-
-      {/* Account Settings */}
-      <ProfileSection title="Account">
-        <SettingItem
-          icon="mail-outline"
-          title="Email"
-          value={user.email}
-          showArrow={false}
-        />
-        <SettingItem
-          icon="call-outline"
-          title="Phone"
-          value={user.phone}
-          showArrow={false}
-        />
-        <SettingItem
-          icon="key-outline"
-          title="Change Password"
-          onPress={handleChangePassword}
-        />
-        <SettingItem
-          icon="ribbon-outline"
-          title="Subscription"
-          value={
-            <View style={[styles.upgradeBadge, { backgroundColor: tierInfo.color }]}>
-              <Text style={styles.upgradeText}>{tierInfo.name}</Text>
+          <View style={styles.profileStats}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats.saved}</Text>
+              <Text style={styles.statLabel}>Saved</Text>
             </View>
-          }
-          onPress={handleUpgrade}
-        />
-      </ProfileSection>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats.searches}</Text>
+              <Text style={styles.statLabel}>Searches</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{user.memberSince}</Text>
+              <Text style={styles.statLabel}>Member</Text>
+            </View>
+          </View>
 
-      {/* Preferences */}
-      <ProfileSection title="Preferences">
-        <SettingItem
-          icon="notifications-outline"
-          title="Push Notifications"
-          isSwitch
-          switchValue={notifications}
-          onSwitchChange={setNotifications}
-        />
-        <SettingItem
-          icon="location-outline"
-          title="Location Services"
-          isSwitch
-          switchValue={locationServices}
-          onSwitchChange={setLocationServices}
-        />
-        <SettingItem
-          icon="moon-outline"
-          title="Dark Mode"
-          isSwitch
-          switchValue={darkMode}
-          onSwitchChange={setDarkMode}
-        />
-        <SettingItem
-          icon="sync-outline"
-          title="Auto-Sync Data"
-          isSwitch
-          switchValue={autoSync}
-          onSwitchChange={setAutoSync}
-        />
-      </ProfileSection>
+          <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Data & Privacy */}
-      <ProfileSection title="Data & Privacy">
-        <SettingItem
-          icon="download-outline"
-          title="Export My Data"
-          value={`${stats.exports} left`}
-          onPress={handleExportData}
-        />
-        <SettingItem
-          icon="shield-checkmark-outline"
-          title="Privacy Policy"
-          onPress={handlePrivacyPolicy}
-        />
-        <SettingItem
-          icon="document-text-outline"
-          title="Terms of Service"
-          onPress={handleTermsOfService}
-        />
-        <SettingItem
-          icon="trash-outline"
-          title="Delete Account"
-          onPress={handleDeleteAccount}
-          showArrow={false}
-        />
-      </ProfileSection>
-
-      {/* Support */}
-      <ProfileSection title="Support">
-        <SettingItem
-          icon="help-circle-outline"
-          title="Help Center"
-          onPress={() => Linking.openURL('https://icnvictoria.com/help')}
-        />
-        <SettingItem
-          icon="chatbubble-outline"
-          title="Contact Support"
-          onPress={handleContactSupport}
-        />
-        <SettingItem
-          icon="star-outline"
-          title="Rate App"
-          onPress={handleRateApp}
-        />
-        <SettingItem
-          icon="share-outline"
-          title="Share App"
-          onPress={handleShareApp}
-        />
-      </ProfileSection>
-
-      {/* About */}
-      <ProfileSection title="About">
-        <SettingItem
-          icon="information-circle-outline"
-          title="App Version"
-          value="1.0.0"
-          showArrow={false}
-        />
-        <SettingItem
-          icon="business-outline"
-          title="About ICN"
-          onPress={() => Linking.openURL('https://icnvictoria.com/about')}
-        />
-        <SettingItem
-          icon="globe-outline"
-          title="Website"
-          value="icnvictoria.com"
-          onPress={() => Linking.openURL('https://icnvictoria.com')}
-        />
-        {!showDeveloperMode && (
-          <SettingItem
-            icon="code-slash-outline"
-            title="Developer Mode"
-            onPress={() => setShowDeveloperMode(true)}
+        {/* Subscription Management Card */}
+        <View style={{ marginVertical: 8 }}>
+          <SubscriptionCard
+            plan={(subscription?.tier || currentTier) as 'free' | 'plus' | 'premium'}
+            renewalDate={tierInfo.nextBilling || undefined}
+            monthlyPrice={
+              subscription?.billingPeriod === 'monthly' ? subscription.amount : undefined
+            }
+            onUpgrade={() => {
+              const targetPlan = currentTier === 'free' ? 'plus' : 'premium';
+              navigation.navigate('Payment', { selectedPlan: targetPlan });
+            }}
+            onManage={handleManageSubscription}
+            onCancel={handleCancelSubscription}
           />
-        )}
-      </ProfileSection>
+        </View>
 
-      {/* Sign Out Button */}
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-        <Text style={styles.signOutText}>Sign Out</Text>
-      </TouchableOpacity>
+        {/* Account Settings */}
+        <ProfileSection title="Account">
+          <SettingItem
+            icon="mail-outline"
+            title="Email"
+            value={user.email}
+            showArrow={false}
+          />
+          <SettingItem
+            icon="call-outline"
+            title="Phone"
+            value={user.phone}
+            showArrow={false}
+          />
+          <SettingItem
+            icon="key-outline"
+            title="Change Password"
+            onPress={handleChangePassword}
+          />
+          <SettingItem
+            icon="ribbon-outline"
+            title="Subscription"
+            value={
+              <View style={[styles.upgradeBadge, { backgroundColor: tierInfo.color }]}>
+                <Text style={styles.upgradeText}>{tierInfo.name}</Text>
+              </View>
+            }
+            onPress={handleUpgrade}
+          />
+        </ProfileSection>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
-        <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
-      </View>
-    </ScrollView>
+        {/* Preferences - Now using context */}
+        <ProfileSection title="Preferences">
+          <SettingItem
+            icon="notifications-outline"
+            title="Push Notifications"
+            isSwitch
+            switchValue={settings.notifications}
+            onSwitchChange={(value) => handleSettingChange('notifications', value)}
+            disabled={settingsLoading.notifications}
+          />
+          <SettingItem
+            icon="location-outline"
+            title="Location Services"
+            isSwitch
+            switchValue={settings.locationServices}
+            onSwitchChange={(value) => handleSettingChange('locationServices', value)}
+            disabled={settingsLoading.locationServices}
+          />
+          <SettingItem
+            icon="moon-outline"
+            title="Dark Mode"
+            isSwitch
+            switchValue={settings.darkMode}
+            onSwitchChange={(value) => handleSettingChange('darkMode', value)}
+            disabled={settingsLoading.darkMode}
+          />
+          <SettingItem
+            icon="sync-outline"
+            title="Auto-Sync Data"
+            isSwitch
+            switchValue={settings.autoSync}
+            onSwitchChange={(value) => handleSettingChange('autoSync', value)}
+            disabled={settingsLoading.autoSync}
+          />
+        </ProfileSection>
+
+        {/* Data & Privacy */}
+        <ProfileSection title="Data & Privacy">
+          <SettingItem
+            icon="download-outline"
+            title="Export My Data"
+            value={`${stats.exports} left`}
+            onPress={handleExportData}
+          />
+          <SettingItem
+            icon="shield-checkmark-outline"
+            title="Privacy Policy"
+            onPress={handlePrivacyPolicy}
+          />
+          <SettingItem
+            icon="document-text-outline"
+            title="Terms of Service"
+            onPress={handleTermsOfService}
+          />
+          <SettingItem
+            icon="trash-outline"
+            title="Delete Account"
+            onPress={handleDeleteAccount}
+            showArrow={false}
+          />
+        </ProfileSection>
+
+        {/* Support */}
+        <ProfileSection title="Support">
+          <SettingItem
+            icon="help-circle-outline"
+            title="Help Center"
+            onPress={() => Linking.openURL('https://icnvictoria.com/help')}
+          />
+          <SettingItem
+            icon="chatbubble-outline"
+            title="Contact Support"
+            onPress={handleContactSupport}
+          />
+          <SettingItem
+            icon="star-outline"
+            title="Rate App"
+            onPress={handleRateApp}
+          />
+          <SettingItem
+            icon="share-outline"
+            title="Share App"
+            onPress={handleShareApp}
+          />
+        </ProfileSection>
+
+        {/* About */}
+        <ProfileSection title="About">
+          <SettingItem
+            icon="information-circle-outline"
+            title="App Version"
+            value="1.0.0"
+            showArrow={false}
+          />
+          <SettingItem
+            icon="business-outline"
+            title="About ICN"
+            onPress={() => Linking.openURL('https://icnvictoria.com/about')}
+          />
+          <SettingItem
+            icon="globe-outline"
+            title="Website"
+            value="icnvictoria.com"
+            onPress={() => Linking.openURL('https://icnvictoria.com')}
+          />
+        </ProfileSection>
+
+        {/* Sign Out Button */}
+        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
+          <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
+        </View>
+      </ScrollView>
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Processing...</Text>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -575,6 +815,36 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingMessage: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.black50,
+  },
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorMessage: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.black50,
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
   profileCard: {
     backgroundColor: Colors.white,
@@ -600,6 +870,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   avatarText: {
     fontSize: 32,
@@ -710,6 +985,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.black20,
   },
+  settingItemDisabled: {
+    opacity: 0.6,
+  },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -749,69 +1027,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: '600',
   },
-  devModeContainer: {
-    padding: 16,
-  },
-  devModeText: {
-    fontSize: 14,
-    color: Colors.black50,
-    marginBottom: 12,
-  },
-  tierButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  tierButton: {
-    flex: 1,
-    paddingVertical: 10,
-    backgroundColor: Colors.black20,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  tierButtonActive: {
-    backgroundColor: Colors.primary,
-  },
-  tierButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.black50,
-  },
-  tierButtonTextActive: {
-    color: Colors.white,
-  },
-  featuresList: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: Colors.orange[400],
-    borderRadius: 8,
-  },
-  featuresTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  featureText: {
-    fontSize: 13,
-    color: Colors.text,
-  },
-  hideDevButton: {
-    marginTop: 12,
-    padding: 8,
-    alignItems: 'center',
-  },
-  hideDevText: {
-    fontSize: 13,
-    color: Colors.primary,
-    textDecorationLine: 'underline',
-  },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -843,5 +1058,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.black50,
     marginTop: 4,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingText: {
+    color: Colors.white,
+    marginTop: 10,
+    fontSize: 16,
   },
 });

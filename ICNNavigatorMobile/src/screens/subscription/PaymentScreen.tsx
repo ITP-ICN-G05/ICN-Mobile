@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Spacing } from '../../constants/colors';
+import { useSubscription } from '../../hooks/useSubscription';
+import { mockSubscriptionApi } from '../../services/mockSubscriptionApi';
 
-type PlanType = 'free' | 'standard' | 'pro';
+type PlanType = 'free' | 'plus' | 'premium';
 type BillingCycle = 'monthly' | 'yearly';
 type PaymentMethod = 'apple' | 'google' | 'paypal' | 'mastercard' | 'visa';
 
@@ -53,7 +55,7 @@ const plans: Plan[] = [
     ],
   },
   {
-    id: 'standard',
+    id: 'plus',
     name: 'Plus',
     monthlyPrice: 9.99,
     yearlyPrice: 99.99,
@@ -72,7 +74,7 @@ const plans: Plan[] = [
     ],
   },
   {
-    id: 'pro',
+    id: 'premium',
     name: 'Premium',
     monthlyPrice: 19.99,
     yearlyPrice: 199.99,
@@ -95,15 +97,31 @@ const plans: Plan[] = [
 
 export default function PaymentScreen() {
   const navigation = useNavigation();
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>('pro');
+  const { 
+    subscription, 
+    currentTier, 
+    createSubscription, 
+    upgradeSubscription, 
+    downgradeToFree,
+    validatePromoCode,
+    loading: subscriptionLoading 
+  } = useSubscription();
+  
+  const [selectedPlan, setSelectedPlan] = useState<PlanType>(() => {
+    // Start with the next logical upgrade, but don't force it
+    if (currentTier === 'free') return 'plus';
+    if (currentTier === 'plus') return 'premium';
+    return 'premium';
+  });
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('yearly');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('apple');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentUserPlan] = useState<PlanType>('free'); // Current user's plan
   const [promoCode, setPromoCode] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [showEnterpriseInfo, setShowEnterpriseInfo] = useState(false);
+
+  // Don't auto-change selection based on tier changes
 
   const handleBack = () => {
     navigation.goBack();
@@ -136,10 +154,6 @@ export default function PaymentScreen() {
   };
 
   const handleSelectPlan = (planId: PlanType) => {
-    if (planId === currentUserPlan) {
-      Alert.alert('Current Plan', 'You are already subscribed to this plan.');
-      return;
-    }
     setSelectedPlan(planId);
   };
 
@@ -148,26 +162,48 @@ export default function PaymentScreen() {
     if (!plan) return;
 
     if (plan.id === 'free') {
-      Alert.alert('Free Plan', 'You already have access to the free plan.');
+      if (currentTier !== 'free') {
+        // Downgrade to free
+        setIsProcessing(true);
+        const result = await downgradeToFree();
+        setIsProcessing(false);
+        
+        if (result.success) {
+          navigation.goBack();
+        }
+      } else {
+        Alert.alert('Free Plan', 'You already have access to the free plan.');
+      }
       return;
     }
 
     setIsProcessing(true);
 
-    // Simulate payment processing
-    setTimeout(() => {
+    try {
+      // Determine if this is a new subscription or an upgrade
+      let result;
+      if (currentTier === 'free') {
+        // Create new subscription
+        result = await createSubscription(
+          plan.id as 'plus' | 'premium',
+          billingCycle,
+          selectedPaymentMethod,
+          promoApplied ? promoCode : undefined
+        );
+      } else {
+        // Upgrade existing subscription
+        const planId = `${plan.id}_${billingCycle}`;
+        result = await upgradeSubscription(planId);
+      }
+
+      if (result.success) {
+        navigation.goBack();
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+    } finally {
       setIsProcessing(false);
-      Alert.alert(
-        'Success!',
-        `You have successfully upgraded to ${plan.name} plan (${billingCycle}).\n\nTotal: ${getPriceText(plan)}${getBillingPeriodText()}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    }, 2000);
+    }
   };
 
   const getPaymentMethodIcon = (method: PaymentMethod) => {
@@ -204,19 +240,13 @@ export default function PaymentScreen() {
     }
   };
 
-  const handleApplyPromoCode = () => {
-    // Validate promo code
-    const validPromoCodes: { [key: string]: number } = {
-      'WELCOME20': 20,
-      'ICNVIC15': 15,
-      'PARTNER10': 10,
-      'EARLY30': 30,
-    };
-
-    if (validPromoCodes[promoCode.toUpperCase()]) {
-      setPromoDiscount(validPromoCodes[promoCode.toUpperCase()]);
+  const handleApplyPromoCode = async () => {
+    const validation = await validatePromoCode(promoCode);
+    
+    if (validation.valid) {
+      setPromoDiscount(validation.discount);
       setPromoApplied(true);
-      Alert.alert('Success', `Promo code applied! ${validPromoCodes[promoCode.toUpperCase()]}% discount`);
+      Alert.alert('Success', `Promo code applied! ${validation.discount}% discount`);
     } else {
       Alert.alert('Invalid Code', 'The promo code you entered is invalid or expired.');
       setPromoCode('');
@@ -230,24 +260,47 @@ export default function PaymentScreen() {
     return price;
   };
 
+  const getButtonText = () => {
+    if (selectedPlan === 'free') {
+      if (currentTier !== 'free') {
+        return 'Downgrade to Free';
+      }
+      return 'Continue with Free';
+    }
+    
+    if (currentTier === 'free') {
+      return `Subscribe to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
+    }
+    
+    if (selectedPlan === currentTier) {
+      return 'Current Plan';
+    }
+    
+    // Determine if it's an upgrade or downgrade
+    const tierOrder = { free: 0, plus: 1, premium: 2 };
+    if (tierOrder[selectedPlan] > tierOrder[currentTier]) {
+      return `Upgrade to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
+    } else {
+      return `Change to ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)}`;
+    }
+  };
+
   const selectedPlanData = plans.find(p => p.id === selectedPlan);
   const basePrice = selectedPlanData ? getPrice(selectedPlanData) : 0;
   const totalPrice = getDiscountedPrice(basePrice);
 
+  if (subscriptionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 16, color: Colors.black50 }}>Loading subscription...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Safe area for top (Dynamic Island) */}
-      <SafeAreaView edges={['top']} style={styles.safeTop}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Choose Your Plan</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-      </SafeAreaView>
-
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -286,10 +339,10 @@ export default function PaymentScreen() {
               styles.planCard,
               selectedPlan === plan.id && styles.planCardSelected,
               plan.recommended && styles.planCardRecommended,
-              currentUserPlan === plan.id && styles.planCardCurrent,
+              currentTier === plan.id && styles.planCardCurrent,
             ]}
             onPress={() => handleSelectPlan(plan.id)}
-            disabled={currentUserPlan === plan.id}
+            disabled={false}
           >
             {plan.recommended && (
               <View style={styles.recommendedBadge}>
@@ -297,7 +350,7 @@ export default function PaymentScreen() {
               </View>
             )}
             
-            {currentUserPlan === plan.id && (
+            {currentTier === plan.id && (
               <View style={styles.currentBadge}>
                 <Text style={styles.currentText}>CURRENT PLAN</Text>
               </View>
@@ -346,10 +399,11 @@ export default function PaymentScreen() {
           </TouchableOpacity>
         ))}
 
-        {/* Payment Methods */}
+        {/* Mock Payment Methods Section */}
         {selectedPlan !== 'free' && (
           <View style={styles.paymentSection}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.sectionTitle}>Payment Method (Mock)</Text>
+            <Text style={styles.mockNote}>This is a demo - no real payment will be processed</Text>
             
             <View style={styles.paymentMethods}>
               {(['apple', 'google', 'paypal'] as PaymentMethod[]).map((method) => (
@@ -369,21 +423,13 @@ export default function PaymentScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-
-            <TouchableOpacity 
-              style={styles.addPaymentButton}
-              onPress={() => Alert.alert('Add Payment Method', 'Payment method addition coming soon!')}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
-              <Text style={styles.addPaymentText}>Add Credit/Debit Card</Text>
-            </TouchableOpacity>
           </View>
         )}
 
         {/* Promotion Code Section */}
         {selectedPlan !== 'free' && (
           <View style={styles.promoSection}>
-            <Text style={styles.sectionTitle}>Promotion Code</Text>
+            <Text style={styles.sectionTitle}>Promotion Code (Try: WELCOME20)</Text>
             <View style={styles.promoInputContainer}>
               <TextInput
                 style={styles.promoInput}
@@ -453,7 +499,7 @@ export default function PaymentScreen() {
             )}
             
             <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>Total (Mock)</Text>
               <View>
                 {promoApplied && basePrice > 0 && (
                   <Text style={styles.originalPrice}>${basePrice.toFixed(2)}</Text>
@@ -466,49 +512,13 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        {/* Enterprise Account Section */}
-        <TouchableOpacity
-          style={styles.enterpriseSection}
-          onPress={() => setShowEnterpriseInfo(!showEnterpriseInfo)}
-        >
-          <View style={styles.enterpriseHeader}>
-            <Ionicons name="business" size={20} color={Colors.primary} />
-            <Text style={styles.enterpriseTitle}>Need an Enterprise Account?</Text>
-            <Ionicons 
-              name={showEnterpriseInfo ? "chevron-up" : "chevron-down"} 
-              size={20} 
-              color={Colors.black50} 
-            />
-          </View>
-        </TouchableOpacity>
-        
-        {showEnterpriseInfo && (
-          <View style={styles.enterpriseContent}>
-            <Text style={styles.enterpriseText}>
-              For organisations requiring multiple licenses or custom features:
-            </Text>
-            <View style={styles.enterpriseFeatures}>
-              <Text style={styles.enterpriseFeature}>• Multiple user licenses</Text>
-              <Text style={styles.enterpriseFeature}>• Volume discounts available</Text>
-              <Text style={styles.enterpriseFeature}>• Custom API integration</Text>
-              <Text style={styles.enterpriseFeature}>• Dedicated support</Text>
-              <Text style={styles.enterpriseFeature}>• Custom reporting features</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.enterpriseContactButton}
-              onPress={() => Alert.alert('Contact Sales', 'Please email enterprise@icn.vic.gov.au for enterprise inquiries')}
-            >
-              <Text style={styles.enterpriseContactText}>Contact Sales Team</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Terms and Conditions */}
-        <Text style={styles.termsText}>
-          By upgrading, you agree to our{' '}
-          <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
-        </Text>
+        {/* Demo Notice */}
+        <View style={styles.demoNotice}>
+          <Ionicons name="information-circle" size={20} color={Colors.warning} />
+          <Text style={styles.demoNoticeText}>
+            This is a demo environment. No actual charges will be made.
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Bottom Action Button - Safe area for bottom */}
@@ -517,32 +527,25 @@ export default function PaymentScreen() {
           <TouchableOpacity
             style={[
               styles.upgradeButton,
-              (isProcessing || totalPrice === 0) && styles.upgradeButtonDisabled,
+              (isProcessing || (selectedPlan === currentTier && selectedPlan !== 'free')) && styles.upgradeButtonDisabled,
             ]}
             onPress={handleUpgrade}
-            disabled={isProcessing || totalPrice === 0}
+            disabled={isProcessing || (selectedPlan === currentTier && selectedPlan !== 'free')}
           >
             {isProcessing ? (
               <ActivityIndicator color={Colors.white} />
             ) : (
               <>
                 <Text style={styles.upgradeButtonText}>
-                  {selectedPlan === 'free' ? 'Continue with Free' : 'Upgrade to Pro'}
+                  {getButtonText()}
                 </Text>
                 {totalPrice > 0 && (
                   <Text style={styles.upgradeButtonPrice}>
-                    ${totalPrice.toFixed(2)}{getBillingPeriodText()}
+                    ${totalPrice.toFixed(2)}{getBillingPeriodText()} (Mock)
                   </Text>
                 )}
               </>
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.restoreButton}
-            onPress={() => Alert.alert('Restore Purchases', 'Checking for previous purchases...')}
-          >
-            <Text style={styles.restoreText}>Restore Purchases</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -586,6 +589,32 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+  trialBanner: {
+    backgroundColor: Colors.primary,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 16,
+  },
+  trialContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trialTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  trialTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.white,
+  },
+  trialSubtitle: {
+    fontSize: 12,
+    color: Colors.white,
+    opacity: 0.9,
+    marginTop: 2,
   },
   billingCycleContainer: {
     flexDirection: 'row',
@@ -763,6 +792,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  mockNote: {
+    fontSize: 12,
+    color: Colors.warning,
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
@@ -787,22 +822,6 @@ const styles = StyleSheet.create({
   paymentMethodSelected: {
     borderColor: Colors.primary,
     backgroundColor: Colors.orange[400],
-  },
-  addPaymentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    borderStyle: 'dashed',
-  },
-  addPaymentText: {
-    fontSize: 14,
-    color: Colors.primary,
-    fontWeight: '500',
   },
   orderSummary: {
     backgroundColor: Colors.white,
@@ -844,57 +863,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.primary,
-  },
-  termsText: {
-    fontSize: 12,
-    color: Colors.black50,
-    textAlign: 'center',
-    marginTop: 20,
-    marginHorizontal: 32,
-  },
-  termsLink: {
-    color: Colors.primary,
-    textDecorationLine: 'underline',
-  },
-  bottomSafeArea: {
-    backgroundColor: Colors.white,
-  },
-  bottomContainer: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.black20,
-  },
-  upgradeButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  upgradeButtonDisabled: {
-    backgroundColor: Colors.black50,
-  },
-  upgradeButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.white,
-  },
-  upgradeButtonPrice: {
-    fontSize: 14,
-    color: Colors.white,
-    marginTop: 4,
-    opacity: 0.9,
-  },
-  restoreButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  restoreText: {
-    fontSize: 14,
-    color: Colors.primary,
-    textDecorationLine: 'underline',
   },
   promoSection: {
     backgroundColor: Colors.white,
@@ -968,56 +936,49 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     marginBottom: 2,
   },
-  enterpriseSection: {
-    backgroundColor: Colors.white,
-    marginHorizontal: 16,
-    marginTop: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  enterpriseHeader: {
+  demoNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 12,
+    backgroundColor: Colors.warning + '20',
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
   },
-  enterpriseTitle: {
+  demoNoticeText: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  enterpriseContent: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  enterpriseText: {
-    fontSize: 14,
-    color: Colors.black50,
-    marginBottom: 12,
-  },
-  enterpriseFeatures: {
-    marginBottom: 16,
-  },
-  enterpriseFeature: {
     fontSize: 13,
     color: Colors.text,
-    marginBottom: 4,
-    paddingLeft: 8,
   },
-  enterpriseContactButton: {
-    backgroundColor: Colors.orange[400],
+  bottomSafeArea: {
+    backgroundColor: Colors.white,
+  },
+  bottomContainer: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.black20,
+  },
+  upgradeButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  enterpriseContactText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.text,
+  upgradeButtonDisabled: {
+    backgroundColor: Colors.black50,
+  },
+  upgradeButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.white,
+  },
+  upgradeButtonPrice: {
+    fontSize: 14,
+    color: Colors.white,
+    marginTop: 4,
+    opacity: 0.9,
   },
 });
