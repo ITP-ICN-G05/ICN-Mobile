@@ -301,17 +301,6 @@ export default function PaymentScreen() {
   return (
     <View style={styles.container}>
       {/* Safe area for top (Dynamic Island) */}
-      <SafeAreaView edges={['top']} style={styles.safeTop}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Choose Your Plan</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-      </SafeAreaView>
-
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}

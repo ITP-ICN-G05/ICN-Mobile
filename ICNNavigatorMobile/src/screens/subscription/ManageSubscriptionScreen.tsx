@@ -125,15 +125,6 @@ export default function ManageSubscriptionScreen() {
   if (loading || loadingBilling) {
     return (
       <View style={styles.container}>
-        <SafeAreaView edges={['top']} style={styles.safeTop}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Manage Subscription</Text>
-            <View style={styles.headerSpacer} />
-          </View>
-        </SafeAreaView>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading subscription...</Text>
@@ -146,16 +137,6 @@ export default function ManageSubscriptionScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={styles.safeTop}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Manage Subscription</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-      </SafeAreaView>
-
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
