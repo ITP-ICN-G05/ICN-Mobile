@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -112,9 +113,9 @@ export default function ManageSubscriptionScreen() {
     
     switch (subscription.tier) {
       case 'premium':
-        return { name: 'Premium Plan', color: Colors.warning };
+        return { name: 'Premium Plan', color: '#1B3E6F' }; // Match Profile page blue theme
       case 'plus':
-        return { name: 'Plus Plan', color: Colors.primary };
+        return { name: 'Plus Plan', color: '#1B3E6F' }; // Match Profile page blue theme
       default:
         return { name: 'Free Plan', color: Colors.black50 };
     }
@@ -126,7 +127,7 @@ export default function ManageSubscriptionScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color="#1B3E6F" />
           <Text style={styles.loadingText}>Loading subscription...</Text>
         </View>
       </View>
@@ -136,14 +137,22 @@ export default function ManageSubscriptionScreen() {
   const isFreeTier = !subscription || subscription.tier === 'free';
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={styles.container}>
+        {/* Background Logo */}
+        <Image 
+          source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+          style={styles.backgroundLogo}
+          resizeMode="cover"
+        />
+        
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
         {/* Current Plan Card */}
         <View style={styles.planCard}>
           {subscription?.status === 'active' && !isFreeTier && (
@@ -202,7 +211,7 @@ export default function ManageSubscriptionScreen() {
                   style={styles.changePlanButton}
                   onPress={handleChangePlan}
                 >
-                  <Ionicons name="swap-horizontal" size={20} color={Colors.primary} />
+                  <Ionicons name="swap-horizontal" size={20} color={Colors.white} />
                   <Text style={styles.changePlanText}>Change Plan</Text>
                 </TouchableOpacity>
 
@@ -210,7 +219,7 @@ export default function ManageSubscriptionScreen() {
                   style={styles.cancelButton}
                   onPress={handleCancelSubscription}
                 >
-                  <Ionicons name="close-circle-outline" size={20} color={Colors.error} />
+                  <Ionicons name="close-circle-outline" size={20} color="rgba(220, 53, 69, 0.8)" />
                   <Text style={styles.cancelText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
@@ -289,7 +298,7 @@ export default function ManageSubscriptionScreen() {
                 </View>
                 <View style={styles.billingAmount}>
                   <Text style={styles.billingPrice}>${item.amount.toFixed(2)}</Text>
-                  <Text style={[styles.billingStatus, { color: item.status === 'paid' ? Colors.success : Colors.warning }]}>
+                  <Text style={[styles.billingStatus, { color: item.status === 'paid' ? '#B6D289' : '#F8C47A' }]}>
                     {item.status.toUpperCase()}
                   </Text>
                 </View>
@@ -329,13 +338,6 @@ export default function ManageSubscriptionScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Demo Notice */}
-        <View style={styles.demoNotice}>
-          <Ionicons name="information-circle" size={20} color={Colors.warning} />
-          <Text style={styles.demoNoticeText}>
-            This is a demo environment with mock data. No real charges are being processed.
-          </Text>
-        </View>
 
         {/* Support */}
         <View style={styles.supportSection}>
@@ -351,14 +353,28 @@ export default function ManageSubscriptionScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF', // White background like ProfileScreen
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'transparent',
+  },
+  backgroundLogo: {
+    position: 'absolute',
+    top: 100,
+    left: -80,
+    width: 400,
+    height: 400,
+    opacity: 0.05,
+    zIndex: 0,
   },
   safeTop: {
     backgroundColor: Colors.white,
@@ -393,14 +409,14 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.7)',
     fontSize: 14,
   },
   scrollView: {
     flex: 1,
   },
   planCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     margin: 16,
     borderRadius: 12,
     padding: 20,
@@ -426,7 +442,7 @@ const styles = StyleSheet.create({
   },
   planLabel: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.75)',
     fontWeight: '500',
     marginBottom: 4,
   },
@@ -459,47 +475,56 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.75)',
   },
   detailValue: {
     fontSize: 14,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)',
     fontWeight: '500',
   },
   planActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
+    marginTop: 4,
   },
   changePlanButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.orange[400],
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: '#1B3E6F',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     gap: 8,
+    shadowColor: '#1B3E6F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   changePlanText: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.text,
+    color: Colors.white,
   },
   cancelButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.error,
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: 'transparent', // Fully transparent background to avoid white border
+    borderWidth: 1.5,
+    borderColor: 'rgba(220, 53, 69, 0.4)',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     gap: 8,
   },
   cancelText: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.error,
+    color: 'rgba(220, 53, 69, 0.9)',
   },
   reactivateButton: {
     flex: 1,
@@ -523,12 +548,12 @@ const styles = StyleSheet.create({
   },
   freeText: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.7)',
     marginBottom: 16,
     textAlign: 'center',
   },
   upgradeButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Blue theme
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 20,
@@ -539,7 +564,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   section: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 12,
@@ -559,7 +584,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)',
     marginBottom: 16,
     marginTop: 0,
   },
@@ -568,7 +593,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: {
     fontSize: 14,
-    color: Colors.primary,
+    color: '#1B3E6F', // Blue theme
   },
   paymentMethodItem: {
     flexDirection: 'row',
@@ -590,15 +615,15 @@ const styles = StyleSheet.create({
   paymentMethodType: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)',
   },
   paymentMethodExpiry: {
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.65)',
     marginTop: 2,
   },
   defaultBadge: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Blue theme
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -621,12 +646,12 @@ const styles = StyleSheet.create({
   },
   billingDescription: {
     fontSize: 14,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)',
     marginBottom: 4,
   },
   billingDate: {
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.65)',
   },
   billingAmount: {
     alignItems: 'flex-end',
@@ -634,7 +659,7 @@ const styles = StyleSheet.create({
   billingPrice: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)',
   },
   billingStatus: {
     fontSize: 10,
@@ -656,22 +681,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 14,
-    color: Colors.text,
-  },
-  demoNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.warning + '20',
-    marginHorizontal: 16,
-    marginTop: 20,
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
-  },
-  demoNoticeText: {
-    flex: 1,
-    fontSize: 12,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.9)',
   },
   supportSection: {
     alignItems: 'center',
@@ -682,12 +692,12 @@ const styles = StyleSheet.create({
   supportTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)',
     marginBottom: 8,
   },
   supportText: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.75)',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -696,10 +706,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.primary,
+    borderColor: '#1B3E6F', // Blue theme
   },
   supportButtonText: {
-    color: Colors.primary,
+    color: '#1B3E6F', // Blue theme
     fontSize: 14,
     fontWeight: '600',
   },

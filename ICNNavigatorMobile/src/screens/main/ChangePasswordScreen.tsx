@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -209,7 +210,7 @@ export default function ChangePasswordScreen() {
           <Ionicons
             name={showPassword ? 'eye-off-outline' : 'eye-outline'}
             size={22}
-            color={Colors.black50}
+            color="rgba(27, 62, 111, 0.6)"
           />
         </TouchableOpacity>
       </View>
@@ -221,9 +222,16 @@ export default function ChangePasswordScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Background Logo */}
+      <Image 
+        source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+        style={styles.backgroundLogo}
+        resizeMode="cover"
+      />
+      
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+        style={styles.keyboardContainer}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -231,7 +239,7 @@ export default function ChangePasswordScreen() {
         >
           {/* Security Notice */}
           <View style={styles.securityNotice}>
-            <Ionicons name="shield-checkmark-outline" size={24} color={Colors.primary} />
+            <Ionicons name="shield-checkmark-outline" size={24} color="#1B3E6F" />
             <Text style={styles.securityText}>
               For your security, we'll sign you out after changing your password
             </Text>
@@ -389,7 +397,20 @@ export default function ChangePasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF', // White background like ProfileScreen
+  },
+  backgroundLogo: {
+    position: 'absolute',
+    top: 100,
+    left: -80,
+    width: 400,
+    height: 400,
+    opacity: 0.05, // Same subtle opacity as ProfileScreen
+    zIndex: 0,
+  },
+  keyboardContainer: {
+    flex: 1,
+    backgroundColor: 'transparent', // Transparent to show background logo
   },
   scrollContent: {
     paddingBottom: 40,
@@ -397,25 +418,35 @@ const styles = StyleSheet.create({
   securityNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 16,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 12, // Match SubscriptionCard radius
     gap: 12,
+    shadowColor: '#000', // Match ProfileScreen shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   securityText: {
     flex: 1,
     fontSize: 14,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
     lineHeight: 20,
   },
   formSection: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 12, // Match SubscriptionCard radius
+    padding: 20, // Match ProfileScreen padding
+    shadowColor: '#000', // Match ProfileScreen shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   inputGroup: {
     marginBottom: 20,
@@ -423,23 +454,23 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen setting title color
     marginBottom: 8,
   },
   passwordInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.black20,
+    borderColor: 'rgba(27, 62, 111, 0.2)', // Subtle blue border
     borderRadius: 8,
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent input background
   },
   passwordInput: {
     flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 15,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.9)', // Match ProfileScreen text color
   },
   inputError: {
     borderColor: Colors.error,
@@ -456,8 +487,10 @@ const styles = StyleSheet.create({
     marginTop: -12,
     marginBottom: 20,
     padding: 12,
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent background
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(27, 62, 111, 0.1)', // Subtle border
   },
   strengthHeader: {
     flexDirection: 'row',
@@ -467,7 +500,7 @@ const styles = StyleSheet.create({
   },
   strengthLabel: {
     fontSize: 13,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
   },
   strengthValue: {
     fontSize: 13,
@@ -484,15 +517,17 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   requirementsContainer: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent background
     padding: 12,
     borderRadius: 8,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(27, 62, 111, 0.1)', // Subtle border
   },
   requirementsTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
     marginBottom: 8,
   },
   requirementRow: {
@@ -503,10 +538,10 @@ const styles = StyleSheet.create({
   },
   requirementText: {
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.6)', // Match ProfileScreen secondary text color
   },
   requirementMet: {
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
     fontWeight: '500',
   },
   forgotButton: {
@@ -515,14 +550,14 @@ const styles = StyleSheet.create({
   },
   forgotText: {
     fontSize: 14,
-    color: Colors.primary,
+    color: '#1B3E6F', // Match ProfileScreen button color
     textDecorationLine: 'underline',
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen button color
     paddingVertical: 14,
     borderRadius: 8,
     gap: 8,
@@ -537,14 +572,16 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   tipsContainer: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent background
     padding: 12,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(27, 62, 111, 0.1)', // Subtle border
   },
   tipsTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
     marginBottom: 8,
   },
   tipRow: {
@@ -553,13 +590,13 @@ const styles = StyleSheet.create({
   },
   tipBullet: {
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.6)', // Match ProfileScreen secondary text color
     marginRight: 8,
   },
   tipText: {
     flex: 1,
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.6)', // Match ProfileScreen secondary text color
     lineHeight: 16,
   },
 });

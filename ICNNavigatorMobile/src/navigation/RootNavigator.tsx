@@ -30,7 +30,7 @@ export default function RootNavigator() {
           borderBottomWidth: 1,
           borderBottomColor: Colors.black20,
         },
-        headerTintColor: Colors.primary,
+        headerTintColor: '#1B3E6F', // Match ProfileScreen blue theme
         headerTitleStyle: {
           fontWeight: '600',
           fontSize: 18,

@@ -142,8 +142,7 @@ export default function BottomTabNavigator() {
         name="Profile" 
         component={ProfileScreen}
         options={{
-          headerShown: true,
-          headerTitle: 'Profile',
+          headerShown: false, // Hide Profile page header
         }}
       />
     </Tab.Navigator>
