@@ -56,18 +56,6 @@ export default function MapScreen() {
       );
     }
 
-    // Apply components/items search filter (NEW)
-    if (filters.componentsItems) {
-      const searchTerm = filters.componentsItems.toLowerCase();
-      filtered = filtered.filter(company =>
-        company.keySectors.some(sector => 
-          sector.toLowerCase().includes(searchTerm)
-        ) ||
-        // In a real app, you'd search through actual components/items data
-        company.name.toLowerCase().includes(searchTerm)
-      );
-    }
-
     // Apply capability filter (multi-select)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
@@ -194,7 +182,6 @@ export default function MapScreen() {
     return filters.capabilities.length > 0 || 
            (filters.sectors && filters.sectors.length > 0) ||
            filters.distance !== 'All' ||
-           (filters.componentsItems && filters.componentsItems.length > 0) ||
            (filters.companySize && filters.companySize !== 'All') ||
            (filters.certifications && filters.certifications.length > 0) ||
            (filters.ownershipType && filters.ownershipType.length > 0) ||
@@ -210,7 +197,6 @@ export default function MapScreen() {
     if (filters.capabilities.length > 0) count++;
     if (filters.sectors && filters.sectors.length > 0) count++;
     if (filters.distance !== 'All') count++;
-    if (filters.componentsItems && filters.componentsItems.length > 0) count++;
     if (filters.companySize && filters.companySize !== 'All') count++;
     if (filters.certifications && filters.certifications.length > 0) count++;
     if (filters.ownershipType && filters.ownershipType.length > 0) count++;
