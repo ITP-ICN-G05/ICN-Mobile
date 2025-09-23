@@ -4,13 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 
 interface SubscriptionCardProps {
-  plan: 'free' | 'standard' | 'pro';
+  plan: 'free' | 'plus' | 'premium';
   renewalDate?: string;
   monthlyPrice?: number;
   onUpgrade?: () => void;
@@ -35,16 +34,16 @@ export default function SubscriptionCard({
           icon: 'person-outline',
           features: ['10 Basic Services', '2 exports/month'],
         };
-      case 'standard':
+      case 'plus':
         return {
-          name: 'Standard',
+          name: 'Plus',
           color: Colors.primary,
           icon: 'star-outline',
-          features: ['20 exports/month', 'Advanced filters', 'Save up to 50 companies'],
+          features: ['50 exports/month', 'Advanced filters', 'Save up to 50 companies'],
         };
-      case 'pro':
+      case 'premium':
         return {
-          name: 'Pro',
+          name: 'Premium',
           color: Colors.warning,
           icon: 'star',
           features: ['Unlimited exports', 'All features', 'Priority support'],
@@ -62,21 +61,10 @@ export default function SubscriptionCard({
   const planDetails = getPlanDetails();
 
   const handleCancelSubscription = () => {
-    Alert.alert(
-      'Cancel Subscription',
-      'Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your billing period.',
-      [
-        { text: 'Keep Subscription', style: 'cancel' },
-        { 
-          text: 'Cancel', 
-          style: 'destructive',
-          onPress: () => {
-            if (onCancel) onCancel();
-            Alert.alert('Subscription Cancelled', 'Your subscription will remain active until the end of the billing period.');
-          }
-        },
-      ]
-    );
+    // Direct cancellation without dialog
+    if (onCancel) {
+      onCancel();
+    }
   };
 
   return (
@@ -114,7 +102,7 @@ export default function SubscriptionCard({
         {plan === 'free' ? (
           <TouchableOpacity style={styles.upgradeButton} onPress={onUpgrade}>
             <Ionicons name="rocket-outline" size={18} color={Colors.white} />
-            <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+            <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
           </TouchableOpacity>
         ) : (
           <>
@@ -127,6 +115,30 @@ export default function SubscriptionCard({
             </TouchableOpacity>
           </>
         )}
+        // In the actions section, update the price display logic
+        {plan !== 'free' && (
+          <View>
+            {monthlyPrice ? (
+              <>
+                <Text style={styles.price}>${monthlyPrice.toFixed(2)}/month</Text>
+                {renewalDate && (
+                  <Text style={styles.renewalText}>Renews {renewalDate}</Text>
+                )}
+              </>
+            ) : (
+              <>
+                {/* For yearly plans without monthlyPrice, show appropriate pricing */}
+                <Text style={styles.price}>
+                  {plan === 'plus' ? '$99.99/year' : plan === 'premium' ? '$199.99/year' : ''}
+                </Text>
+                {renewalDate && (
+                  <Text style={styles.renewalText}>Renews {renewalDate}</Text>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
       </View>
     </View>
   );

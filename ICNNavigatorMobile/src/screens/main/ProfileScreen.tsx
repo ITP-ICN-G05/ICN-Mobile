@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing } from '../../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { useUserTier, UserTier } from '../../contexts/UserTierContext';
+import { useSubscription } from '../../hooks/useSubscription';
 import SubscriptionCard from '../../components/common/SubscriptionCard';
 
 interface ProfileSectionProps {
@@ -89,6 +90,11 @@ const SettingItem = ({
 export default function ProfileScreen() {
   const navigation = useNavigation<any>();
   const { currentTier, setCurrentTier, features } = useUserTier();
+  const { 
+    subscription, 
+    cancelSubscription, 
+    refreshSubscription 
+  } = useSubscription();
   const [avatarLoading, setAvatarLoading] = useState(false);
 
   // User state (would typically come from Redux/context)
@@ -107,40 +113,80 @@ export default function ProfileScreen() {
   const [locationServices, setLocationServices] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
-  const [showDeveloperMode, setShowDeveloperMode] = useState(true);
 
-  // Stats based on tier
+  // Refresh subscription data when screen focuses
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshSubscription();
+    });
+    return unsubscribe;
+  }, [navigation, refreshSubscription]);
+
+  // Stats based on tier - should use actual currentTier, not change it
   const getStats = () => {
-    switch(currentTier) {
+    const tier = subscription?.tier || currentTier;
+    switch(tier) {
       case 'premium':
         return { saved: 'Unlimited', searches: 'Unlimited', exports: 'Unlimited' };
       case 'plus':
         return { saved: '50', searches: '500/mo', exports: '50/mo' };
       default:
-        return { saved: '10', searches: '100/mo', exports: '10/mo' };
+        return { saved: '10', searches: '100/mo', exports: '2/mo' };
     }
   };
 
   const stats = getStats();
 
-  // Get tier display info
+  // Get tier display info from actual subscription
   const getTierInfo = () => {
-    switch(currentTier) {
+    if (!subscription) {
+      return { 
+        name: 'Free', 
+        color: Colors.black50,
+        icon: 'star-outline',
+        price: null,
+        nextBilling: null
+      };
+    }
+
+    const formatDate = (dateString: string | undefined) => {
+      if (!dateString) return null;
+      return new Date(dateString).toLocaleDateString('en-US', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    };
+
+    const getPrice = () => {
+      if (!subscription.amount) return null;
+      
+        // Check if subscription has billingPeriod field first
+      if (subscription.billingPeriod) {
+        return `${subscription.amount.toFixed(2)}/${subscription.billingPeriod === 'yearly' ? 'year' : 'month'}`;
+      }
+      
+      // Fallback logic: yearly plans are typically >$50
+      const isYearly = subscription.amount >= 50;
+      return `${subscription.amount.toFixed(2)}/${isYearly ? 'year' : 'month'}`;
+    };
+
+    switch(subscription.tier) {
       case 'premium':
         return { 
           name: 'Premium', 
           color: Colors.warning,
           icon: 'star',
-          price: '$19.99/month',
-          nextBilling: '15 Feb 2025'
+          price: getPrice(),
+          nextBilling: formatDate(subscription.nextBillingDate)
         };
       case 'plus':
         return { 
           name: 'Plus', 
           color: Colors.primary,
           icon: 'star-half',
-          price: '$9.99/month',
-          nextBilling: '15 Feb 2025'
+          price: getPrice(),
+          nextBilling: formatDate(subscription.nextBillingDate)
         };
       default:
         return { 
@@ -215,10 +261,6 @@ export default function ProfileScreen() {
         name: 'avatar.jpg',
       } as any);
       
-      // Example API call:
-      // const response = await api.uploadAvatar(formData);
-      // setUser({ ...user, avatar: response.avatarUrl });
-      
       console.log('Avatar uploaded successfully');
       Alert.alert('Success', 'Profile picture updated successfully!');
     } catch (error) {
@@ -250,31 +292,19 @@ export default function ProfileScreen() {
     navigation.navigate('ChangePassword');
   };
 
-  // ==========================================
-  // UPDATED: Subscription Management Handlers
-  // ==========================================
+  // Subscription Management Handlers
   const handleUpgrade = () => {
     navigation.navigate('Payment');
   };
 
   const handleManageSubscription = () => {
-    // Navigate to the ManageSubscription screen
     navigation.navigate('ManageSubscription');
   };
 
   const handleCancelSubscription = async () => {
-    // Quick action that redirects to manage subscription for cancellation
-    Alert.alert(
-      'Cancel Subscription',
-      'Are you sure? You\'ll lose access to premium features at the end of your billing period.',
-      [
-        { text: 'Keep Subscription', style: 'cancel' },
-        { 
-          text: 'Manage Subscription', 
-          onPress: () => navigation.navigate('ManageSubscription')
-        }
-      ]
-    );
+    // Direct cancellation for SubscriptionCard button
+    // This immediately downgrades to free tier without any dialog
+    await cancelSubscription();
   };
 
   // External Links Handlers
@@ -331,7 +361,6 @@ export default function ProfileScreen() {
             onPress: async () => {
               try {
                 // TODO: Implement actual export with subscriptionApi
-                // const data = await subscriptionApi.exportUserData();
                 Alert.alert('Success', 'Data exported successfully!');
               } catch (error) {
                 Alert.alert('Error', 'Failed to export data. Please try again.');
@@ -354,8 +383,6 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // TODO: Implement with profileApi
-              // await profileApi.deleteAccount();
               Alert.alert('Account Deletion', 'Your account deletion request has been submitted.');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete account. Please contact support.');
@@ -377,12 +404,6 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // TODO: Clear auth tokens and user data
-              // await AsyncStorage.clear();
-              // navigation.reset({
-              //   index: 0,
-              //   routes: [{ name: 'Auth' }],
-              // });
               Alert.alert('Signed Out', 'You have been signed out successfully.');
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out. Please try again.');
@@ -458,101 +479,26 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Developer Mode Tier Selector */}
-      {showDeveloperMode && (
-        <ProfileSection title="🔧 Developer Mode (Testing Only)">
-          <View style={styles.devModeContainer}>
-            <Text style={styles.devModeText}>Test different tier features:</Text>
-            <View style={styles.tierButtons}>
-              {(['free', 'plus', 'premium'] as UserTier[]).map(tier => (
-                <TouchableOpacity
-                  key={tier}
-                  style={[
-                    styles.tierButton,
-                    currentTier === tier && styles.tierButtonActive
-                  ]}
-                  onPress={() => setCurrentTier(tier)}
-                >
-                  <Text style={[
-                    styles.tierButtonText,
-                    currentTier === tier && styles.tierButtonTextActive
-                  ]}>
-                    {tier.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            
-            <View style={styles.featuresList}>
-              <Text style={styles.featuresTitle}>Current Access:</Text>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canFilterBySize ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canFilterBySize ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>Company Size Filter</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canFilterByDiversity ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canFilterByDiversity ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>Diversity Filters</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canSeeRevenue ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canSeeRevenue ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>Revenue Data</Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canCreateFolders ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canCreateFolders ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>
-                  Bookmark Folders ({features.maxBookmarkFolders} max)
-                </Text>
-              </View>
-              <View style={styles.featureRow}>
-                <Ionicons 
-                  name={features.canExportFull ? "checkmark-circle" : "close-circle"} 
-                  size={16} 
-                  color={features.canExportFull ? Colors.success : Colors.error} 
-                />
-                <Text style={styles.featureText}>
-                  Full Export ({features.exportLimit === -1 ? 'Unlimited' : features.exportLimit})
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.hideDevButton}
-              onPress={() => setShowDeveloperMode(false)}
-            >
-              <Text style={styles.hideDevText}>Hide Developer Mode</Text>
-            </TouchableOpacity>
-          </View>
-        </ProfileSection>
-      )}
-
       {/* Subscription Management Card */}
       <View style={{ marginVertical: 8 }}>
         <SubscriptionCard
-          plan={currentTier as 'free' | 'standard' | 'pro'}
+          plan={(subscription?.tier || currentTier) as 'free' | 'plus' | 'premium'}
           renewalDate={tierInfo.nextBilling || undefined}
-          monthlyPrice={currentTier === 'premium' ? 19.99 : currentTier === 'plus' ? 9.99 : undefined}
-          onUpgrade={handleUpgrade}
+          monthlyPrice={
+            // Only pass actual monthly amounts, not yearly amounts
+            subscription?.billingPeriod === 'monthly' ? subscription.amount : undefined
+          }
+          onUpgrade={() => {
+            // Smart navigation based on current tier
+            const targetPlan = currentTier === 'free' ? 'plus' : 'premium';
+            navigation.navigate('Payment', { selectedPlan: targetPlan });
+          }}
           onManage={handleManageSubscription}
           onCancel={handleCancelSubscription}
         />
       </View>
 
+      {/* Rest of the sections remain the same... */}
       {/* Account Settings */}
       <ProfileSection title="Account">
         <SettingItem
@@ -685,13 +631,6 @@ export default function ProfileScreen() {
           value="icnvictoria.com"
           onPress={() => Linking.openURL('https://icnvictoria.com')}
         />
-        {!showDeveloperMode && (
-          <SettingItem
-            icon="code-slash-outline"
-            title="Developer Mode"
-            onPress={() => setShowDeveloperMode(true)}
-          />
-        )}
       </ProfileSection>
 
       {/* Sign Out Button */}

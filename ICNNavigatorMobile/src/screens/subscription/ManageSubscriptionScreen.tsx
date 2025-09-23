@@ -2,409 +2,375 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
+  StyleSheet,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors } from '../../constants/colors';
-import { useUserTier } from '../../contexts/UserTierContext';
-import { subscriptionApi, Subscription } from '../../services/subscriptionApi';
-
-// Use the Subscription type directly from the API service
-// Remove the duplicate SubscriptionDetails interface
-
-interface BillingHistory {
-  id: string;
-  date: string;
-  amount: number;
-  status: 'paid' | 'pending' | 'failed';
-  description: string;
-  invoiceUrl?: string;
-}
+import { useSubscription } from '../../hooks/useSubscription';
+import { mockSubscriptionApi } from '../../services/mockSubscriptionApi';
 
 export default function ManageSubscriptionScreen() {
-  const navigation = useNavigation();
-  const { currentTier, setCurrentTier } = useUserTier();
-  const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [billingHistory, setBillingHistory] = useState<BillingHistory[]>([]);
-  const [processing, setProcessing] = useState(false);
+  const navigation = useNavigation<any>();
+  const { 
+    subscription, 
+    cancelSubscription,
+    refreshSubscription,
+    loading 
+  } = useSubscription();
+  
+  const [billingHistory, setBillingHistory] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingBilling, setLoadingBilling] = useState(true);
 
   useEffect(() => {
-    loadSubscriptionDetails();
+    loadData();
   }, []);
 
-  const loadSubscriptionDetails = async () => {
+  const loadData = async () => {
+    setLoadingBilling(true);
     try {
-      setLoading(true);
-      const [subDetails, history] = await Promise.all([
-        subscriptionApi.getSubscription(),
-        subscriptionApi.getBillingHistory(),
+      const [history, methods] = await Promise.all([
+        mockSubscriptionApi.getBillingHistory(5),
+        mockSubscriptionApi.getPaymentMethods(),
       ]);
-      
-      setSubscription(subDetails);
       setBillingHistory(history);
+      setPaymentMethods(methods);
     } catch (error) {
-      console.error('Failed to load subscription:', error);
-      // Mock data for testing - ensure it matches the Subscription type
-      setSubscription({
-        id: 'sub_123',
-        userId: 'user_123',
-        tier: currentTier as any,
-        status: 'active',
-        startDate: '2025-01-15',
-        nextBillingDate: '2025-02-15', // Optional in type, but we provide it here
-        amount: currentTier === 'premium' ? 19.99 : 9.99,
-        currency: 'USD',
-        paymentMethod: {
-          id: 'pm_123',
-          type: 'card',
-          last4: '4242',
-          brand: 'Visa',
-          isDefault: true,
-        },
-        autoRenew: true,
-        cancelAtPeriodEnd: false,
-      });
-      
-      setBillingHistory([
-        {
-          id: '1',
-          date: '2025-01-15',
-          amount: 9.99,
-          status: 'paid',
-          description: 'Plus Monthly Subscription',
-        },
-        {
-          id: '2',
-          date: '2024-12-15',
-          amount: 9.99,
-          status: 'paid',
-          description: 'Plus Monthly Subscription',
-        },
-      ]);
+      console.error('Error loading data:', error);
     } finally {
-      setLoading(false);
+      setLoadingBilling(false);
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      refreshSubscription(),
+      loadData(),
+    ]);
+    setRefreshing(false);
+  };
+
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
+  const handleChangePlan = () => {
+    navigation.navigate('Payment');
+  };
+
   const handleCancelSubscription = () => {
+    if (!subscription || subscription.tier === 'free') {
+      Alert.alert('No Active Subscription', 'You are currently on the free plan.');
+      return;
+    }
+
     Alert.alert(
       'Cancel Subscription',
-      'Are you sure you want to cancel your subscription? You\'ll continue to have access until the end of your billing period.',
+      'Are you sure? You will be immediately downgraded to the free plan.',
       [
         { text: 'Keep Subscription', style: 'cancel' },
         { 
-          text: 'Cancel Subscription', 
+          text: 'Cancel & Downgrade', 
           style: 'destructive',
-          onPress: processCancellation,
+          onPress: async () => {
+            await cancelSubscription();
+            await loadData(); // Refresh data
+            navigation.goBack(); // Return to profile after cancellation
+          }
         },
       ]
     );
   };
 
-  const processCancellation = async () => {
-    setProcessing(true);
-    try {
-      await subscriptionApi.cancelSubscription();
-      
-      setSubscription(prev => prev ? {
-        ...prev,
-        cancelAtPeriodEnd: true,
-        status: 'cancelled',
-      } : null);
-      
-      Alert.alert(
-        'Subscription Cancelled',
-        `Your subscription will end on ${subscription?.nextBillingDate || 'the end of your billing period'}. You'll continue to have access until then.`
-      );
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to cancel subscription');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleReactivateSubscription = async () => {
-    setProcessing(true);
-    try {
-      const reactivatedSub = await subscriptionApi.reactivateSubscription();
-      setSubscription(reactivatedSub);
-      
-      Alert.alert('Success', 'Your subscription has been reactivated!');
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to reactivate subscription');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleUpdatePaymentMethod = () => {
-    navigation.navigate('UpdatePayment' as never);
+    Alert.alert('Update Payment Method', 'This feature will be available soon.');
   };
 
-  const handleChangePlan = () => {
-    navigation.navigate('Payment' as never);
+  const handleDownloadInvoices = () => {
+    Alert.alert('Download Invoices', 'Your invoices have been sent to your email.');
   };
 
-  const handleDownloadInvoice = async (invoice: BillingHistory) => {
-    if (invoice.invoiceUrl) {
-      // Download or open invoice
-      Alert.alert('Invoice', 'Opening invoice...');
+  const handleUpdateBillingEmail = () => {
+    Alert.alert('Update Billing Email', 'Feature coming soon!');
+  };
+
+  const handleRedeemPromo = () => {
+    navigation.navigate('Payment');
+  };
+
+  const getTierDisplay = () => {
+    if (!subscription) return { name: 'Free', color: Colors.black50 };
+    
+    switch (subscription.tier) {
+      case 'premium':
+        return { name: 'Premium Plan', color: Colors.warning };
+      case 'plus':
+        return { name: 'Plus Plan', color: Colors.primary };
+      default:
+        return { name: 'Free Plan', color: Colors.black50 };
     }
   };
 
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+  const tierDisplay = getTierDisplay();
 
-  const formatCurrency = (amount: number | undefined) => {
-    if (amount === undefined) return 'N/A';
-    return `$${amount.toFixed(2)}`;
-  };
-
-  if (loading) {
+  if (loading || loadingBilling) {
     return (
-      <SafeAreaView style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </SafeAreaView>
+      <View style={styles.container}>
+        <SafeAreaView edges={['top']} style={styles.safeTop}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color={Colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Manage Subscription</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+        </SafeAreaView>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading subscription...</Text>
+        </View>
+      </View>
     );
   }
 
-  if (!subscription || currentTier === 'free') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.emptyState}>
-          <Ionicons name="card-outline" size={64} color={Colors.black50} />
-          <Text style={styles.emptyTitle}>No Active Subscription</Text>
-          <Text style={styles.emptyText}>
-            You're currently on the Free plan. Upgrade to access premium features!
-          </Text>
-          <TouchableOpacity 
-            style={styles.upgradeButton}
-            onPress={handleChangePlan}
-          >
-            <Text style={styles.upgradeButtonText}>View Plans</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+  const isFreeTier = !subscription || subscription.tier === 'free';
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
+      <SafeAreaView edges={['top']} style={styles.safeTop}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Manage Subscription</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+      </SafeAreaView>
+
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Current Plan Card */}
         <View style={styles.planCard}>
-          <View style={styles.planHeader}>
-            <View>
-              <Text style={styles.planLabel}>Current Plan</Text>
-              <Text style={styles.planName}>
-                {subscription.tier.charAt(0).toUpperCase() + subscription.tier.slice(1)} Plan
-              </Text>
+          {subscription?.status === 'active' && !isFreeTier && (
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>ACTIVE</Text>
             </View>
-            <View style={[
-              styles.statusBadge,
-              subscription.status === 'active' ? styles.statusActive : styles.statusCancelled
-            ]}>
-              <Text style={styles.statusText}>
-                {subscription.status.toUpperCase()}
-              </Text>
-            </View>
-          </View>
+          )}
+          
+          <Text style={styles.planLabel}>Current Plan</Text>
+          <Text style={[styles.planName, { color: tierDisplay.color }]}>
+            {tierDisplay.name}
+          </Text>
 
-          <View style={styles.planDetails}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Amount</Text>
-              <Text style={styles.detailValue}>
-                {formatCurrency(subscription.amount)}/month
-              </Text>
-            </View>
-            
-            {subscription.nextBillingDate && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Next billing date</Text>
-                <Text style={styles.detailValue}>
-                  {formatDate(subscription.nextBillingDate)}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Member since</Text>
-              <Text style={styles.detailValue}>
-                {formatDate(subscription.startDate)}
-              </Text>
-            </View>
-
-            {subscription.cancelAtPeriodEnd && subscription.nextBillingDate && (
-              <View style={styles.cancelNotice}>
-                <Ionicons name="information-circle" size={20} color={Colors.warning} />
-                <Text style={styles.cancelNoticeText}>
-                  Your subscription will end on {formatDate(subscription.nextBillingDate)}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.planActions}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleChangePlan}
-            >
-              <Ionicons name="swap-horizontal-outline" size={20} color={Colors.primary} />
-              <Text style={styles.actionButtonText}>Change Plan</Text>
-            </TouchableOpacity>
-
-            {subscription.cancelAtPeriodEnd ? (
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.reactivateButton]}
-                onPress={handleReactivateSubscription}
-                disabled={processing}
-              >
-                {processing ? (
-                  <ActivityIndicator size="small" color={Colors.success} />
-                ) : (
-                  <>
-                    <Ionicons name="refresh-outline" size={20} color={Colors.success} />
-                    <Text style={[styles.actionButtonText, { color: Colors.success }]}>
-                      Reactivate
+          {!isFreeTier && (
+            <>
+              <View style={styles.planDetails}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Amount</Text>
+                  <Text style={styles.detailValue}>
+                    ${subscription?.amount?.toFixed(2) || '0.00'}/
+                    {subscription?.billingPeriod === 'yearly' ? 'year' : 
+                    (subscription?.billingPeriod === 'monthly' ? 'month' : 
+                      (subscription?.amount && subscription.amount >= 50 ? 'year' : 'month'))}
+                  </Text>
+                </View>
+                
+                {subscription?.nextBillingDate && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Next billing date</Text>
+                    <Text style={styles.detailValue}>
+                      {new Date(subscription.nextBillingDate).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
                     </Text>
-                  </>
+                  </View>
                 )}
-              </TouchableOpacity>
-            ) : (
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Member since</Text>
+                  <Text style={styles.detailValue}>
+                    {subscription?.startDate 
+                      ? new Date(subscription.startDate).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })
+                      : 'N/A'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.planActions}>
+                <TouchableOpacity 
+                  style={styles.changePlanButton}
+                  onPress={handleChangePlan}
+                >
+                  <Ionicons name="swap-horizontal" size={20} color={Colors.primary} />
+                  <Text style={styles.changePlanText}>Change Plan</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.cancelButton}
+                  onPress={handleCancelSubscription}
+                >
+                  <Ionicons name="close-circle-outline" size={20} color={Colors.error} />
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {isFreeTier && (
+            <View style={styles.freeActions}>
+              <Text style={styles.freeText}>
+                Upgrade to unlock premium features
+              </Text>
               <TouchableOpacity 
-                style={[styles.actionButton, styles.cancelButton]}
-                onPress={handleCancelSubscription}
-                disabled={processing}
+                style={styles.upgradeButton}
+                onPress={handleChangePlan}
               >
-                {processing ? (
-                  <ActivityIndicator size="small" color={Colors.error} />
-                ) : (
-                  <>
-                    <Ionicons name="close-circle-outline" size={20} color={Colors.error} />
-                    <Text style={[styles.actionButtonText, { color: Colors.error }]}>
-                      Cancel
-                    </Text>
-                  </>
-                )}
+                <Text style={styles.upgradeButtonText}>Upgrade Now</Text>
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          )}
         </View>
 
         {/* Payment Method */}
-        {subscription.paymentMethod && (
+        {!isFreeTier && paymentMethods.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Payment Method</Text>
-            <TouchableOpacity 
-              style={styles.paymentCard}
-              onPress={handleUpdatePaymentMethod}
-            >
-              <View style={styles.paymentInfo}>
-                <Ionicons 
-                  name={subscription.paymentMethod.type === 'card' ? 'card' : 'logo-paypal'} 
-                  size={24} 
-                  color={Colors.text} 
-                />
-                <View style={styles.paymentDetails}>
-                  {subscription.paymentMethod.type === 'card' ? (
-                    <>
-                      <Text style={styles.paymentText}>
-                        {subscription.paymentMethod.brand} •••• {subscription.paymentMethod.last4}
-                      </Text>
-                      <Text style={styles.paymentSubtext}>Credit Card</Text>
-                    </>
-                  ) : (
-                    <Text style={styles.paymentText}>PayPal</Text>
+            
+            {paymentMethods.map((method, index) => (
+              <TouchableOpacity 
+                key={method.id}
+                style={styles.paymentMethodItem}
+                onPress={handleUpdatePaymentMethod}
+              >
+                <View style={styles.paymentMethodInfo}>
+                  <Ionicons name="card-outline" size={24} color={Colors.black50} />
+                  <View style={styles.paymentMethodDetails}>
+                    <Text style={styles.paymentMethodType}>
+                      {method.brand || 'Card'} •••• {method.last4}
+                    </Text>
+                    <Text style={styles.paymentMethodExpiry}>
+                      {method.type === 'card' ? `Expires ${method.expiryMonth}/${method.expiryYear}` : 'Payment Method'}
+                    </Text>
+                  </View>
+                  {method.isDefault && (
+                    <View style={styles.defaultBadge}>
+                      <Text style={styles.defaultText}>DEFAULT</Text>
+                    </View>
                   )}
                 </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
-            </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
         {/* Billing History */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Billing History</Text>
-            <TouchableOpacity onPress={() => {}}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
+        {billingHistory.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.billingHeader}>
+              <Text style={styles.sectionTitle}>Billing History</Text>
+              <TouchableOpacity onPress={() => Alert.alert('View All', 'Full billing history coming soon!')}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            </View>
 
-          {billingHistory.map((item) => (
-            <TouchableOpacity 
-              key={item.id}
-              style={styles.billingItem}
-              onPress={() => handleDownloadInvoice(item)}
-            >
-              <View style={styles.billingInfo}>
-                <Text style={styles.billingDescription}>{item.description}</Text>
-                <Text style={styles.billingDate}>{formatDate(item.date)}</Text>
-              </View>
-              <View style={styles.billingAmount}>
-                <Text style={styles.billingPrice}>{formatCurrency(item.amount)}</Text>
-                <View style={[
-                  styles.billingStatus,
-                  item.status === 'paid' && styles.statusPaid,
-                  item.status === 'pending' && styles.statusPending,
-                  item.status === 'failed' && styles.statusFailed,
-                ]}>
-                  <Text style={styles.billingStatusText}>{item.status}</Text>
+            {billingHistory.map((item) => (
+              <View key={item.id} style={styles.billingItem}>
+                <View style={styles.billingInfo}>
+                  <Text style={styles.billingDescription}>{item.description}</Text>
+                  <Text style={styles.billingDate}>
+                    {new Date(item.date).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.billingAmount}>
+                  <Text style={styles.billingPrice}>${item.amount.toFixed(2)}</Text>
+                  <Text style={[styles.billingStatus, { color: item.status === 'paid' ? Colors.success : Colors.warning }]}>
+                    {item.status.toUpperCase()}
+                  </Text>
                 </View>
               </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
 
         {/* Additional Options */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Additional Options</Text>
           
-          <TouchableOpacity style={styles.optionItem}>
-            <Ionicons name="download-outline" size={20} color={Colors.text} />
-            <Text style={styles.optionText}>Download All Invoices</Text>
+          <TouchableOpacity style={styles.optionItem} onPress={handleDownloadInvoices}>
+            <View style={styles.optionLeft}>
+              <Ionicons name="download-outline" size={20} color={Colors.black50} />
+              <Text style={styles.optionText}>Download All Invoices</Text>
+            </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.optionItem}>
-            <Ionicons name="mail-outline" size={20} color={Colors.text} />
-            <Text style={styles.optionText}>Update Billing Email</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
-          </TouchableOpacity>
+          {!isFreeTier && (
+            <TouchableOpacity style={styles.optionItem} onPress={handleUpdateBillingEmail}>
+              <View style={styles.optionLeft}>
+                <Ionicons name="mail-outline" size={20} color={Colors.black50} />
+                <Text style={styles.optionText}>Update Billing Email</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity style={styles.optionItem}>
-            <Ionicons name="card-outline" size={20} color={Colors.text} />
-            <Text style={styles.optionText}>Redeem Promo Code</Text>
+          <TouchableOpacity style={styles.optionItem} onPress={handleRedeemPromo}>
+            <View style={styles.optionLeft}>
+              <Ionicons name="pricetag-outline" size={20} color={Colors.black50} />
+              <Text style={styles.optionText}>Redeem Promo Code</Text>
+            </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
           </TouchableOpacity>
+        </View>
+
+        {/* Demo Notice */}
+        <View style={styles.demoNotice}>
+          <Ionicons name="information-circle" size={20} color={Colors.warning} />
+          <Text style={styles.demoNoticeText}>
+            This is a demo environment with mock data. No real charges are being processed.
+          </Text>
         </View>
 
         {/* Support */}
         <View style={styles.supportSection}>
-          <Ionicons name="help-circle-outline" size={24} color={Colors.primary} />
+          <Text style={styles.supportTitle}>Need Help?</Text>
           <Text style={styles.supportText}>
-            Need help with your subscription?
+            Contact our support team for assistance with billing or subscription issues.
           </Text>
-          <TouchableOpacity style={styles.supportButton}>
+          <TouchableOpacity 
+            style={styles.supportButton}
+            onPress={() => Alert.alert('Support', 'Opening support chat...')}
+          >
             <Text style={styles.supportButtonText}>Contact Support</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -413,44 +379,48 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  safeTop: {
+    backgroundColor: Colors.white,
   },
-  emptyState: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.black20,
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 32,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: Colors.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
+  loadingText: {
+    marginTop: 12,
     color: Colors.black50,
-    textAlign: 'center',
-    marginBottom: 24,
+    fontSize: 14,
   },
-  upgradeButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  upgradeButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
+  scrollView: {
+    flex: 1,
   },
   planCard: {
     backgroundColor: Colors.white,
-    marginHorizontal: 16,
-    marginTop: 16,
+    margin: 16,
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000',
@@ -459,42 +429,47 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  planHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
+  statusBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: Colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  statusText: {
+    fontSize: 10,
+    color: Colors.white,
+    fontWeight: '600',
   },
   planLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.black50,
+    fontWeight: '500',
     marginBottom: 4,
+  },
+  activeBadge: {
+    backgroundColor: Colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  activeText: {
+    fontSize: 10,
+    color: Colors.white,
+    fontWeight: '600',
   },
   planName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.text,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusActive: {
-    backgroundColor: Colors.success + '30',
-  },
-  statusCancelled: {
-    backgroundColor: Colors.error + '30',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.text,
+    marginBottom: 20,
   },
   planDetails: {
     borderTopWidth: 1,
     borderTopColor: Colors.black20,
     paddingTop: 16,
+    marginBottom: 20,
   },
   detailRow: {
     flexDirection: 'row',
@@ -507,109 +482,164 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 14,
-    fontWeight: '600',
     color: Colors.text,
-  },
-  cancelNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.warning + '20',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  cancelNoticeText: {
-    fontSize: 13,
-    color: Colors.text,
-    marginLeft: 8,
-    flex: 1,
+    fontWeight: '500',
   },
   planActions: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 20,
   },
-  actionButton: {
+  changePlanButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    gap: 6,
+    backgroundColor: Colors.orange[400],
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  changePlanText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
   },
   cancelButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
     borderColor: Colors.error,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.error,
   },
   reactivateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
     borderColor: Colors.success,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
   },
-  actionButtonText: {
-    fontSize: 14,
+  reactivateText: {
+    fontSize: 15,
     fontWeight: '600',
-    color: Colors.primary,
+    color: Colors.success,
+  },
+  freeActions: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  freeText: {
+    fontSize: 14,
+    color: Colors.black50,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  upgradeButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  upgradeButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
   section: {
-    marginTop: 20,
-    paddingHorizontal: 16,
+    backgroundColor: Colors.white,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionHeader: {
+  billingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 12,
+    marginBottom: 16,
+    marginTop: 0,
+  },
+  contentGap: {
+    gap: 12,
   },
   viewAllText: {
     fontSize: 14,
     color: Colors.primary,
   },
-  paymentCard: {
-    backgroundColor: Colors.white,
-    padding: 16,
-    borderRadius: 12,
+  paymentMethodItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.black20,
   },
-  paymentInfo: {
+  paymentMethodInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    flex: 1,
   },
-  paymentDetails: {
-    gap: 2,
+  paymentMethodDetails: {
+    marginLeft: 12,
+    flex: 1,
   },
-  paymentText: {
+  paymentMethodType: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     color: Colors.text,
   },
-  paymentSubtext: {
+  paymentMethodExpiry: {
     fontSize: 12,
     color: Colors.black50,
+    marginTop: 2,
+  },
+  defaultBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  defaultText: {
+    fontSize: 10,
+    color: Colors.white,
+    fontWeight: '600',
   },
   billingItem: {
-    backgroundColor: Colors.white,
-    padding: 16,
-    borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.black20,
   },
   billingInfo: {
     flex: 1,
   },
   billingDescription: {
     fontSize: 14,
-    fontWeight: '500',
     color: Colors.text,
     marginBottom: 4,
   },
@@ -624,60 +654,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 4,
   },
   billingStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  statusPaid: {
-    backgroundColor: Colors.success + '30',
-  },
-  statusPending: {
-    backgroundColor: Colors.warning + '30',
-  },
-  statusFailed: {
-    backgroundColor: Colors.error + '30',
-  },
-  billingStatusText: {
     fontSize: 10,
     fontWeight: '600',
-    textTransform: 'uppercase',
+    marginTop: 2,
   },
   optionItem: {
-    backgroundColor: Colors.white,
-    padding: 16,
-    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.black20,
+  },
+  optionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   optionText: {
-    flex: 1,
     fontSize: 14,
     color: Colors.text,
-    marginLeft: 12,
+  },
+  demoNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.warning + '20',
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+  },
+  demoNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.text,
   },
   supportSection: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 24,
+    marginTop: 20,
+  },
+  supportTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
   },
   supportText: {
     fontSize: 14,
     color: Colors.black50,
-    marginVertical: 8,
+    textAlign: 'center',
+    marginBottom: 16,
   },
   supportButton: {
     paddingHorizontal: 24,
-    paddingVertical: 8,
-    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.primary,
   },
   supportButtonText: {
-    fontSize: 14,
     color: Colors.primary,
+    fontSize: 14,
     fontWeight: '600',
-    textDecorationLine: 'underline',
   },
 });
