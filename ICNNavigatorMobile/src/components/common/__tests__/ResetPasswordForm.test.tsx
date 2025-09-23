@@ -1,6 +1,21 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import ResetPasswordForm from '../ResetPasswordForm';
+import { Animated } from 'react-native';
+
+// Mock Animated.timing to make it synchronous and satisfy TypeScript types
+jest.spyOn(Animated, 'timing').mockImplementation((value, config) => {
+  return {
+    start: (callback?: (result: { finished: boolean }) => void) => {
+      (value as any).setValue(config.toValue);
+      if (callback) {
+        callback({ finished: true });
+      }
+    },
+    stop: () => {},
+    reset: () => {}, // Added to satisfy the CompositeAnimation interface
+  } as Animated.CompositeAnimation;
+});
 
 // Mock the alert function
 global.alert = jest.fn();
@@ -29,9 +44,8 @@ describe('ResetPasswordForm Component', () => {
       expect(getByText('Send')).toBeTruthy();
       expect(getByText('Password')).toBeTruthy();
       
-      // Check password inputs - there are two with same placeholder
       const passwordInputs = getAllByPlaceholderText('Enter your password');
-      expect(passwordInputs).toHaveLength(2); // Password and Confirm Password
+      expect(passwordInputs).toHaveLength(2);
       
       expect(getByText('Confirm Password')).toBeTruthy();
       expect(getByText('Confirm')).toBeTruthy();
@@ -40,6 +54,38 @@ describe('ResetPasswordForm Component', () => {
     it('should render without crashing', () => {
       expect(() => render(<ResetPasswordForm />)).not.toThrow();
     });
+  });
+
+  describe('Password Visibility Toggle', () => {
+    it('should toggle password visibility when the eye icon is pressed', async () => {
+      const { getByLabelText, getAllByPlaceholderText } = render(<ResetPasswordForm />);
+      const passwordInput = getAllByPlaceholderText('Enter your password')[0];
+      const eyeIcon = getByLabelText('Show password');
+      
+      expect(passwordInput.props.secureTextEntry).toBe(true);
+
+      fireEvent.press(eyeIcon);
+
+      await waitFor(() => {
+        expect(getByLabelText('Hide password')).toBeTruthy();
+        expect(passwordInput.props.secureTextEntry).toBe(false);
+      });
+    });
+
+    it('should toggle confirm password visibility when the eye icon is pressed', async () => {
+        const { getByLabelText, getAllByPlaceholderText } = render(<ResetPasswordForm />);
+        const confirmPasswordInput = getAllByPlaceholderText('Enter your password')[1];
+        const eyeIcon = getByLabelText('Show confirm password');
+        
+        expect(confirmPasswordInput.props.secureTextEntry).toBe(true);
+  
+        fireEvent.press(eyeIcon);
+  
+        await waitFor(() => {
+            expect(getByLabelText('Hide confirm password')).toBeTruthy();
+            expect(confirmPasswordInput.props.secureTextEntry).toBe(false);
+        });
+      });
   });
 
   describe('Email Input Functionality', () => {
@@ -99,7 +145,7 @@ describe('ResetPasswordForm Component', () => {
       fireEvent.changeText(emailInput, 'test@example.com');
       fireEvent.press(sendButton);
 
-      expect(console.log).toHaveBeenCalledWith('Send verification to:', 'test@example.com');
+            expect(console.log).toHaveBeenCalledWith('Send verification to:', 'test@example.com');
     });
   });
 
@@ -137,22 +183,15 @@ describe('ResetPasswordForm Component', () => {
 
   describe('Form Validation', () => {
     it('should show alert when verification code is empty', () => {
-      // Mock window.alert since we're using alert() in the component
-      const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
-      
       const { getByText } = render(<ResetPasswordForm />);
       const confirmButton = getByText('Confirm');
 
       fireEvent.press(confirmButton);
 
-      expect(alertSpy).toHaveBeenCalledWith('Please enter a valid 6-digit verification code');
-      
-      alertSpy.mockRestore();
+      expect(global.alert).toHaveBeenCalledWith('Please enter a valid 6-digit verification code');
     });
 
     it('should show alert when verification code is less than 6 digits', () => {
-      const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
-      
       const { getByPlaceholderText, getByText } = render(<ResetPasswordForm />);
       const verificationInput = getByPlaceholderText('Verification Code');
       const confirmButton = getByText('Confirm');
@@ -160,9 +199,7 @@ describe('ResetPasswordForm Component', () => {
       fireEvent.changeText(verificationInput, '123');
       fireEvent.press(confirmButton);
 
-      expect(alertSpy).toHaveBeenCalledWith('Please enter a valid 6-digit verification code');
-      
-      alertSpy.mockRestore();
+      expect(global.alert).toHaveBeenCalledWith('Please enter a valid 6-digit verification code');
     });
 
     it('should process form when valid verification code is provided', () => {
@@ -195,16 +232,12 @@ describe('ResetPasswordForm Component', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty form submission gracefully', () => {
-      const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => {});
-      
       const { getByText } = render(<ResetPasswordForm />);
       const confirmButton = getByText('Confirm');
 
       fireEvent.press(confirmButton);
 
-      expect(alertSpy).toHaveBeenCalled();
-      
-      alertSpy.mockRestore();
+      expect(global.alert).toHaveBeenCalled();
     });
 
     it('should handle special characters in inputs', () => {
@@ -235,14 +268,13 @@ describe('ResetPasswordForm Component', () => {
     });
 
     it('should have proper button roles', () => {
-      const { getByText } = render(<ResetPasswordForm />);
+      const { getAllByRole } = render(<ResetPasswordForm />);
       
-      const sendButton = getByText('Send');
-      const confirmButton = getByText('Confirm');
+      // Find all buttons by their accessibility role
+      const buttons = getAllByRole('button');
       
-      // Buttons should be touchable/pressable
-      expect(() => fireEvent.press(sendButton)).not.toThrow();
-      expect(() => fireEvent.press(confirmButton)).not.toThrow();
+      // Check if two buttons are found
+      expect(buttons).toHaveLength(2);
     });
   });
 

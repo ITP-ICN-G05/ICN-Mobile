@@ -1,123 +1,90 @@
 import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+import PaymentSuccessModal from '../PaymentSuccessModal';
 
-// Simple mock for PaymentSuccessModal since the real component has complex dependencies
-const MockPaymentSuccessModal = ({ visible, onClose, planName, amount }: any) => {
-  if (!visible) return null;
+// Mock the Animated library to make animations synchronous for tests
+jest.mock('react-native', () => {
+    const RN = jest.requireActual('react-native');
   
-  return (
-    <>
-      <div>Payment Successful!</div>
-      <div>Welcome to {planName} Plan</div>
-      <div>Amount Paid: {amount}</div>
-      <button onClick={onClose}>Start Exploring</button>
-      <button onClick={onClose}>View Receipt</button>
-    </>
-  );
+    // Mock animation functions to run synchronously
+    const mockAnimation = (value: { setValue: (arg0: any) => void; }, config: { toValue: any; }) => ({
+      start: (callback?: (result: { finished: boolean }) => void) => {
+        value.setValue(config.toValue);
+        callback?.({ finished: true });
+      },
+      stop: jest.fn(),
+      reset: jest.fn(),
+    });
+  
+    RN.Animated.timing = mockAnimation;
+    RN.Animated.spring = mockAnimation;
+    RN.Animated.sequence = (animations: Array<{ start: (cb: any) => void }>) => ({
+        start: (callback?: (result: { finished: boolean }) => void) => {
+            animations.forEach(anim => anim.start(() => {}));
+            callback?.({ finished: true });
+        },
+        stop: jest.fn(),
+        reset: jest.fn(),
+    });
+  
+    return RN;
+});
+
+const mockOnClose = jest.fn();
+
+const defaultProps = {
+  visible: true,
+  onClose: mockOnClose,
+  planName: 'Premium Plan',
+  amount: '$99.99',
+  billingCycle: 'yearly' as const,
+  nextBillingDate: '2024-09-23',
+  features: ['Feature 1', 'Feature 2', 'Feature 3'],
 };
 
-describe('PaymentSuccessModal Component', () => {
-  const defaultProps = {
-    visible: true,
-    onClose: jest.fn(),
-    planName: 'Premium',
-    amount: '$199.99',
-    billingCycle: 'yearly' as const,
-    nextBillingDate: '2026-09-21',
-    features: [
-      'Advanced analytics access',
-      'Priority support',
-      'Enterprise API access',
-    ],
-  };
-
+describe('PaymentSuccessModal', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Clear mock history before each test
+    mockOnClose.mockClear();
   });
 
-  describe('Basic Functionality Tests', () => {
-    it('should handle props correctly', () => {
-      expect(defaultProps.visible).toBe(true);
-      expect(defaultProps.planName).toBe('Premium');
-      expect(defaultProps.amount).toBe('$199.99');
-    });
+  it('renders correctly with all props', () => {
+    const { getByText } = render(<PaymentSuccessModal {...defaultProps} />);
 
-    it('should have correct billing cycle', () => {
-      expect(defaultProps.billingCycle).toBe('yearly');
-    });
-
-    it('should handle callback functions', () => {
-      const mockCallback = jest.fn();
-      const props = { ...defaultProps, onClose: mockCallback };
-      
-      expect(typeof props.onClose).toBe('function');
-      props.onClose();
-      expect(mockCallback).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle features array', () => {
-      expect(Array.isArray(defaultProps.features)).toBe(true);
-      expect(defaultProps.features).toHaveLength(3);
-    });
+    expect(getByText('Payment Successful!')).toBeTruthy();
+    expect(getByText('Welcome to Premium Plan')).toBeTruthy();
+    expect(getByText('$99.99')).toBeTruthy();
+    expect(getByText('Yearly')).toBeTruthy();
+    expect(getByText('🎉 Features Unlocked')).toBeTruthy();
+    expect(getByText('Feature 1')).toBeTruthy();
+    expect(getByText('Feature 2')).toBeTruthy();
+    expect(getByText('Feature 3')).toBeTruthy();
   });
 
-  describe('Modal State Logic', () => {
-    it('should handle visible state changes', () => {
-      let visible = true;
-      expect(visible).toBe(true);
-      
-      visible = false;
-      expect(visible).toBe(false);
-    });
-
-    it('should handle billing cycle text conversion', () => {
-      const getBillingText = (cycle: string) => {
-        return cycle === 'monthly' ? 'Monthly' : 'Yearly';
-      };
-      
-      expect(getBillingText('monthly')).toBe('Monthly');
-      expect(getBillingText('yearly')).toBe('Yearly');
-    });
+  it('renders correctly for monthly billing cycle', () => {
+    const { getByText } = render(<PaymentSuccessModal {...defaultProps} billingCycle="monthly" />);
+    expect(getByText('Monthly')).toBeTruthy();
   });
 
-  describe('Data Processing', () => {
-    it('should format plan name correctly', () => {
-      const formatPlanName = (name: string) => `Welcome to ${name} Plan`;
-      
-      expect(formatPlanName('Premium')).toBe('Welcome to Premium Plan');
-      expect(formatPlanName('Basic')).toBe('Welcome to Basic Plan');
-    });
-
-    it('should handle feature processing', () => {
-      const features = defaultProps.features;
-      const limitedFeatures = features.slice(0, 3);
-      
-      expect(limitedFeatures).toHaveLength(3);
-      expect(limitedFeatures[0]).toBe('Advanced analytics access');
-    });
+  it('does not render features section if features array is empty', () => {
+    const { queryByText } = render(<PaymentSuccessModal {...defaultProps} features={[]} />);
+    expect(queryByText('🎉 Features Unlocked')).toBeNull();
   });
 
-  describe('Edge Cases', () => {
-    it('should handle empty features', () => {
-      const emptyFeatures: string[] = [];
-      expect(emptyFeatures).toHaveLength(0);
-    });
+  it('calls onClose when "Start Exploring" button is pressed', () => {
+    const { getByText } = render(<PaymentSuccessModal {...defaultProps} />);
+    fireEvent.press(getByText('Start Exploring'));
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
 
-    it('should handle undefined values', () => {
-      const safeValue = (value: any) => value || 'N/A';
-      
-      expect(safeValue(undefined)).toBe('N/A');
-      expect(safeValue('')).toBe('N/A');
-      expect(safeValue('Valid')).toBe('Valid');
-    });
+  it('calls onClose when "View Receipt" button is pressed', () => {
+    const { getByText } = render(<PaymentSuccessModal {...defaultProps} />);
+    fireEvent.press(getByText('View Receipt'));
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
 
-    it('should validate billing date format', () => {
-      const isValidDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return !isNaN(date.getTime());
-      };
-      
-      expect(isValidDate('2026-09-21')).toBe(true);
-      expect(isValidDate('invalid-date')).toBe(false);
-    });
+  it('does not render when visible is false', () => {
+    const { queryByText } = render(<PaymentSuccessModal {...defaultProps} visible={false} />);
+    expect(queryByText('Payment Successful!')).toBeNull();
   });
 });

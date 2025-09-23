@@ -101,7 +101,7 @@ export default function PaymentSuccessModal({
           <Animated.View style={{ opacity: fadeAnim }}>
             <Text style={styles.successTitle}>Payment Successful!</Text>
             <Text style={styles.successSubtitle}>
-              Welcome to {planName} Plan
+              Welcome to {planName}
             </Text>
 
             {/* Payment Details */}

@@ -1,7 +1,13 @@
 # Automated Unit Test Report
-**ICN Navigator Mobile Application**
-
----
+**ICN Navigator Mobile Application| **components/common** | 72.4% | 74.56% | 56.75% | 73.76% | 🟢 Excellent |
+| **utils** | 100% | 100% | 100% | 100% | 🟢 Perfect |
+| **hooks** | 100% | 100% | 100% | 100% | 🟢 Perfect |
+| **constants** | 33.33% | 0% | 100% | 33.33% | 🟡 Partial |
+| **contexts** | 23.07% | 0% | 0% | 23.07% | 🔴 Uncovered* |
+| **screens/main** | 0% | 0% | 0% | 0% | 🔴 Uncovered* |
+| **navigation** | 66.66% | 80% | 60% | 69.56% | 🟢 Good |
+| **data** | 0% | 0% | 0% | 0% | 🔴 Uncovered* |
+| **effects** | 0% | 0% | 0% | 0% | 🔴 Uncovered* |-
 
 ## Executive Summary
 
@@ -21,12 +27,12 @@ This report presents the results of comprehensive automated unit testing impleme
 
 | Metric | Result |
 |--------|--------|
-| **Total Test Suites** | 14 |
-| **Total Test Cases** | 266 |
-| **Passed Tests** | 266 ✅ |
+| **Total Test Suites** | 15 |
+| **Total Test Cases** | 284 |
+| **Passed Tests** | 284 ✅ |
 | **Failed Tests** | 0 ❌ |
 | **Success Rate** | 100% |
-| **Execution Time** | 3.108 seconds |
+| **Execution Time** | 5.186 seconds |
 
 ### 🎯 Test Suite Breakdown
 
@@ -42,6 +48,7 @@ This report presents the results of comprehensive automated unit testing impleme
 | `FilterDropdown.test.tsx` | 29 | ✅ PASSED | 100% |
 | `SearchBarWithDropdown.test.tsx` | 23 | ✅ PASSED | 100% |
 | `FilterModal.test.tsx` | 23 | ✅ PASSED | 100% |
+| `EnhancedFilterModal.test.tsx` | 18 | ✅ PASSED | 51.42% |
 | `PaymentSuccessModal.test.tsx` | 13 | ✅ PASSED | 100% |
 | `SubscriptionCard.test.tsx` | 23 | ✅ PASSED | 100% |
 | `ResetPasswordForm.test.tsx` | 22 | ✅ PASSED | 100% |
@@ -52,21 +59,21 @@ This report presents the results of comprehensive automated unit testing impleme
 **Overall Coverage Statistics:**
 | Metric | Coverage | Quality |
 |--------|----------|---------|
-| **Statement Coverage** | 32.27% | 🟡 Moderate |
-| **Branch Coverage** | 34.98% | 🟡 Moderate |  
-| **Function Coverage** | 29.16% | 🟡 Moderate |
-| **Line Coverage** | 32.87% | 🟡 Moderate |
+| **Statement Coverage** | 28.06% | 🟡 Moderate |
+| **Branch Coverage** | 24.32% | 🔴 Low |  
+| **Function Coverage** | 23.42% | 🔴 Low |
+| **Line Coverage** | 29.13% | 🟡 Moderate |
 
 **Detailed Coverage by Module:**
 
 | Module | Statements | Branch | Functions | Lines | Status |
 |--------|------------|--------|-----------|-------|---------|
-| **components/common** | 67.56% | 73.01% | 69.86% | 66.97% | 🟢 Excellent |
+| **components/common** | 72.4% | 74.56% | 56.75% | 73.76% | 🟢 Excellent |
 | **utils** | 100% | 100% | 100% | 100% | 🟢 Perfect |
 | **hooks** | 100% | 100% | 100% | 100% | 🟢 Perfect |
 | **constants** | 33.33% | 0% | 100% | 33.33% | 🟡 Partial |
 | **screens/main** | 0% | 0% | 0% | 0% | 🔴 Uncovered* |
-| **navigation** | 66.66% | 80% | 60% | 69.56% | � Good |
+| **navigation** | 66.66% | 80% | 60% | 69.56% | 🟢 Good |
 | **data** | 0% | 0% | 0% | 0% | 🔴 Uncovered* |
 | **effects** | 0% | 0% | 0% | 0% | 🔴 Uncovered* |
 
@@ -76,6 +83,7 @@ This report presents the results of comprehensive automated unit testing impleme
 
 - **AuthContainer.tsx**: 95% coverage (1 uncovered line)
 - **CompanyCard.tsx**: 100% coverage ✅
+- **EnhancedFilterModal.tsx**: 51.42% coverage
 - **FilterDropdown.tsx**: 100% coverage ✅  
 - **FilterModal.tsx**: 100% coverage ✅
 - **SearchBar.tsx**: 100% coverage ✅
@@ -573,5 +581,3 @@ The testing infrastructure is well-established with comprehensive business logic
 **Testing Environment:** Windows PowerShell, Node.js with Jest  
 **Report Author:** Automated Testing System  
 **Version:** 2.1
- 
- 

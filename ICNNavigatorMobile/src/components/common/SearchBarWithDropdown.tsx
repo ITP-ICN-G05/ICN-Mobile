@@ -137,12 +137,11 @@ export default function SearchBarWithDropdown({
             placeholderTextColor={Colors.black50}
             onFocus={() => value.length > 0 && showDropdownAnimation()}
             numberOfLines={1} // Limit to single line
-            ellipsizeMode="tail" // Show ellipsis at the end
           />
           
           {/* Right side search icon or clear button */}
           {value.length > 0 ? (
-            <TouchableOpacity onPress={handleClear} style={styles.iconButton}>
+            <TouchableOpacity onPress={handleClear} style={styles.iconButton} testID="clear-button">
               <Ionicons name="close-circle" size={20} color="#EF8059" />
             </TouchableOpacity>
           ) : (
@@ -152,7 +151,7 @@ export default function SearchBarWithDropdown({
           )}
         </View>
         {onFilter && (
-          <TouchableOpacity style={styles.filterButton} onPress={onFilter}>
+          <TouchableOpacity style={styles.filterButton} onPress={onFilter} testID="filter-button">
             <Ionicons name="filter" size={24} color={Colors.white} />
           </TouchableOpacity>
         )}

@@ -121,6 +121,36 @@ describe('SearchBarWithDropdown Component', () => {
       expect(onChangeTextMock).toHaveBeenCalledTimes(4);
       expect(onChangeTextMock).toHaveBeenLastCalledWith('Tech');
     });
+
+    it('should call onChangeText with empty string when clear button is pressed', () => {
+      const onChangeTextMock = jest.fn();
+      const { getByTestId } = render(
+        <SearchBarWithDropdown
+          {...defaultProps}
+          value="Some text"
+          onChangeText={onChangeTextMock}
+        />
+      );
+
+      const clearButton = getByTestId('clear-button');
+      fireEvent.press(clearButton);
+
+      expect(onChangeTextMock).toHaveBeenCalledWith('');
+    });
+  });
+
+  describe('Filter Functionality', () => {
+    it('should call onFilter when filter button is pressed', () => {
+      const onFilterMock = jest.fn();
+      const { getByTestId } = render(
+        <SearchBarWithDropdown {...defaultProps} onFilter={onFilterMock} />
+      );
+
+      const filterButton = getByTestId('filter-button');
+      fireEvent.press(filterButton);
+
+      expect(onFilterMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Company Selection Callbacks', () => {

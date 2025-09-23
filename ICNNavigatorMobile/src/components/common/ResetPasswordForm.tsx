@@ -148,6 +148,7 @@ export default function ResetPasswordForm() {
             onPressOut={() => setSendButtonPressed(false)}
             disabled={isCountingDown}
             activeOpacity={1}
+            accessibilityRole="button"
           >
             <Text style={[
               styles.sendButtonText, 
@@ -177,6 +178,7 @@ export default function ResetPasswordForm() {
           <TouchableOpacity 
             style={styles.eyeIcon}
             onPress={togglePasswordVisibility}
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
           >
             <MaterialIcons 
               name={showPassword ? "visibility" : "visibility-off"} 
@@ -202,6 +204,7 @@ export default function ResetPasswordForm() {
           <TouchableOpacity 
             style={styles.eyeIcon}
             onPress={toggleConfirmPasswordVisibility}
+            accessibilityLabel={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
           >
             <MaterialIcons 
               name={showConfirmPassword ? "visibility" : "visibility-off"} 
@@ -213,7 +216,7 @@ export default function ResetPasswordForm() {
       </View>
 
       {/* Confirm Button */}
-      <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmReset}>
+      <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmReset} accessibilityRole="button">
         <Text style={styles.confirmButtonText}>Confirm</Text>
       </TouchableOpacity>
     </View>
