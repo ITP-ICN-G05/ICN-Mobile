@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors } from '../../constants/colors';
@@ -29,10 +28,6 @@ export default function MapScreen() {
   const { features } = useUserTier();
   const insets = useSafeAreaInsets();
 
-  
-  const tabBarHeight = useBottomTabBarHeight();
-  
-
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -41,34 +36,42 @@ export default function MapScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
 
-  // ICN Data state
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filterOptions, setFilterOptions] = useState<{
-    sectors: string[];
-    states: string[];
-    cities: string[];
-    capabilities: string[];
-  }>({ sectors: [], states: [], cities: [], capabilities: [] });
+  // ===== Auto-zoom debouncer with selection/camera lock (prevents zoom-out after selecting) =====
+  const zoomTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionLockUntil = useRef<number>(0);
+  const cameraBusyRef = useRef<boolean>(false); // true while we are animating the camera to a selection
 
-  // Filters
-  const [filters, setFilters] = useState<EnhancedFilterOptions>({
-    capabilities: [],
-    sectors: [],
-    distance: 'All',
-  });
+  const cancelZoomTimeout = () => {
+    if (zoomTimeout.current) {
+      clearTimeout(zoomTimeout.current);
+      zoomTimeout.current = null;
+    }
+  };
 
-  // Debounce helper for camera updates
-  const zoomTimeout = useRef<NodeJS.Timeout | null>(null);
+  const startSelectionLock = (ms = 1200) => {
+    selectionLockUntil.current = Date.now() + ms; // block auto-zoom while we animate to a pin
+    cameraBusyRef.current = true;
+    cancelZoomTimeout(); // cancel any pending auto-zoom from previous typing/filtering
+  };
+
+  const releaseSelectionLockSoon = (ms = 750) => {
+    setTimeout(() => {
+      cameraBusyRef.current = false;
+      selectionLockUntil.current = 0;
+    }, ms);
+  };
+
   const scheduleZoom = (delay = 250) => {
-    if (zoomTimeout.current) clearTimeout(zoomTimeout.current);
+    // Respect selection/camera lock
+    if (Date.now() < selectionLockUntil.current || cameraBusyRef.current) return;
+    cancelZoomTimeout();
     zoomTimeout.current = setTimeout(() => {
+      if (Date.now() < selectionLockUntil.current || cameraBusyRef.current) return; // double-check before firing
       zoomToFilteredResults();
     }, delay);
   };
-  useEffect(() => () => {
-    if (zoomTimeout.current) clearTimeout(zoomTimeout.current);
-  }, []);
+
+  useEffect(() => () => cancelZoomTimeout(), []);
 
   // Load ICN data
   useEffect(() => {
@@ -95,12 +98,7 @@ export default function MapScreen() {
       .map(c => ({ latitude: toNumber(c.latitude), longitude: toNumber(c.longitude) }));
     if (coords.length === 0) return;
     if (coords.length === 1) {
-      mapRef.current?.animateToRegion({
-        latitude: coords[0].latitude,
-        longitude: coords[0].longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      }, 500);
+      mapRef.current?.animateCamera({ center: coords[0], zoom: 14 }, { duration: 500 });
       return;
     }
     mapRef.current?.fitToCoordinates(coords, {
@@ -108,6 +106,23 @@ export default function MapScreen() {
       animated: true,
     });
   };
+
+  // ICN Data state (placed after hooks for clarity)
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterOptions, setFilterOptions] = useState<{
+    sectors: string[];
+    states: string[];
+    cities: string[];
+    capabilities: string[];
+  }>({ sectors: [], states: [], cities: [], capabilities: [] });
+
+  // Filters
+  const [filters, setFilters] = useState<EnhancedFilterOptions>({
+    capabilities: [],
+    sectors: [],
+    distance: 'All',
+  });
 
   // Derived list
   const filteredCompanies = useMemo(() => {
@@ -143,38 +158,21 @@ export default function MapScreen() {
       filtered = filtered.filter(company => company.billingAddress?.state === filters.state);
     }
 
-    // Company type
+    // Company type (supports grouped labels and "Both")
     if (filters.companyTypes && filters.companyTypes.length > 0) {
       filtered = filtered.filter(company => {
-
         const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
-        
         for (const filterType of filters.companyTypes!) {
-          // Handle special "Both" case
           if (filterType === 'Both') {
-            const hasSupplier = capabilityTypes.some(t => 
-              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
-            );
-            const hasManufacturer = capabilityTypes.some(t => 
-              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
-            );
+            const hasSupplier = capabilityTypes.some(t => t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier');
+            const hasManufacturer = capabilityTypes.some(t => t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler');
             if (hasSupplier && hasManufacturer) return true;
-          }
-          // Direct capability type match
-          else if (capabilityTypes.includes(filterType as any)) {
+          } else if (capabilityTypes.includes(filterType as any)) {
             return true;
-          }
-          // Check for supplier group
-          else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
-            if (capabilityTypes.some(t => 
-              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
-            )) return true;
-          }
-          // Check for manufacturer group
-          else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
-            if (capabilityTypes.some(t => 
-              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
-            )) return true;
+          } else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
+            if (capabilityTypes.some(t => t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier')) return true;
+          } else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
+            if (capabilityTypes.some(t => t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler')) return true;
           }
         }
         return false;
@@ -246,22 +244,20 @@ export default function MapScreen() {
     return filtered.filter(hasValidCoords);
   }, [searchText, filters, region, features, companies]);
 
-  // Auto-zoom on dataset changes unless we're in a selection flow
+  // Auto-zoom on dataset changes — but NEVER while a selection/card is open or camera is animating
   useEffect(() => {
-    if (!isLoading && !isFromDropdownSelection) scheduleZoom(250);
+    if (isLoading) return;
+    if (selectedCompany) return; // keep focused on the selected company
+    if (cameraBusyRef.current) return; // don't fight the camera while it's animating
+    if (!isFromDropdownSelection) scheduleZoom(250);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredCompanies, isLoading]);
+  }, [filteredCompanies, isLoading, selectedCompany]);
 
   const zoomToFilteredResults = () => {
     const coords: LatLng[] = filteredCompanies.map(c => ({ latitude: toNumber(c.latitude), longitude: toNumber(c.longitude) }));
     if (coords.length === 0) return;
     if (coords.length === 1) {
-      mapRef.current?.animateToRegion({
-        latitude: coords[0].latitude,
-        longitude: coords[0].longitude,
-        latitudeDelta: 0.015,
-        longitudeDelta: 0.015,
-      }, 400);
+      mapRef.current?.animateCamera({ center: coords[0], zoom: 15 }, { duration: 400 });
     } else {
       mapRef.current?.fitToCoordinates(coords, {
         edgePadding: { top: 80, right: 80, bottom: CARD_RAISE + 60, left: 80 },
@@ -270,16 +266,24 @@ export default function MapScreen() {
     }
   };
 
-  const handleMarkerPress = (company: Company) => {
+  const animateToCompany = (company: Company) => {
+    startSelectionLock(1200);
     setSelectedCompany(company);
-    setIsFromDropdownSelection(false);
+
+    // Slide up the detail card immediately
     Animated.timing(slideAnimation, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    mapRef.current?.animateToRegion({
-      latitude: toNumber(company.latitude),
-      longitude: toNumber(company.longitude),
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    }, 400);
+
+    // Smooth camera focus using animateCamera (more reliable than animateToRegion for zoom level)
+    const center = { latitude: toNumber(company.latitude), longitude: toNumber(company.longitude) };
+    mapRef.current?.animateCamera({ center, zoom: 15, heading: 0, pitch: 0 }, { duration: 500 });
+
+    // Release the lock slightly after the camera settles
+    releaseSelectionLockSoon(800);
+  };
+
+  const handleMarkerPress = (company: Company) => {
+    setIsFromDropdownSelection(false);
+    animateToCompany(company);
   };
 
   const navigateToDetail = (company: Company) => navigation.navigate('CompanyDetail', { company });
@@ -289,16 +293,35 @@ export default function MapScreen() {
   const handleCompanySelection = (company: Company) => {
     setIsFromDropdownSelection(true);
     setSearchText(company.name);
-    handleMarkerPress(company);
-    setTimeout(() => setIsFromDropdownSelection(false), 400);
+    animateToCompany(company);
+    // allow dropdown state to relax after animation
+    setTimeout(() => setIsFromDropdownSelection(false), 900);
   };
 
-  const handleRegionChangeComplete = (newRegion: Region) => setRegion(newRegion);
-  const handleApplyFilters = (newFilters: EnhancedFilterOptions) => { setFilters(newFilters); setFilterModalVisible(false); scheduleZoom(250); };
-  const handleSearchChange = (text: string) => { setSearchText(text); setIsFromDropdownSelection(false); if (text === '' || text.length > 2) scheduleZoom(250); };
+  const handleRegionChangeComplete = (newRegion: Region) => {
+    setRegion(newRegion);
+  };
+
+  const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
+    setFilters(newFilters);
+    setFilterModalVisible(false);
+    scheduleZoom(250);
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchText(text);
+    setIsFromDropdownSelection(false);
+    if (text === '' || text.length > 2) scheduleZoom(250);
+  };
 
   const getMarkerColor = (company: Company) => (searchText && company.name.toLowerCase().includes(searchText.toLowerCase()) ? Colors.warning : (company.verificationStatus === 'verified' ? Colors.success : Colors.primary));
-  const clearFilters = () => { setIsFromDropdownSelection(false); setFilters({ capabilities: [], sectors: [], distance: 'All' }); mapRef.current?.animateToRegion(MELBOURNE_REGION, 400); };
+
+  const clearFilters = () => {
+    setIsFromDropdownSelection(false);
+    setSelectedCompany(null);
+    setFilters({ capabilities: [], sectors: [], distance: 'All' });
+    mapRef.current?.animateCamera({ center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 11 }, { duration: 400 });
+  };
 
   const hasAnyFilters = (
     filters.capabilities.length > 0 ||
@@ -410,12 +433,10 @@ export default function MapScreen() {
         </View>
       )}
 
-
       {/* Watermark — ALWAYS rendered. Non-interactive. */}
       <View pointerEvents="none" style={[styles.logoWatermark, { bottom: watermarkBottom }]}>
         <Image
           source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')}
-
           style={styles.watermarkLogo}
           resizeMode="contain"
           accessible={false}
@@ -427,7 +448,7 @@ export default function MapScreen() {
         <TouchableOpacity style={styles.filterFloatingButton} onPress={() => setFilterModalVisible(true)}>
           <Ionicons name="filter" size={24} color={Colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.myLocationButton} onPress={() => mapRef.current?.animateToRegion(MELBOURNE_REGION, 400)}>
+        <TouchableOpacity style={styles.myLocationButton} onPress={() => mapRef.current?.animateCamera({ center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 11 }, { duration: 400 })}>
           <Ionicons name="locate" size={24} color={Colors.primary} />
         </TouchableOpacity>
       </View>
