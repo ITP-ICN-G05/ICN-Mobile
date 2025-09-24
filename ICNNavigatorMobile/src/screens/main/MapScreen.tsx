@@ -348,21 +348,10 @@ export default function MapScreen() {
 
   // Handler for company selection from dropdown
   const handleCompanySelection = (company: Company) => {
-    setIsFromDropdownSelection(true);
-    
-    mapRef.current?.animateToRegion({
-      latitude: company.latitude,
-      longitude: company.longitude,
-      latitudeDelta: 0.005,
-      longitudeDelta: 0.005,
-    }, 500);
-    
-    setSelectedCompany(company);
-    
-    setTimeout(() => {
-      setSearchText('');
-      setIsFromDropdownSelection(false);
-    }, 1500);
+    // Show the selected org name in the search bar
+    setSearchText(company.name);
+    // Mirror pin-tap behavior: center map + open card
+    handleMarkerPress(company);
   };
 
   const handleRegionChangeComplete = (newRegion: Region) => {
