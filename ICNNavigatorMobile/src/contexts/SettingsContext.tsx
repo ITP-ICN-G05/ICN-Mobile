@@ -144,7 +144,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         await AsyncStorage.setItem('@user_settings', JSON.stringify(mergedSettings));
       }
     } catch (error) {
-      console.error('Failed to sync settings from backend:', error);
+      // console.error('Failed to sync settings from backend:', error);
     }
   };
 

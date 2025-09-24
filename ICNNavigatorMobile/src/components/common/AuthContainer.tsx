@@ -1,26 +1,40 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import SignInForm from './SignInForm';
 import SignUpForm from './SignUpForm';
 import ResetPasswordForm from './ResetPasswordForm';
 
-type AuthMode = 'signin' | 'signup' | 'reset';
+type InternalMode = 'signin' | 'signup' | 'reset';
+type AuthModeProp = 'login' | 'signin' | 'signup' | 'reset';
 
-export default function AuthContainer() {
-  const [currentMode, setCurrentMode] = useState<AuthMode>('signin');
+type Props = {
+  /** Optional: read-once default mode */
+  initialMode?: AuthModeProp;
+  /** Optional: controlled mode from navigation params */
+  mode?: AuthModeProp;
+};
 
-  const handleForgotPassword = () => {
-    setCurrentMode('reset');
-  };
+function normalizeMode(m?: AuthModeProp): InternalMode {
+  if (m === 'signup') return 'signup';
+  if (m === 'reset') return 'reset';
+  // Treat both 'login' and 'signin' as 'signin'
+  return 'signin';
+}
 
-  const handleAlreadyHaveAccount = () => {
-    setCurrentMode('signin');
-  };
+export default function AuthContainer({ initialMode = 'signin', mode }: Props) {
+  const startMode = useMemo(() => normalizeMode(mode ?? initialMode), [mode, initialMode]);
+  const [currentMode, setCurrentMode] = useState<InternalMode>(startMode);
+
+  // Keep in sync if parent controls `mode`
+  useEffect(() => {
+    setCurrentMode(startMode);
+  }, [startMode]);
+
+  const handleForgotPassword = () => setCurrentMode('reset');
+  const handleAlreadyHaveAccount = () => setCurrentMode('signin');
 
   const renderTabButtons = () => {
-    if (currentMode === 'reset') {
-      return null; // Reset password page does not show tab buttons
-    }
+    if (currentMode === 'reset') return null;
 
     return (
       <View style={styles.tabContainer}>
@@ -28,30 +42,28 @@ export default function AuthContainer() {
           style={[
             styles.tabButton,
             styles.leftTab,
-            currentMode === 'signin' && styles.activeTab
+            currentMode === 'signin' && styles.activeTab,
           ]}
           onPress={() => setCurrentMode('signin')}
         >
-          <Text style={[
-            styles.tabText,
-            currentMode === 'signin' && styles.activeTabText
-          ]}>
+          <Text
+            style={[styles.tabText, currentMode === 'signin' && styles.activeTabText]}
+          >
             Sign In
           </Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[
             styles.tabButton,
             styles.rightTab,
-            currentMode === 'signup' && styles.activeTab
+            currentMode === 'signup' && styles.activeTab,
           ]}
           onPress={() => setCurrentMode('signup')}
         >
-          <Text style={[
-            styles.tabText,
-            currentMode === 'signup' && styles.activeTabText
-          ]}>
+          <Text
+            style={[styles.tabText, currentMode === 'signup' && styles.activeTabText]}
+          >
             Sign Up
           </Text>
         </TouchableOpacity>
@@ -61,12 +73,11 @@ export default function AuthContainer() {
 
   const renderCurrentForm = () => {
     switch (currentMode) {
-      case 'signin':
-        return <SignInForm onForgotPassword={handleForgotPassword} />;
       case 'signup':
         return <SignUpForm onAlreadyHaveAccount={handleAlreadyHaveAccount} />;
       case 'reset':
         return <ResetPasswordForm />;
+      case 'signin':
       default:
         return <SignInForm onForgotPassword={handleForgotPassword} />;
     }
@@ -74,17 +85,12 @@ export default function AuthContainer() {
 
   return (
     <View style={styles.container}>
-      {/* Tab Buttons */}
       {renderTabButtons()}
-      
-      {/* Form Content */}
-      <View style={styles.formContainer}>
-        {renderCurrentForm()}
-      </View>
-      
-      {/* Back to Sign In link for Reset Password */}
+
+      <View style={styles.formContainer}>{renderCurrentForm()}</View>
+
       {currentMode === 'reset' && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backToSignInContainer}
           onPress={() => setCurrentMode('signin')}
         >
@@ -98,14 +104,14 @@ export default function AuthContainer() {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12, // Reduced from 20 to 12 for sharper corners
+    borderRadius: 12,
     paddingVertical: 30,
     paddingHorizontal: 10,
     marginHorizontal: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
+    shadowOffset: { 
+      width: 0, 
+      height: 4 
     },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -116,28 +122,25 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     marginHorizontal: 20,
     backgroundColor: '#F0F0F0',
-    borderRadius: 20, // Reduced from 25 to 20 to coordinate with main container
+    borderRadius: 20,
     padding: 4,
   },
   tabButton: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    borderRadius: 16, // Reduced from 20 to 16 to maintain hierarchy
+    borderRadius: 16,
   },
-  leftTab: {
-    marginRight: 2,
+  leftTab: { 
+    marginRight: 2 
   },
   rightTab: {
-    marginLeft: 2,
+    marginLeft: 2 
   },
   activeTab: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
@@ -152,7 +155,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   formContainer: {
-    minHeight: 300, // Ensure form area has sufficient height
+    minHeight: 300,
   },
   backToSignInContainer: {
     alignItems: 'center',

@@ -1,19 +1,31 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useUser } from '../../contexts/UserContext';
 
 interface SignInFormProps {
   onForgotPassword: () => void;
 }
 
 export default function SignInForm({ onForgotPassword }: SignInFormProps) {
+  const { login } = useUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSignIn = () => {
-    // Handle sign in logic
-    console.log('Sign in with:', { email, password });
+  const handleSignIn = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await login(email, password); 
+      // no imperative navigation here
+    } catch (e) {
+      console.log('Sign in failed:', e);
+      // optionally show a toast/alert
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const togglePasswordVisibility = () => {

@@ -120,7 +120,7 @@ export default function ProfileScreen() {
   } = useSubscription();
   
   // Use contexts for user data and settings
-  const { user, isLoading: userLoading, updateUser, refreshUser, clearUser } = useUser();
+  const { user, isLoading: userLoading, updateUser, refreshUser, clearUser, logout } = useUser();
   const { settings, updateSetting, syncSettings } = useSettings();
   
   const [avatarLoading, setAvatarLoading] = useState(false);
@@ -377,15 +377,15 @@ export default function ProfileScreen() {
 
   // External Links Handlers
   const handlePrivacyPolicy = () => {
-    Linking.openURL('https://icnvictoria.com/privacy');
+    Linking.openURL('https://icn.org.au/icn_vic/');
   };
 
   const handleTermsOfService = () => {
-    Linking.openURL('https://icnvictoria.com/terms');
+    Linking.openURL('https://icn.org.au/icn_vic/');
   };
 
   const handleContactSupport = () => {
-    Linking.openURL('mailto:support@icnvictoria.com');
+    Linking.openURL('mailto:research@icn.vic.gov.au');
   };
 
   const handleRateApp = () => {
@@ -421,15 +421,16 @@ export default function ProfileScreen() {
             try {
               setIsLoading(true);
               
-              await AuthService.signOut();
-              clearUser(); // Clear user context
+              await AuthService.signOut?.();
               
-              navigation.dispatch(
-                CommonActions.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                })
-              );
+              if (typeof logout === 'function') {
+                await logout();              // clears tokens + user
+              } else {
+                clearUser();                 // fallback
+              }
+              // No navigation here; AppNavigator will render Auth stack now
+
+
             } catch (error) {
               setIsLoading(false);
               Alert.alert(
@@ -473,14 +474,12 @@ export default function ProfileScreen() {
                       setIsLoading(true);
                       
                       await AuthService.deleteAccount(password);
-                      clearUser(); // Clear user context
-                      
-                      navigation.dispatch(
-                        CommonActions.reset({
-                          index: 0,
-                          routes: [{ name: 'Onboarding' }],
-                        })
-                      );
+                      if (typeof logout === 'function') {
+                        await logout();
+                      } else {
+                        clearUser();
+                      }
+                      // No imperative navigation; AppNavigator shows Auth
                       
                       Alert.alert(
                         'Account Deleted',
@@ -496,7 +495,7 @@ export default function ProfileScreen() {
                           { text: 'OK', style: 'cancel' },
                           { 
                             text: 'Contact Support', 
-                            onPress: () => Linking.openURL('mailto:support@icnvictoria.com')
+                            onPress: () => Linking.openURL('mailto:research@icn.vic.gov.au')
                           }
                         ]
                       );
@@ -823,7 +822,7 @@ export default function ProfileScreen() {
           <SettingItem
             icon="help-circle-outline"
             title="Help Center"
-            onPress={() => Linking.openURL('https://icnvictoria.com/help')}
+            onPress={() => Linking.openURL('mailto:research@icn.vic.gov.au')}
           />
           <SettingItem
             icon="chatbubble-outline"
@@ -860,13 +859,13 @@ export default function ProfileScreen() {
           <SettingItem
             icon="business-outline"
             title="About ICN"
-            onPress={() => Linking.openURL('https://icnvictoria.com/about')}
+            onPress={() => Linking.openURL('https://icn.org.au/icn_vic/about/')}
           />
           <SettingItem
             icon="globe-outline"
             title="Website"
             value="icnvictoria.com"
-            onPress={() => Linking.openURL('https://icnvictoria.com')}
+            onPress={() => Linking.openURL('https://icn.org.au/icn_vic/')}
           />
         </ProfileSection>
 

@@ -13,6 +13,7 @@ const Tab = createBottomTabNavigator();
 export default function BottomTabNavigator() {
   return (
     <Tab.Navigator
+      initialRouteName="Map"
       screenOptions={({ route, navigation }) => ({
         // Custom tab button with fixed activation state detection
         tabBarButton: ({ children, onPress, accessibilityState, style }) => {
