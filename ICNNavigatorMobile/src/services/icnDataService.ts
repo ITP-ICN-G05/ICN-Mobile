@@ -1,4 +1,4 @@
-// services/icnDataService.ts - Complete version with geocode caching
+// services/icnDataService.ts - Complete version with geocode caching and stratified sampling
 import { Company, ICNItem, ICNCompanyData } from '../types';
 import { Platform } from 'react-native';
 import { geocodeAddress, getFallbackCoordinates, batchGeocodeAddresses } from './geocodingService';
@@ -396,20 +396,127 @@ async function getCoordinatesWithGeocoding(
 }
 
 /**
- * Convert all ICN data to Company array with deduplication
+ * Perform stratified random sampling to get a subset of companies
+ * while ensuring all states and item types (sectors) are represented
  */
-async function convertICNDataToCompanies(icnItems: ICNItem[]): Promise<Company[]> {
+function stratifiedSampleCompanies(companies: Company[], targetSize: number = 300): Company[] {
+  console.log(`Starting stratified sampling from ${companies.length} companies to ${targetSize}`);
+  
+  // If we have fewer companies than target, return all
+  if (companies.length <= targetSize) {
+    console.log('Company count less than target, returning all companies');
+    return companies;
+  }
+  
+  // Create maps to track companies by state and sector
+  const companiesByState = new Map<string, Company[]>();
+  const companiesBySector = new Map<string, Company[]>();
+  const selectedCompanies = new Set<string>(); // Track selected company IDs
+  const result: Company[] = [];
+  
+  // Group companies by state and sector
+  companies.forEach(company => {
+    // Group by state
+    const state = company.billingAddress?.state;
+    if (state && STANDARD_STATES_TERRITORIES.includes(state)) {
+      if (!companiesByState.has(state)) {
+        companiesByState.set(state, []);
+      }
+      companiesByState.get(state)!.push(company);
+    }
+    
+    // Group by sectors
+    company.keySectors.forEach(sector => {
+      if (sector !== 'General') {
+        if (!companiesBySector.has(sector)) {
+          companiesBySector.set(sector, []);
+        }
+        companiesBySector.get(sector)!.push(company);
+      }
+    });
+  });
+  
+  console.log(`Found ${companiesByState.size} states/territories`);
+  console.log(`Found ${companiesBySector.size} unique sectors`);
+  
+  // Step 1: Ensure at least one company from each state
+  companiesByState.forEach((stateCompanies, state) => {
+    if (selectedCompanies.size < targetSize && stateCompanies.length > 0) {
+      // Randomly select one company from this state
+      const randomIndex = Math.floor(Math.random() * stateCompanies.length);
+      const company = stateCompanies[randomIndex];
+      if (!selectedCompanies.has(company.id)) {
+        selectedCompanies.add(company.id);
+        result.push(company);
+      }
+    }
+  });
+  
+  console.log(`Selected ${result.length} companies to cover all states`);
+  
+  // Step 2: Ensure at least one company from each sector
+  companiesBySector.forEach((sectorCompanies, sector) => {
+    if (selectedCompanies.size < targetSize) {
+      // Find a company from this sector that hasn't been selected yet
+      const unselected = sectorCompanies.filter(c => !selectedCompanies.has(c.id));
+      if (unselected.length > 0) {
+        const randomIndex = Math.floor(Math.random() * unselected.length);
+        const company = unselected[randomIndex];
+        selectedCompanies.add(company.id);
+        result.push(company);
+      }
+    }
+  });
+  
+  console.log(`Selected ${result.length} companies to cover all sectors`);
+  
+  // Step 3: Calculate remaining slots and distribute randomly
+  const remaining = targetSize - result.length;
+  
+  if (remaining > 0) {
+    // Get all unselected companies
+    const unselectedCompanies = companies.filter(c => !selectedCompanies.has(c.id));
+    
+    // Shuffle unselected companies for random selection
+    const shuffled = [...unselectedCompanies].sort(() => Math.random() - 0.5);
+    
+    // Take the first 'remaining' companies
+    const additionalCompanies = shuffled.slice(0, remaining);
+    additionalCompanies.forEach(company => {
+      selectedCompanies.add(company.id);
+      result.push(company);
+    });
+  }
+  
+  // Log final statistics
+  const finalStateDistribution = new Map<string, number>();
+  const finalSectorDistribution = new Map<string, number>();
+  
+  result.forEach(company => {
+    const state = company.billingAddress?.state;
+    if (state) {
+      finalStateDistribution.set(state, (finalStateDistribution.get(state) || 0) + 1);
+    }
+    company.keySectors.forEach(sector => {
+      finalSectorDistribution.set(sector, (finalSectorDistribution.get(sector) || 0) + 1);
+    });
+  });
+  
+  console.log('Final sample statistics:');
+  console.log(`- Total companies: ${result.length}`);
+  console.log(`- States covered: ${finalStateDistribution.size}/${companiesByState.size}`);
+  console.log(`- Sectors covered: ${finalSectorDistribution.size}/${companiesBySector.size}`);
+  console.log('State distribution:', Object.fromEntries(finalStateDistribution));
+  
+  return result;
+}
+
+/**
+ * Convert all ICN data to Company array with deduplication and optional sampling
+ */
+async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boolean = true): Promise<Company[]> {
   const companyMap = new Map<string, Company>();
   let skippedCount = 0;
-  
-  // First pass: collect all unique companies and their addresses
-  const companiesToGeocode: Array<{
-    orgId: string;
-    street: string;
-    city: string;
-    state: string;
-    postcode: string;
-  }> = [];
   
   // Process items and build company map without geocoding
   icnItems.forEach(item => {
@@ -433,15 +540,6 @@ async function convertICNDataToCompanies(icnItems: ICNItem[]): Promise<Company[]
         let city = cleanCompanyData(org["Organisation: Billing City"], 'City Not Available');
         city = autoCorrectData(city, 'city');
         const postcode = cleanCompanyData(org["Organisation: Billing Zip/Postal Code"], '');
-        
-        // Add to geocoding queue
-        companiesToGeocode.push({
-          orgId,
-          street,
-          city,
-          state: normalizedState!,
-          postcode
-        });
         
         // Create company without coordinates (will be added later)
         const companyName = cleanCompanyData(org["Organisation: Organisation Name"], `Company ${orgId.slice(-4)}`);
@@ -530,6 +628,26 @@ async function convertICNDataToCompanies(icnItems: ICNItem[]): Promise<Company[]
     });
   });
   
+  // Convert map to array
+  let allCompanies = Array.from(companyMap.values());
+  console.log(`Processed ${allCompanies.length} unique companies before sampling`);
+  
+  // Apply stratified sampling if enabled
+  let companiesToProcess = allCompanies;
+  if (useSampling) {
+    companiesToProcess = stratifiedSampleCompanies(allCompanies, 300);
+    console.log(`Sampled ${companiesToProcess.length} companies for geocoding`);
+  }
+  
+  // Prepare selected companies for geocoding
+  const companiesToGeocode = companiesToProcess.map(company => ({
+    orgId: company.id,
+    street: company.billingAddress?.street || '',
+    city: company.billingAddress?.city || '',
+    state: company.billingAddress?.state || 'NSW',
+    postcode: company.billingAddress?.postcode || ''
+  }));
+  
   console.log(`Prepared ${companiesToGeocode.length} companies for geocoding`);
   
   // Batch geocode all addresses using cache
@@ -538,7 +656,7 @@ async function convertICNDataToCompanies(icnItems: ICNItem[]): Promise<Company[]
   // Apply coordinates to companies
   companiesToGeocode.forEach((company, index) => {
     const coords = coordinates[index];
-    const companyData = companyMap.get(company.orgId);
+    const companyData = companiesToProcess.find(c => c.id === company.orgId);
     if (companyData) {
       companyData.latitude = coords.latitude;
       companyData.longitude = coords.longitude;
@@ -551,9 +669,9 @@ async function convertICNDataToCompanies(icnItems: ICNItem[]): Promise<Company[]
     console.log('Geocode cache statistics:', cacheStats);
   }
   
-  console.log(`Processed ${companyMap.size} valid companies, skipped ${skippedCount} invalid entries`);
+  console.log(`Returning ${companiesToProcess.length} companies with geocoded locations`);
   
-  return Array.from(companyMap.values());
+  return companiesToProcess;
 }
 
 /**
@@ -566,6 +684,7 @@ class ICNDataService {
   private isLoading = false;
   private isLoaded = false;
   private lastLoadTime: Date | null = null;
+  private useSampling: boolean = true; // Control sampling behavior
   
   private constructor() {}
   
@@ -577,7 +696,18 @@ class ICNDataService {
   }
   
   /**
-   * Load ICN data - React Native version
+   * Set whether to use sampling when loading data
+   */
+  setSampling(enabled: boolean): void {
+    this.useSampling = enabled;
+    // If changing sampling preference, clear cached data to force reload
+    if (this.isLoaded) {
+      this.clearCache();
+    }
+  }
+  
+  /**
+   * Load ICN data - React Native version with optional sampling
    */
   async loadData(): Promise<void> {
     // Check if already loaded
@@ -597,7 +727,7 @@ class ICNDataService {
     this.isLoading = true;
     
     try {
-      console.log('Loading ICN data...');
+      console.log(`Loading ICN data (sampling: ${this.useSampling})...`);
       
       // In React Native, the JSON is already imported as a JavaScript object
       const data = ICNData as ICNItem[];
@@ -617,14 +747,14 @@ class ICNDataService {
       
       console.log(`Valid ICN items: ${this.icnItems.length}`);
       
-      // Convert to Company format with geocoding (now with cache)
+      // Convert to Company format with geocoding (now with optional sampling)
       console.log('Starting geocoding process (using cache for existing addresses)...');
-      this.companies = await convertICNDataToCompanies(this.icnItems);
+      this.companies = await convertICNDataToCompanies(this.icnItems, this.useSampling);
       
       this.isLoaded = true;
       this.lastLoadTime = new Date();
       
-      console.log(`Converted to ${this.companies.length} unique companies with geocoded locations`);
+      console.log(`Loaded ${this.companies.length} companies with geocoded locations`);
       
       // Log statistics
       this.logStatistics();
@@ -1040,6 +1170,7 @@ export {
   autoCorrectData,
   findClosestState,
   levenshteinDistance,
+  stratifiedSampleCompanies,
   STANDARD_STATES_TERRITORIES,
   AUSTRALIAN_STATES,
   NEW_ZEALAND_TERRITORIES,
