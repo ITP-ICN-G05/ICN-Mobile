@@ -1,5 +1,5 @@
 import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import EditProfileScreen from '../screens/main/EditProfileScreen';
 import ChangePasswordScreen from '../screens/main/ChangePasswordScreen';
@@ -7,35 +7,29 @@ import PaymentScreen from '../screens/subscription/PaymentScreen';
 import ManageSubscriptionScreen from '../screens/subscription/ManageSubscriptionScreen';
 import { Colors } from '../constants/colors';
 
-export type RootStackParamList = {
+export type MainStackParamList = {
   MainTabs: undefined;
   EditProfile: undefined;
   ChangePassword: undefined;
-  Payment: undefined;
+  Payment: { planType?: string };
   ManageSubscription: undefined;
-  UpdatePayment: undefined;
-  ComparePlans: undefined;
 };
 
-const Stack = createStackNavigator<RootStackParamList>();
+const Stack = createNativeStackNavigator<MainStackParamList>();
 
-export default function RootNavigator() {
+export default function MainNavigator() {
   return (
     <Stack.Navigator
       screenOptions={{
         headerStyle: {
           backgroundColor: Colors.white,
-          elevation: 0,
-          shadowOpacity: 0,
-          borderBottomWidth: 1,
-          borderBottomColor: Colors.black20,
         },
-        headerTintColor: '#1B3E6F', // Match ProfileScreen blue theme
+        headerShadowVisible: false,
+        headerTintColor: '#1B3E6F',
         headerTitleStyle: {
           fontWeight: '600',
           fontSize: 18,
         },
-        headerBackTitle: 'Back',
       }}
     >
       <Stack.Screen 
@@ -44,39 +38,43 @@ export default function RootNavigator() {
         options={{ headerShown: false }}
       />
       
-      {/* Profile Screens */}
       <Stack.Screen 
         name="EditProfile" 
         component={EditProfileScreen}
         options={{ 
           title: 'Edit Profile',
-          presentation: 'card'
+          headerBackTitle: 'Back',
+          animation: 'slide_from_right'
         }}
       />
+      
       <Stack.Screen 
         name="ChangePassword" 
         component={ChangePasswordScreen}
         options={{ 
           title: 'Change Password',
-          presentation: 'card'
+          headerBackTitle: 'Back',
+          animation: 'slide_from_right'
         }}
       />
       
-      {/* Subscription Screens */}
       <Stack.Screen 
         name="Payment" 
         component={PaymentScreen}
         options={{ 
           title: 'Choose Your Plan',
-          presentation: 'modal'
+          presentation: 'modal',
+          headerShown: true
         }}
       />
+      
       <Stack.Screen 
         name="ManageSubscription" 
         component={ManageSubscriptionScreen}
         options={{ 
           title: 'Manage Subscription',
-          presentation: 'card'
+          headerBackTitle: 'Back',
+          animation: 'slide_from_right'
         }}
       />
     </Stack.Navigator>

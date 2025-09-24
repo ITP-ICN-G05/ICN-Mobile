@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { profileApi, ProfileData } from '../services/profileApi';
+import { useUser } from './UserContext';
 
 interface UserProfile {
   id: string;
@@ -39,6 +40,7 @@ interface ProfileContextType {
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [settings, setSettings] = useState<UserSettings>({
     notifications: true,
@@ -46,46 +48,69 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     darkMode: false,
     autoSync: true,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadProfile();
-    loadSettings();
-  }, []);
+    // Only load profile if user is authenticated
+    if (isAuthenticated && user) {
+      loadProfile();
+      loadSettings();
+    } else {
+      // Clear profile when user logs out
+      setProfile(null);
+      setSettings({
+        notifications: true,
+        locationServices: true,
+        darkMode: false,
+        autoSync: true,
+      });
+    }
+  }, [isAuthenticated, user]);
 
   const loadProfile = async () => {
     try {
       setLoading(true);
+      
       // Try to load from cache first
       const cachedProfile = await AsyncStorage.getItem('userProfile');
       if (cachedProfile) {
         setProfile(JSON.parse(cachedProfile));
       }
       
+      // Check for auth token
+      const token = await AsyncStorage.getItem('@auth_token');
+      if (!token) {
+        console.warn('No auth token available');
+        return;
+      }
+      
       // Then fetch from API
-      const profileData = await profileApi.getProfile();
-      
-      // Convert ProfileData to UserProfile
-      const fullProfile: UserProfile = {
-        id: profileData.id,
-        firstName: profileData.firstName,
-        lastName: profileData.lastName,
-        email: profileData.email,
-        phone: profileData.phone,
-        company: profileData.company,
-        role: profileData.role,
-        bio: profileData.bio,
-        linkedIn: profileData.linkedIn,
-        website: profileData.website,
-        avatar: profileData.avatar || null,
-        memberSince: profileData.memberSince,
-      };
-      
-      setProfile(fullProfile);
-      await AsyncStorage.setItem('userProfile', JSON.stringify(fullProfile));
+      try {
+        const profileData = await profileApi.getProfile();
+        
+        // Convert ProfileData to UserProfile
+        const fullProfile: UserProfile = {
+          id: profileData.id,
+          firstName: profileData.firstName,
+          lastName: profileData.lastName,
+          email: profileData.email,
+          phone: profileData.phone,
+          company: profileData.company,
+          role: profileData.role,
+          bio: profileData.bio,
+          linkedIn: profileData.linkedIn,
+          website: profileData.website,
+          avatar: profileData.avatar || null,
+          memberSince: profileData.memberSince,
+        };
+        
+        setProfile(fullProfile);
+        await AsyncStorage.setItem('userProfile', JSON.stringify(fullProfile));
+      } catch (apiError) {
+        console.warn('Failed to fetch profile from API, using cached data');
+      }
     } catch (error) {
       console.error('Failed to load profile:', error);
-      // Use cached data if API fails
     } finally {
       setLoading(false);
     }
@@ -99,11 +124,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setSettings(JSON.parse(savedSettings));
       }
       
+      // Check for auth token before API call
+      const token = await AsyncStorage.getItem('@auth_token');
+      if (!token) return;
+      
       // Then sync with server
-      const serverSettings = await profileApi.getSettings();
-      const mergedSettings = { ...settings, ...serverSettings };
-      setSettings(mergedSettings);
-      await AsyncStorage.setItem('userSettings', JSON.stringify(mergedSettings));
+      try {
+        const serverSettings = await profileApi.getSettings();
+        const mergedSettings = { ...settings, ...serverSettings };
+        setSettings(mergedSettings);
+        await AsyncStorage.setItem('userSettings', JSON.stringify(mergedSettings));
+      } catch (apiError) {
+        console.warn('Failed to sync settings with server');
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -146,11 +179,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       // Save locally immediately
       await AsyncStorage.setItem('userSettings', JSON.stringify(updatedSettings));
       
-      // Sync with server
-      await profileApi.updateSettings(newSettings);
+      // Sync with server if authenticated
+      const token = await AsyncStorage.getItem('@auth_token');
+      if (token) {
+        try {
+          await profileApi.updateSettings(newSettings);
+        } catch (apiError) {
+          console.warn('Failed to sync settings with server');
+        }
+      }
     } catch (error) {
       console.error('Failed to update settings:', error);
-      // Settings are saved locally even if server sync fails
     }
   };
 

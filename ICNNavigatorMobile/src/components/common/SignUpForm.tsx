@@ -1,22 +1,36 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useUser } from '../../contexts/UserContext';
 
 interface SignUpFormProps {
   onAlreadyHaveAccount: () => void;
 }
 
 export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
+  const { login } = useUser();
   const [userName, setUserName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSignUp = () => {
-    // Handle sign up logic
-    console.log('Sign up with:', { userName, email, password, confirmPassword });
+  const handleSignUp = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      // TODO: validate and call real register API if available
+      // After a successful register, authenticate so AppNavigator switches to Main:
+      await login(email || 'newuser@example.com', password || 'password'); // works with your mock auth
+      // No need to manually navigate; AppNavigator will render MainNavigator.
+    } catch (e) {
+      console.log('Sign up failed:', e);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const togglePasswordVisibility = () => {

@@ -1,24 +1,24 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
-import RootNavigator from './src/navigation/RootNavigator';
-import { UserTierProvider } from './src/contexts/UserTierContext';
+import AppNavigator from './src/navigation/AppNavigator';
 import { UserProvider } from './src/contexts/UserContext';
+import { UserTierProvider } from './src/contexts/UserTierContext';
 import { SettingsProvider } from './src/contexts/SettingsContext';
+import { ProfileProvider } from './src/contexts/ProfileContext';
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <UserProvider>
-        <SettingsProvider>
-          <UserTierProvider>
-            <NavigationContainer>
+        <ProfileProvider>
+          <SettingsProvider>
+            <UserTierProvider>
               <StatusBar style="auto" />
-              <RootNavigator />
-            </NavigationContainer>
-          </UserTierProvider>
-        </SettingsProvider>
+              <AppNavigator />
+            </UserTierProvider>
+          </SettingsProvider>
+        </ProfileProvider>
       </UserProvider>
     </SafeAreaProvider>
   );

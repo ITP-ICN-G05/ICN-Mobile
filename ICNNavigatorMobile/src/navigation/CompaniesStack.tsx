@@ -3,7 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import CompaniesScreen from '../screens/main/CompaniesScreen';
 import CompanyDetailScreen from '../screens/main/CompanyDetailScreen';
 
-const Stack = createNativeStackNavigator();
+export type CompaniesStackParamList = {
+  CompaniesList: undefined;
+  CompanyDetail: { companyId: string; companyName?: string };
+};
+
+const Stack = createNativeStackNavigator<CompaniesStackParamList>();
 
 export default function CompaniesStack() {
   return (

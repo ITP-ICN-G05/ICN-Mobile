@@ -2,36 +2,48 @@ import React from 'react';
 import { View, StyleSheet, Image, ScrollView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AuthContainer from '../../components/common/AuthContainer';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+
+type ScreenRoute = RouteProp<AuthStackParamList, 'LoginSignUp'>;
+type AuthMode = 'login' | 'signup' | 'reset';
+
+// Accept either `initialMode` or `mode` to cover both APIs
+const AuthContainerCompat = AuthContainer as React.ComponentType<{
+  initialMode?: AuthMode;
+  mode?: AuthMode;
+}>;
 
 export default function LoginSignUpResetScreen() {
+  const { params } = useRoute<ScreenRoute>();
+  const mode: AuthMode = params?.mode ?? 'login';
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      
-      {/* Background Image */}
-      <Image 
-        source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+
+      <Image
+        source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')}
         style={styles.backgroundImage}
         resizeMode="cover"
         onError={(error) => console.log('Background image load error:', error)}
       />
-      
-      {/* Top Logo */}
-      <Image 
-        source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')} 
+
+      <Image
+        source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')}
         style={styles.topLogo}
         resizeMode="contain"
         onError={(error) => console.log('Top logo load error:', error)}
       />
-      
-      {/* Auth Container */}
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.authWrapper}>
-          <AuthContainer />
+          {/* Force remount when mode changes and support either prop name */}
+          <AuthContainerCompat key={mode} initialMode={mode} mode={mode} />
         </View>
       </ScrollView>
     </View>
@@ -39,10 +51,7 @@ export default function LoginSignUpResetScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7B85C',
-  },
+  container: { flex: 1, backgroundColor: '#F7B85C' },
   backgroundImage: {
     position: 'absolute',
     top: 150,
@@ -51,29 +60,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 530,
     height: 530,
-    opacity: 0.6, // 透明度调节参数：0=完全透明，1=完全不透明
+    opacity: 0.6,
   },
   topLogo: {
     position: 'absolute',
-    top: 30, // 距离顶部的距离
-    left: 30, // 距离左边的距离
-    width: 200, // logo宽度
-    height: 80, // logo高度
-    zIndex: 1, // 确保在背景图片之上
-    opacity: 0.8
+    top: 30,
+    left: 30,
+    width: 200,
+    height: 80,
+    zIndex: 1,
+    opacity: 0.8,
   },
-  scrollContainer: {
-    flex: 1,
-    marginTop: 120, // 为顶部logo留出空间
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingBottom: 50,
-  },
-  authWrapper: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 500, // 确保认证容器有足够高度
-  },
+  scrollContainer: { flex: 1, marginTop: 120 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 50 },
+  authWrapper: { flex: 1, justifyContent: 'center', minHeight: 500 },
 });

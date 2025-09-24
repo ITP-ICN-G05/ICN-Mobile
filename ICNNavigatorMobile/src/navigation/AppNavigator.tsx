@@ -1,17 +1,22 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
 import AuthNavigator from './AuthNavigator';
 import MainNavigator from './MainNavigator';
-import CompanyDetailScreen from '../screens/main/CompanyDetailScreen';
-
+import { useUser } from '../contexts/UserContext';
 
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { user, isLoading } = useUser();
+  
+  // Consider user authenticated if user data exists
+  const isAuthenticated = !!user;
+
+  if (isLoading) {
+    // You can return a splash screen here
+    return null;
+  }
 
   return (
     <NavigationContainer>

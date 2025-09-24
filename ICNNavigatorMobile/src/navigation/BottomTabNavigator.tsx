@@ -6,13 +6,14 @@ import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native
 import { Colors } from '../constants/colors';
 import CompaniesStack from './CompaniesStack';
 import MapStack from './MapStack';
-import ProfileScreen from '../screens/main/ProfileScreen';
+import ProfileStack from './ProfileStack';
 
 const Tab = createBottomTabNavigator();
 
 export default function BottomTabNavigator() {
   return (
     <Tab.Navigator
+      initialRouteName="Map"
       screenOptions={({ route, navigation }) => ({
         // Custom tab button with fixed activation state detection
         tabBarButton: ({ children, onPress, accessibilityState, style }) => {
@@ -140,7 +141,7 @@ export default function BottomTabNavigator() {
       />
       <Tab.Screen 
         name="Profile" 
-        component={ProfileScreen}
+        component={ProfileStack}
         options={{
           headerShown: false, // Hide Profile page header
         }}
