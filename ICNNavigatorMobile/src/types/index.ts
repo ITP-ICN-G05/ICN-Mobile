@@ -1,12 +1,27 @@
 // ==========================================
 // ICN Navigator Data Structure Types
 // ==========================================
+
+// Define all possible capability types as a union type
+export type CapabilityType = 
+  | 'Supplier'
+  | 'Item Supplier'
+  | 'Parts Supplier'
+  | 'Manufacturer'
+  | 'Manufacturer (Parts)'
+  | 'Service Provider'
+  | 'Project Management'
+  | 'Designer'
+  | 'Assembler'
+  | 'Retailer'
+  | 'Wholesaler';
+
 // Raw ICN data structure from JSON file
 export interface ICNCompanyData {
   "Organisation Capability": string;  // Unique capability ID for this company-item relationship
   "Organisation: Organisation Name": string;  // Company name
   "Organisation: Organisation ID": string;  // Company unique ID
-  "Capability Type": "Supplier" | "Manufacturer";  // Company's role for this item
+  "Capability Type": string;  // Company's role for this item - now accepts any string from data
   "Validation Date": string;  // When company was verified (d/MM/yyyy format)
   "Organisation: Billing Street": string;  // Company street address
   "Organisation: Billing City": string;  // Company city
@@ -54,7 +69,7 @@ export interface Company {
   // Capabilities and sectors
   keySectors: string[];  // Aggregated ICN "Sector Name" from all items
   capabilities?: string[];  // Aggregated ICN "Detailed Item Name" from all items
-  companyType?: 'supplier' | 'manufacturer' | 'service' | 'consultant';  // Maps from ICN "Capability Type"
+  companyType?: 'supplier' | 'manufacturer' | 'service' | 'consultant' | 'retail' | 'both';  // Extended types
   
   // ICN-specific capability details (when data is from ICN)
   icnCapabilities?: Array<{
@@ -62,7 +77,7 @@ export interface Company {
     itemId: string;  // "Item ID"
     itemName: string;  // "Item Name"
     detailedItemName: string;  // "Detailed Item Name"
-    capabilityType: "Supplier" | "Manufacturer";  // "Capability Type"
+    capabilityType: CapabilityType;  // Now uses the full CapabilityType union
     sectorName: string;  // "Sector Name"
     sectorMappingId: string;  // "Sector Mapping ID"
   }>;
@@ -208,7 +223,7 @@ export interface SearchFilters {
   // Basic search
   searchText: string;
   sectors: string[];
-  companyTypes: ('supplier' | 'manufacturer' | 'service' | 'consultant')[];
+  companyTypes: ('supplier' | 'manufacturer' | 'service' | 'consultant' | 'retail' | 'both')[];
   verificationStatus?: 'all' | 'verified' | 'unverified';
   distance?: number;
   
@@ -245,6 +260,25 @@ export interface SearchFilters {
   // Pagination
   page?: number;
   limit?: number;
+}
+
+// ==========================================
+// Enhanced Filter Options (for filter modal)
+// ==========================================
+export interface EnhancedFilterOptions {
+  capabilities: string[];
+  distance: string;
+  sectors: string[];
+  state?: string;
+  companyTypes?: string[];
+  companySize?: string;
+  certifications?: string[];
+  ownershipType?: string[];
+  revenue?: { min: number; max: number };
+  employeeCount?: { min: number; max: number };
+  socialEnterprise?: boolean;
+  australianDisability?: boolean;
+  localContentPercentage?: number;
 }
 
 // ==========================================
@@ -472,6 +506,23 @@ export const isFreeUser = (user: User): boolean => {
   return user.tier === 'free';
 };
 
+// Type guard to check if a string is a valid CapabilityType
+export const isValidCapabilityType = (type: string): type is CapabilityType => {
+  return [
+    'Supplier',
+    'Item Supplier',
+    'Parts Supplier',
+    'Manufacturer',
+    'Manufacturer (Parts)',
+    'Service Provider',
+    'Project Management',
+    'Designer',
+    'Assembler',
+    'Retailer',
+    'Wholesaler'
+  ].includes(type);
+};
+
 // ==========================================
 // Enums for better type safety
 // ==========================================
@@ -499,7 +550,9 @@ export enum CompanyType {
   SUPPLIER = 'supplier',
   MANUFACTURER = 'manufacturer',
   SERVICE = 'service',
-  CONSULTANT = 'consultant'
+  CONSULTANT = 'consultant',
+  RETAIL = 'retail',
+  BOTH = 'both'
 }
 
 export enum VerificationStatus {

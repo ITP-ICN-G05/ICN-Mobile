@@ -143,15 +143,37 @@ export default function MapScreen() {
     // Apply company type filter
     if (filters.companyTypes && filters.companyTypes.length > 0) {
       filtered = filtered.filter(company => {
-        const hasSupplier = company.icnCapabilities?.some(cap => cap.capabilityType === 'Supplier');
-        const hasManufacturer = company.icnCapabilities?.some(cap => cap.capabilityType === 'Manufacturer');
+        const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
         
-        return filters.companyTypes?.some(type => {
-          if (type === 'Supplier' && hasSupplier) return true;
-          if (type === 'Manufacturer' && hasManufacturer) return true;
-          if (type === 'Both' && hasSupplier && hasManufacturer) return true;
-          return false;
-        });
+        for (const filterType of filters.companyTypes!) {
+          // Handle special "Both" case
+          if (filterType === 'Both') {
+            const hasSupplier = capabilityTypes.some(t => 
+              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
+            );
+            const hasManufacturer = capabilityTypes.some(t => 
+              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
+            );
+            if (hasSupplier && hasManufacturer) return true;
+          }
+          // Direct capability type match
+          else if (capabilityTypes.includes(filterType as any)) {
+            return true;
+          }
+          // Check for supplier group
+          else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
+            if (capabilityTypes.some(t => 
+              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
+            )) return true;
+          }
+          // Check for manufacturer group
+          else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
+            if (capabilityTypes.some(t => 
+              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
+            )) return true;
+          }
+        }
+        return false;
       });
     }
 

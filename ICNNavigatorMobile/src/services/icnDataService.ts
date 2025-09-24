@@ -1,5 +1,5 @@
-// services/icnDataService.ts - Complete version with geocode caching and stratified sampling
-import { Company, ICNItem, ICNCompanyData } from '../types';
+// services/icnDataService.ts - Complete version with proper capability type handling
+import { Company, ICNItem, ICNCompanyData, CapabilityType, isValidCapabilityType } from '../types';
 import { Platform } from 'react-native';
 import { geocodeAddress, getFallbackCoordinates, batchGeocodeAddresses } from './geocodingService';
 import geocodeCacheService from './geocodeCacheService';
@@ -7,30 +7,56 @@ import geocodeCacheService from './geocodeCacheService';
 // Import the JSON file from assets folder
 import ICNData from '../../assets/ICN_Navigator.Company.json';
 
+// Define all capability types found in the data
+const CAPABILITY_TYPES = {
+  SUPPLIER: 'Supplier' as CapabilityType,
+  ITEM_SUPPLIER: 'Item Supplier' as CapabilityType,
+  PARTS_SUPPLIER: 'Parts Supplier' as CapabilityType,
+  MANUFACTURER: 'Manufacturer' as CapabilityType,
+  MANUFACTURER_PARTS: 'Manufacturer (Parts)' as CapabilityType,
+  SERVICE_PROVIDER: 'Service Provider' as CapabilityType,
+  PROJECT_MANAGEMENT: 'Project Management' as CapabilityType,
+  DESIGNER: 'Designer' as CapabilityType,
+  ASSEMBLER: 'Assembler' as CapabilityType,
+  RETAILER: 'Retailer' as CapabilityType,
+  WHOLESALER: 'Wholesaler' as CapabilityType
+} as const;
+
+// Group capability types for filtering - with proper type assertions
+const CAPABILITY_TYPE_GROUPS: Record<string, CapabilityType[]> = {
+  supplier: [
+    CAPABILITY_TYPES.SUPPLIER,
+    CAPABILITY_TYPES.ITEM_SUPPLIER,
+    CAPABILITY_TYPES.PARTS_SUPPLIER
+  ] as CapabilityType[],
+  manufacturer: [
+    CAPABILITY_TYPES.MANUFACTURER,
+    CAPABILITY_TYPES.MANUFACTURER_PARTS,
+    CAPABILITY_TYPES.ASSEMBLER
+  ] as CapabilityType[],
+  service: [
+    CAPABILITY_TYPES.SERVICE_PROVIDER,
+    CAPABILITY_TYPES.PROJECT_MANAGEMENT,
+    CAPABILITY_TYPES.DESIGNER
+  ] as CapabilityType[],
+  retail: [
+    CAPABILITY_TYPES.RETAILER,
+    CAPABILITY_TYPES.WHOLESALER
+  ] as CapabilityType[]
+};
+
 // State/Territory Codes for Australia and New Zealand ONLY
 const STANDARD_STATES_TERRITORIES = [
-  // Australian States and Territories (8 total)
-  'VIC',  // Victoria
-  'NSW',  // New South Wales  
-  'QLD',  // Queensland
-  'SA',   // South Australia
-  'WA',   // Western Australia
-  'NT',   // Northern Territory
-  'TAS',  // Tasmania
-  'ACT',  // Australian Capital Territory
-  // New Zealand Islands (2 total)
-  'NI',   // North Island, New Zealand
-  'SI',   // South Island, New Zealand
+  'VIC', 'NSW', 'QLD', 'SA', 'WA', 'NT', 'TAS', 'ACT',
+  'NI', 'SI'
 ];
 
-// Separate for easier reference
 const AUSTRALIAN_STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'NT', 'TAS', 'ACT'];
 const NEW_ZEALAND_TERRITORIES = ['NI', 'SI'];
 const ALL_VALID_REGIONS = STANDARD_STATES_TERRITORIES;
 
-// Aggressive state/territory mapping - maps EVERYTHING possible to AU/NZ
+// State/territory mapping
 const STATE_TERRITORY_MAP: Record<string, string> = {
-  // Australian States - Full names to codes
   'victoria': 'VIC',
   'new south wales': 'NSW',
   'queensland': 'QLD', 
@@ -39,155 +65,49 @@ const STATE_TERRITORY_MAP: Record<string, string> = {
   'northern territory': 'NT',
   'tasmania': 'TAS',
   'australian capital territory': 'ACT',
-  
-  // Common variations and abbreviations
-  'vic.': 'VIC', 'v.i.c': 'VIC', 'vi': 'VIC', 'vc': 'VIC',
-  'nsw.': 'NSW', 'n.s.w': 'NSW', 'n.s.w.': 'NSW', 'ns': 'NSW', 'nw': 'NSW',
-  'qld.': 'QLD', 'q.l.d': 'QLD', 'ql': 'QLD', 'qd': 'QLD',
-  'sa.': 'SA', 's.a': 'SA', 's.a.': 'SA', 'south aus': 'SA', 's aus': 'SA',
-  'wa.': 'WA', 'w.a': 'WA', 'w.a.': 'WA', 'west aus': 'WA', 'w aus': 'WA',
-  'nt.': 'NT', 'n.t': 'NT', 'n.t.': 'NT', 'north terr': 'NT',
-  'tas.': 'TAS', 't.a.s': 'TAS', 'ta': 'TAS', 'ts': 'TAS',
-  'act.': 'ACT', 'a.c.t': 'ACT', 'a.c.t.': 'ACT', 'ac': 'ACT', 'at': 'ACT',
-  
-  // Major cities mapped to their states
-  'melbourne': 'VIC', 'melb': 'VIC', 'geelong': 'VIC', 'ballarat': 'VIC', 'bendigo': 'VIC',
-  'sydney': 'NSW', 'syd': 'NSW', 'newcastle': 'NSW', 'wollongong': 'NSW', 'central coast': 'NSW',
-  'brisbane': 'QLD', 'bris': 'QLD', 'gold coast': 'QLD', 'sunshine coast': 'QLD', 'townsville': 'QLD',
-  'adelaide': 'SA', 'adel': 'SA', 'mount gambier': 'SA',
-  'perth': 'WA', 'bunbury': 'WA', 'mandurah': 'WA', 'geraldton': 'WA',
-  'darwin': 'NT', 'alice springs': 'NT', 'alice': 'NT',
-  'hobart': 'TAS', 'launceston': 'TAS', 'devonport': 'TAS',
-  'canberra': 'ACT', 'cbr': 'ACT', 'act region': 'ACT',
-  
-  // New Zealand mappings
-  'north island': 'NI', 'north island nz': 'NI', 'north island new zealand': 'NI',
-  'ni.': 'NI', 'n.i': 'NI', 'n.i.': 'NI', 'n.island': 'NI', 'n island': 'NI',
-  'auckland': 'NI', 'wellington': 'NI', 'hamilton': 'NI', 'tauranga': 'NI', 'napier': 'NI',
-  'south island': 'SI', 'south island nz': 'SI', 'south island new zealand': 'SI',
-  'si.': 'SI', 's.i': 'SI', 's.i.': 'SI', 's.island': 'SI', 's island': 'SI',
-  'christchurch': 'SI', 'dunedin': 'SI', 'queenstown': 'SI', 'invercargill': 'SI', 'nelson': 'SI',
-  
-  // Common typos aggressively corrected
-  'qkd': 'QLD', 'qld ': 'QLD', 'qlld': 'QLD', 'qls': 'QLD', 'qsl': 'QLD', 'qld1': 'QLD',
-  'nws': 'NSW', 'nsw ': 'NSW', 'msw': 'NSW', 'bsw': 'NSW', 'nsw1': 'NSW', 'nsw2': 'NSW',
-  'viic': 'VIC', 'vuc': 'VIC', 'voc': 'VIC', 'bic': 'VIC', 'cic': 'VIC', 'vic1': 'VIC',
-  'ss': 'SA', 'saa': 'SA', 'as': 'SA', 'da': 'SA', 'sa1': 'SA',
-  'waa': 'WA', 'ws': 'WA', 'qa': 'WA', 'wa1': 'WA',
-  'ntt': 'NT', 'mt': 'NT', 'bt': 'NT', 'nt1': 'NT',
-  'tass': 'TAS', 'taz': 'TAS', 'tas1': 'TAS', 'tqs': 'TAS',
-  'actt': 'ACT', 'axt': 'ACT', 'sct': 'ACT', 'act1': 'ACT',
-  
-  // International entries mapped to nearest AU/NZ region
-  'uk': 'NSW', 'england': 'NSW', 'london': 'NSW',
-  'usa': 'VIC', 'america': 'VIC', 'us': 'VIC',
-  'china': 'QLD', 'cn': 'QLD', 'beijing': 'QLD',
-  'india': 'WA', 'in': 'WA', 'delhi': 'WA',
-  'singapore': 'ACT', 'sg': 'ACT',
-  'nz': 'NI', 'new zealand': 'NI', 'kiwi': 'NI',
-  
-  // Numeric and special character variations
-  'v1c': 'VIC', 'n5w': 'NSW', 'ql0': 'QLD', '5a': 'SA', 'w4': 'WA', 'n7': 'NT', 'ta5': 'TAS', '4ct': 'ACT',
+  'vic.': 'VIC', 'nsw.': 'NSW', 'qld.': 'QLD', 'sa.': 'SA',
+  'wa.': 'WA', 'nt.': 'NT', 'tas.': 'TAS', 'act.': 'ACT',
+  'melbourne': 'VIC', 'sydney': 'NSW', 'brisbane': 'QLD',
+  'adelaide': 'SA', 'perth': 'WA', 'darwin': 'NT',
+  'hobart': 'TAS', 'canberra': 'ACT',
+  'north island': 'NI', 'south island': 'SI',
+  'auckland': 'NI', 'wellington': 'NI', 'christchurch': 'SI',
+  'qkd': 'QLD', 'qld ': 'QLD'
 };
 
-// Extended typo corrections for aggressive fixing
+// Typo corrections
 const TYPO_CORRECTIONS: Record<string, string> = {
-  'VUC': 'VIC', 'VOC': 'VIC', 'BIC': 'VIC', 'CIC': 'VIC', 'VIS': 'VIC', 'VIX': 'VIC', 'VID': 'VIC',
-  'MSW': 'NSW', 'BSW': 'NSW', 'NWS': 'NSW', 'NSE': 'NSW', 'NSQ': 'NSW', 'NEW': 'NSW', 'NSW': 'NSW',
-  'QKD': 'QLD', 'QLS': 'QLD', 'QLF': 'QLD', 'QLE': 'QLD', 'QDL': 'QLD', 'QSD': 'QLD', 'QLD': 'QLD',
-  'SAA': 'SA', 'SAS': 'SA', 'SSA': 'SA', 'ZA': 'SA', 'AS': 'SA', 'DS': 'SA',
-  'WAA': 'WA', 'WWA': 'WA', 'QA': 'WA', 'WS': 'WA', 'VA': 'WA', 'EA': 'WA',
-  'NTT': 'NT', 'NNT': 'NT', 'MT': 'NT', 'BT': 'NT', 'HT': 'NT', 'NR': 'NT',
-  'TAZ': 'TAS', 'TQS': 'TAS', 'TSA': 'TAS', 'TAA': 'TAS', 'TES': 'TAS', 'TOS': 'TAS',
-  'AXT': 'ACT', 'SCT': 'ACT', 'ACY': 'ACT', 'ACR': 'ACT', 'ACC': 'ACT', 'AST': 'ACT',
-  'NII': 'NI', 'NIE': 'NI', 'MI': 'NI', 'BI': 'NI',
-  'SII': 'SI', 'SIE': 'SI', 'ZI': 'SI', 'CI': 'SI',
+  'VUC': 'VIC', 'VOC': 'VIC', 'VIS': 'VIC',
+  'MSW': 'NSW', 'NWS': 'NSW', 'NSE': 'NSW',
+  'QKD': 'QLD', 'QLS': 'QLD', 'QLF': 'QLD',
+  'SAA': 'SA', 'SAS': 'SA', 'AS': 'SA',
+  'WAA': 'WA', 'WWA': 'WA', 'QA': 'WA',
+  'NTT': 'NT', 'NNT': 'NT', 'MT': 'NT',
+  'TAZ': 'TAS', 'TQS': 'TAS', 'TSA': 'TAS',
+  'AXT': 'ACT', 'SCT': 'ACT', 'ACY': 'ACT'
 };
 
-// Auto-correction for common data issues
+// Data corrections
 const DATA_CORRECTIONS: Record<string, any> = {
-  // City name corrections
   cities: {
-    // Victoria cities
-    'Melb': 'Melbourne', 'Melborne': 'Melbourne', 'Melboune': 'Melbourne', 'Melbourn': 'Melbourne',
-    'Gelong': 'Geelong', 'Geeling': 'Geelong', 'Geelon': 'Geelong',
-    'Balarat': 'Ballarat', 'Ballerat': 'Ballarat', 'Ballarot': 'Ballarat',
-    'Bendgo': 'Bendigo', 'Benigo': 'Bendigo', 'Bendingo': 'Bendigo',
-    
-    // NSW cities
-    'Syd': 'Sydney', 'Sydeny': 'Sydney', 'Sidney': 'Sydney', 'Sydny': 'Sydney',
-    'Newcaste': 'Newcastle', 'New Castle': 'Newcastle', 'Newcastl': 'Newcastle',
-    'Woollongong': 'Wollongong', 'Wollongon': 'Wollongong', 'Woolongong': 'Wollongong',
-    
-    // Queensland cities
-    'Bris': 'Brisbane', 'Brisban': 'Brisbane', 'Brisbaine': 'Brisbane', 'Brisbne': 'Brisbane',
-    'Goldcoast': 'Gold Coast', 'Gold cost': 'Gold Coast', 'Goldcost': 'Gold Coast',
-    'Townsvile': 'Townsville', 'Townsvill': 'Townsville', 'Townseville': 'Townsville',
-    'Cairnes': 'Cairns', 'Cains': 'Cairns', 'Carins': 'Cairns',
-    
-    // SA cities
-    'Adel': 'Adelaide', 'Adelade': 'Adelaide', 'Adeliade': 'Adelaide', 'Adalaide': 'Adelaide',
-    'Mt Gambier': 'Mount Gambier', 'Mt. Gambier': 'Mount Gambier',
-    
-    // WA cities  
-    'Pert': 'Perth', 'Perh': 'Perth', 'Perrth': 'Perth',
-    'Freemantle': 'Fremantle', 'Fremantel': 'Fremantle',
-    
-    // NT cities
-    'Darwn': 'Darwin', 'Darwen': 'Darwin', 'Darvin': 'Darwin',
-    'Alice': 'Alice Springs', 'Alice Spring': 'Alice Springs',
-    
-    // Tasmania cities
-    'Hobar': 'Hobart', 'Hobat': 'Hobart', 'Hobarth': 'Hobart',
-    
-    // ACT
-    'Canbera': 'Canberra', 'Canbbera': 'Canberra', 'Camberra': 'Canberra',
-    
-    // NZ cities
-    'Auck': 'Auckland', 'Aukland': 'Auckland', 'Aucland': 'Auckland',
-    'Welling': 'Wellington', 'Wellingtn': 'Wellington',
-    'Christ': 'Christchurch', 'Christchrch': 'Christchurch', 'Chch': 'Christchurch',
-    'Duneden': 'Dunedin', 'Denedin': 'Dunedin',
-    'Queenstwon': 'Queenstown', 'Queen Town': 'Queenstown',
-  },
-  
-  // Capability type corrections
-  capabilityTypes: {
-    'suppler': 'Supplier', 'suplier': 'Supplier', 'suppiler': 'Supplier',
-    'supply': 'Supplier', 'supplyer': 'Supplier', 'supp': 'Supplier',
-    'manifacturer': 'Manufacturer', 'manufcturer': 'Manufacturer', 'manufacurer': 'Manufacturer',
-    'manufactrer': 'Manufacturer', 'manfacturer': 'Manufacturer', 'manufacter': 'Manufacturer',
-    'manuf': 'Manufacturer', 'manu': 'Manufacturer', 'manufac': 'Manufacturer',
-  },
+    'Melb': 'Melbourne', 'Syd': 'Sydney', 'Bris': 'Brisbane',
+    'Adel': 'Adelaide', 'Pert': 'Perth', 'Darwn': 'Darwin',
+    'Hobar': 'Hobart', 'Canbera': 'Canberra'
+  }
 };
 
-// Default state assignment based on common patterns
-function getDefaultStateForUnknown(input: string): string {
-  const lower = input.toLowerCase();
-  
-  if (lower.includes('mine') || lower.includes('mining')) return 'WA';
-  if (lower.includes('tech') || lower.includes('it')) return 'VIC';
-  if (lower.includes('finance') || lower.includes('bank')) return 'NSW';
-  if (lower.includes('tourism') || lower.includes('resort')) return 'QLD';
-  if (lower.includes('wine') || lower.includes('vineyard')) return 'SA';
-  if (lower.includes('forest') || lower.includes('timber')) return 'TAS';
-  if (lower.includes('government') || lower.includes('federal')) return 'ACT';
-  if (lower.includes('indigenous') || lower.includes('aboriginal')) return 'NT';
-  
-  const firstChar = lower.charAt(0);
-  switch(firstChar) {
-    case 'n': return 'NSW';
-    case 'v': return 'VIC';
-    case 'q': return 'QLD';
-    case 's': return 'SA';
-    case 'w': return 'WA';
-    case 't': return 'TAS';
-    case 'a': return 'ACT';
-    default: return 'NSW';
-  }
+// Utility functions
+function isInvalidValue(value: string | undefined | null): boolean {
+  if (!value) return true;
+  const cleanValue = value.trim().toUpperCase();
+  return cleanValue === '' || 
+         cleanValue === '#N/A' || 
+         cleanValue === 'N/A' || 
+         cleanValue === '0' ||
+         cleanValue === 'NULL' ||
+         cleanValue === 'UNDEFINED';
 }
 
-// Levenshtein distance for fuzzy matching
 function levenshteinDistance(str1: string, str2: string): number {
   const matrix = [];
   for (let i = 0; i <= str2.length; i++) {
@@ -212,7 +132,6 @@ function levenshteinDistance(str1: string, str2: string): number {
   return matrix[str2.length][str1.length];
 }
 
-// Find closest valid state using fuzzy matching
 function findClosestState(input: string): string | null {
   const upperInput = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
   
@@ -222,16 +141,6 @@ function findClosestState(input: string): string | null {
   
   if (TYPO_CORRECTIONS[upperInput]) {
     return TYPO_CORRECTIONS[upperInput];
-  }
-  
-  if (upperInput.length === 2) {
-    if (upperInput[0] === 'N') return 'NSW';
-    if (upperInput[0] === 'V') return 'VIC';
-    if (upperInput[0] === 'Q') return 'QLD';
-    if (upperInput[0] === 'S') return upperInput[1] === 'I' ? 'SI' : 'SA';
-    if (upperInput[0] === 'W') return 'WA';
-    if (upperInput[0] === 'T') return 'TAS';
-    if (upperInput[0] === 'A') return 'ACT';
   }
   
   let minDistance = Infinity;
@@ -245,42 +154,26 @@ function findClosestState(input: string): string | null {
     }
   }
   
-  if (!closestState && upperInput.length >= 3) {
-    for (const state of STANDARD_STATES_TERRITORIES) {
-      if (upperInput.startsWith(state.substring(0, 2))) {
-        return state;
-      }
-    }
-  }
-  
   return closestState;
 }
 
-/**
- * Check if a value is invalid (N/A, 0, empty, etc.)
- */
-function isInvalidValue(value: string | undefined | null): boolean {
-  if (!value) return true;
-  const cleanValue = value.trim().toUpperCase();
-  return cleanValue === '' || 
-         cleanValue === '#N/A' || 
-         cleanValue === 'N/A' || 
-         cleanValue === '0' ||
-         cleanValue === 'NULL' ||
-         cleanValue === 'UNDEFINED';
+function getDefaultStateForUnknown(input: string): string {
+  const lower = input.toLowerCase();
+  
+  if (lower.includes('mine') || lower.includes('mining')) return 'WA';
+  if (lower.includes('tech') || lower.includes('it')) return 'VIC';
+  if (lower.includes('finance') || lower.includes('bank')) return 'NSW';
+  if (lower.includes('tourism') || lower.includes('resort')) return 'QLD';
+  
+  return 'NSW';
 }
 
-/**
- * Enhanced state/territory normalization with aggressive auto-correction
- */
 function normalizeStateTerritory(state: string | undefined | null): string | null {
   if (!state || isInvalidValue(state)) {
-    console.log(`Empty/invalid state, defaulting to NSW`);
     return 'NSW';
   }
   
   const cleaned = state.trim().toLowerCase();
-  
   const normalized = cleaned
     .replace(/^(state of |territory of |province of )/i, '')
     .replace(/( state| territory| province)$/i, '')
@@ -288,57 +181,92 @@ function normalizeStateTerritory(state: string | undefined | null): string | nul
     .trim();
   
   const mapped = STATE_TERRITORY_MAP[normalized] || STATE_TERRITORY_MAP[cleaned];
-  if (mapped) {
-    if (state !== mapped) {
-      console.log(`Mapped state: "${state}" → "${mapped}"`);
-    }
-    return mapped;
-  }
+  if (mapped) return mapped;
   
   const upper = state.trim().toUpperCase();
-  if (STANDARD_STATES_TERRITORIES.includes(upper)) {
-    return upper;
-  }
+  if (STANDARD_STATES_TERRITORIES.includes(upper)) return upper;
   
   const fuzzyMatch = findClosestState(upper);
-  if (fuzzyMatch) {
-    console.log(`Fuzzy matched state: "${state}" → "${fuzzyMatch}"`);
-    return fuzzyMatch;
-  }
+  if (fuzzyMatch) return fuzzyMatch;
   
   for (const [key, value] of Object.entries(STATE_TERRITORY_MAP)) {
     if (normalized.includes(key) || key.includes(normalized)) {
-      console.log(`Partial matched state: "${state}" → "${value}"`);
       return value;
     }
   }
   
-  const defaultState = getDefaultStateForUnknown(state);
-  console.warn(`Could not normalize state "${state}", defaulting to "${defaultState}"`);
-  return defaultState;
+  return getDefaultStateForUnknown(state);
 }
 
-/**
- * Auto-correct common data issues
- */
+// Normalize capability type - returns CapabilityType
+function normalizeCapabilityType(type: string | undefined | null): CapabilityType {
+  if (!type || isInvalidValue(type)) {
+    return CAPABILITY_TYPES.SERVICE_PROVIDER;
+  }
+
+  const cleanType = type.trim();
+  
+  // Check if it's already a valid type
+  if (isValidCapabilityType && isValidCapabilityType(cleanType)) {
+    return cleanType as CapabilityType;
+  }
+  
+  // Map common variations
+  const typeMap: Record<string, CapabilityType> = {
+    'supplier': CAPABILITY_TYPES.SUPPLIER,
+    'item supplier': CAPABILITY_TYPES.ITEM_SUPPLIER,
+    'parts supplier': CAPABILITY_TYPES.PARTS_SUPPLIER,
+    'manufacturer': CAPABILITY_TYPES.MANUFACTURER,
+    'manufacturer (parts)': CAPABILITY_TYPES.MANUFACTURER_PARTS,
+    'service provider': CAPABILITY_TYPES.SERVICE_PROVIDER,
+    'project management': CAPABILITY_TYPES.PROJECT_MANAGEMENT,
+    'designer': CAPABILITY_TYPES.DESIGNER,
+    'assembler': CAPABILITY_TYPES.ASSEMBLER,
+    'retailer': CAPABILITY_TYPES.RETAILER,
+    'wholesaler': CAPABILITY_TYPES.WHOLESALER
+  };
+  
+  const normalized = cleanType.toLowerCase();
+  return typeMap[normalized] || CAPABILITY_TYPES.SERVICE_PROVIDER;
+}
+
+// Determine company type based on capability types
+function determineCompanyType(capabilityTypes: CapabilityType[]): Company['companyType'] {
+  const hasSupplier = capabilityTypes.some(type => 
+    (CAPABILITY_TYPE_GROUPS.supplier as readonly CapabilityType[]).includes(type)
+  );
+  const hasManufacturer = capabilityTypes.some(type => 
+    (CAPABILITY_TYPE_GROUPS.manufacturer as readonly CapabilityType[]).includes(type)
+  );
+  const hasService = capabilityTypes.some(type => 
+    (CAPABILITY_TYPE_GROUPS.service as readonly CapabilityType[]).includes(type)
+  );
+  const hasRetail = capabilityTypes.some(type => 
+    (CAPABILITY_TYPE_GROUPS.retail as readonly CapabilityType[]).includes(type)
+  );
+  
+  if (hasManufacturer && hasSupplier) {
+    return 'both';
+  } else if (hasManufacturer) {
+    return 'manufacturer';
+  } else if (hasSupplier) {
+    return 'supplier';
+  } else if (hasService) {
+    return 'service';
+  } else if (hasRetail) {
+    return 'retail';
+  } else {
+    return 'supplier';
+  }
+}
+
 function autoCorrectData(value: string, type: 'city' | 'sector' | 'capability'): string {
   if (!value) return value;
   
-  const corrections = type === 'city' ? DATA_CORRECTIONS.cities :
-                      type === 'sector' ? DATA_CORRECTIONS.sectors :
-                      DATA_CORRECTIONS.capabilityTypes;
+  const corrections = type === 'city' ? DATA_CORRECTIONS.cities : {};
   
   for (const [wrong, correct] of Object.entries(corrections)) {
     if (value.toLowerCase() === wrong.toLowerCase()) {
-      console.log(`Auto-corrected ${type}: "${value}" → "${correct}"`);
-      return correct as string;
-    }
-  }
-  
-  const valueLower = value.toLowerCase();
-  for (const [wrong, correct] of Object.entries(corrections)) {
-    if (valueLower.includes(wrong.toLowerCase()) || wrong.toLowerCase().includes(valueLower)) {
-      console.log(`Auto-corrected ${type}: "${value}" → "${correct}"`);
       return correct as string;
     }
   }
@@ -346,9 +274,6 @@ function autoCorrectData(value: string, type: 'city' | 'sector' | 'capability'):
   return value;
 }
 
-/**
- * Clean and validate company data
- */
 function cleanCompanyData(data: string | undefined | null, placeholder: string = 'Not Available'): string {
   if (isInvalidValue(data)) {
     return placeholder;
@@ -356,9 +281,6 @@ function cleanCompanyData(data: string | undefined | null, placeholder: string =
   return data!.trim();
 }
 
-/**
- * Convert ICN date format (d/MM/yyyy) to ISO format
- */
 function convertICNDateToISO(icnDate: string): string | undefined {
   if (!icnDate || isInvalidValue(icnDate)) return undefined;
   
@@ -372,51 +294,19 @@ function convertICNDateToISO(icnDate: string): string | undefined {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * Get coordinates for a company using geocoding with caching
- */
-async function getCoordinatesWithGeocoding(
-  street: string, 
-  city: string, 
-  state: string, 
-  postcode: string
-): Promise<{ latitude: number; longitude: number }> {
-  const result = await geocodeCacheService.getCoordinatesWithCache(
-    street,
-    city,
-    state,
-    postcode,
-    false // Don't force refresh by default
-  );
-  
-  return {
-    latitude: result.latitude,
-    longitude: result.longitude
-  };
-}
-
-/**
- * Perform stratified random sampling to get a subset of companies
- * while ensuring all states and item types (sectors) are represented
- */
 function stratifiedSampleCompanies(companies: Company[], targetSize: number = 300): Company[] {
   console.log(`Starting stratified sampling from ${companies.length} companies to ${targetSize}`);
   
-  // If we have fewer companies than target, return all
   if (companies.length <= targetSize) {
-    console.log('Company count less than target, returning all companies');
     return companies;
   }
   
-  // Create maps to track companies by state and sector
   const companiesByState = new Map<string, Company[]>();
   const companiesBySector = new Map<string, Company[]>();
-  const selectedCompanies = new Set<string>(); // Track selected company IDs
+  const selectedCompanies = new Set<string>();
   const result: Company[] = [];
   
-  // Group companies by state and sector
   companies.forEach(company => {
-    // Group by state
     const state = company.billingAddress?.state;
     if (state && STANDARD_STATES_TERRITORIES.includes(state)) {
       if (!companiesByState.has(state)) {
@@ -425,7 +315,6 @@ function stratifiedSampleCompanies(companies: Company[], targetSize: number = 30
       companiesByState.get(state)!.push(company);
     }
     
-    // Group by sectors
     company.keySectors.forEach(sector => {
       if (sector !== 'General') {
         if (!companiesBySector.has(sector)) {
@@ -436,13 +325,9 @@ function stratifiedSampleCompanies(companies: Company[], targetSize: number = 30
     });
   });
   
-  console.log(`Found ${companiesByState.size} states/territories`);
-  console.log(`Found ${companiesBySector.size} unique sectors`);
-  
-  // Step 1: Ensure at least one company from each state
+  // Ensure at least one company from each state
   companiesByState.forEach((stateCompanies, state) => {
     if (selectedCompanies.size < targetSize && stateCompanies.length > 0) {
-      // Randomly select one company from this state
       const randomIndex = Math.floor(Math.random() * stateCompanies.length);
       const company = stateCompanies[randomIndex];
       if (!selectedCompanies.has(company.id)) {
@@ -452,12 +337,9 @@ function stratifiedSampleCompanies(companies: Company[], targetSize: number = 30
     }
   });
   
-  console.log(`Selected ${result.length} companies to cover all states`);
-  
-  // Step 2: Ensure at least one company from each sector
+  // Ensure at least one company from each sector
   companiesBySector.forEach((sectorCompanies, sector) => {
     if (selectedCompanies.size < targetSize) {
-      // Find a company from this sector that hasn't been selected yet
       const unselected = sectorCompanies.filter(c => !selectedCompanies.has(c.id));
       if (unselected.length > 0) {
         const randomIndex = Math.floor(Math.random() * unselected.length);
@@ -468,19 +350,11 @@ function stratifiedSampleCompanies(companies: Company[], targetSize: number = 30
     }
   });
   
-  console.log(`Selected ${result.length} companies to cover all sectors`);
-  
-  // Step 3: Calculate remaining slots and distribute randomly
+  // Fill remaining slots randomly
   const remaining = targetSize - result.length;
-  
   if (remaining > 0) {
-    // Get all unselected companies
     const unselectedCompanies = companies.filter(c => !selectedCompanies.has(c.id));
-    
-    // Shuffle unselected companies for random selection
     const shuffled = [...unselectedCompanies].sort(() => Math.random() - 0.5);
-    
-    // Take the first 'remaining' companies
     const additionalCompanies = shuffled.slice(0, remaining);
     additionalCompanies.forEach(company => {
       selectedCompanies.add(company.id);
@@ -488,37 +362,13 @@ function stratifiedSampleCompanies(companies: Company[], targetSize: number = 30
     });
   }
   
-  // Log final statistics
-  const finalStateDistribution = new Map<string, number>();
-  const finalSectorDistribution = new Map<string, number>();
-  
-  result.forEach(company => {
-    const state = company.billingAddress?.state;
-    if (state) {
-      finalStateDistribution.set(state, (finalStateDistribution.get(state) || 0) + 1);
-    }
-    company.keySectors.forEach(sector => {
-      finalSectorDistribution.set(sector, (finalSectorDistribution.get(sector) || 0) + 1);
-    });
-  });
-  
-  console.log('Final sample statistics:');
-  console.log(`- Total companies: ${result.length}`);
-  console.log(`- States covered: ${finalStateDistribution.size}/${companiesByState.size}`);
-  console.log(`- Sectors covered: ${finalSectorDistribution.size}/${companiesBySector.size}`);
-  console.log('State distribution:', Object.fromEntries(finalStateDistribution));
-  
   return result;
 }
 
-/**
- * Convert all ICN data to Company array with deduplication and optional sampling
- */
 async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boolean = true): Promise<Company[]> {
   const companyMap = new Map<string, Company>();
   let skippedCount = 0;
   
-  // Process items and build company map without geocoding
   icnItems.forEach(item => {
     if (isInvalidValue(item["Sector Name"]) && isInvalidValue(item["Item Name"])) {
       skippedCount++;
@@ -534,31 +384,23 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
       }
       
       if (!companyMap.has(orgId)) {
-        // Process address data
         const normalizedState = normalizeStateTerritory(org["Organisation: Billing State/Province"]);
         const street = cleanCompanyData(org["Organisation: Billing Street"], 'Address Not Available');
         let city = cleanCompanyData(org["Organisation: Billing City"], 'City Not Available');
         city = autoCorrectData(city, 'city');
         const postcode = cleanCompanyData(org["Organisation: Billing Zip/Postal Code"], '');
         
-        // Create company without coordinates (will be added later)
         const companyName = cleanCompanyData(org["Organisation: Organisation Name"], `Company ${orgId.slice(-4)}`);
         const fullAddress = [street, city, normalizedState, postcode]
           .filter(v => v && v !== '')
           .join(', ');
         
-        // Auto-correct capability type
-        let capabilityType = org["Capability Type"];
-        if (DATA_CORRECTIONS.capabilityTypes[capabilityType?.toLowerCase()]) {
-          capabilityType = DATA_CORRECTIONS.capabilityTypes[capabilityType.toLowerCase()] as "Supplier" | "Manufacturer";
-        }
-        if (capabilityType !== "Manufacturer" && capabilityType !== "Supplier") {
-          capabilityType = "Supplier";
-        }
+        // Normalize capability type to ensure it's a valid CapabilityType
+        const capabilityType = normalizeCapabilityType(org["Capability Type"]);
         
-        const companyType: Company['companyType'] = capabilityType === "Manufacturer" 
-          ? 'manufacturer' 
-          : 'supplier';
+        // Collect all capability types for this company
+        const companyCapabilityTypes = [capabilityType];
+        const companyType = determineCompanyType(companyCapabilityTypes);
         
         const verificationDate = convertICNDateToISO(org["Validation Date"]);
         const sectorName = cleanCompanyData(item["Sector Name"], 'General');
@@ -575,8 +417,8 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
             state: normalizedState!,
             postcode
           },
-          latitude: 0, // Will be set after geocoding
-          longitude: 0, // Will be set after geocoding
+          latitude: 0,
+          longitude: 0,
           verificationStatus: verificationDate ? 'verified' : 'unverified',
           verificationDate,
           keySectors: [sectorName],
@@ -587,7 +429,7 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
             itemId: item["Item ID"],
             itemName,
             detailedItemName,
-            capabilityType: capabilityType as "Supplier" | "Manufacturer",
+            capabilityType, // This is now guaranteed to be CapabilityType
             sectorName,
             sectorMappingId: item["Sector Mapping ID"]
           }],
@@ -599,10 +441,10 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
           website: undefined,
         } as Company);
       } else {
-        // Merge capabilities for existing company
         const existingCompany = companyMap.get(orgId)!;
         const sectorName = cleanCompanyData(item["Sector Name"], 'General');
         const detailedItemName = cleanCompanyData(item["Detailed Item Name"], 'Service');
+        const capabilityType = normalizeCapabilityType(org["Capability Type"]);
         
         if (!existingCompany.keySectors.includes(sectorName)) {
           existingCompany.keySectors.push(sectorName);
@@ -619,27 +461,30 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
             itemId: item["Item ID"],
             itemName: cleanCompanyData(item["Item Name"], 'Service'),
             detailedItemName,
-            capabilityType: org["Capability Type"],
+            capabilityType, // This is now guaranteed to be CapabilityType
             sectorName,
             sectorMappingId: item["Sector Mapping ID"]
           });
+        }
+        
+        // Update company type based on all capability types
+        if (existingCompany.icnCapabilities) {
+          const allCapTypes = existingCompany.icnCapabilities.map(c => c.capabilityType);
+          existingCompany.companyType = determineCompanyType(allCapTypes);
         }
       }
     });
   });
   
-  // Convert map to array
   let allCompanies = Array.from(companyMap.values());
   console.log(`Processed ${allCompanies.length} unique companies before sampling`);
   
-  // Apply stratified sampling if enabled
   let companiesToProcess = allCompanies;
   if (useSampling) {
     companiesToProcess = stratifiedSampleCompanies(allCompanies, 300);
     console.log(`Sampled ${companiesToProcess.length} companies for geocoding`);
   }
   
-  // Prepare selected companies for geocoding
   const companiesToGeocode = companiesToProcess.map(company => ({
     orgId: company.id,
     street: company.billingAddress?.street || '',
@@ -648,12 +493,8 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
     postcode: company.billingAddress?.postcode || ''
   }));
   
-  console.log(`Prepared ${companiesToGeocode.length} companies for geocoding`);
-  
-  // Batch geocode all addresses using cache
   const coordinates = await geocodeCacheService.batchGeocodeWithCache(companiesToGeocode);
   
-  // Apply coordinates to companies
   companiesToGeocode.forEach((company, index) => {
     const coords = coordinates[index];
     const companyData = companiesToProcess.find(c => c.id === company.orgId);
@@ -663,20 +504,9 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
     }
   });
   
-  // Log cache statistics
-  const cacheStats = geocodeCacheService.getCacheStats();
-  if (cacheStats) {
-    console.log('Geocode cache statistics:', cacheStats);
-  }
-  
-  console.log(`Returning ${companiesToProcess.length} companies with geocoded locations`);
-  
   return companiesToProcess;
 }
 
-/**
- * Main ICN Data Service class
- */
 class ICNDataService {
   private static instance: ICNDataService;
   private companies: Company[] = [];
@@ -684,7 +514,7 @@ class ICNDataService {
   private isLoading = false;
   private isLoaded = false;
   private lastLoadTime: Date | null = null;
-  private useSampling: boolean = true; // Control sampling behavior
+  private useSampling: boolean = true;
   
   private constructor() {}
   
@@ -695,29 +525,20 @@ class ICNDataService {
     return ICNDataService.instance;
   }
   
-  /**
-   * Set whether to use sampling when loading data
-   */
   setSampling(enabled: boolean): void {
     this.useSampling = enabled;
-    // If changing sampling preference, clear cached data to force reload
     if (this.isLoaded) {
       this.clearCache();
     }
   }
   
-  /**
-   * Load ICN data - React Native version with optional sampling
-   */
   async loadData(): Promise<void> {
-    // Check if already loaded
     if (this.isLoaded) {
       console.log('ICN data already loaded');
       return;
     }
     
     if (this.isLoading) {
-      // Wait for existing load to complete
       while (this.isLoading) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -729,7 +550,6 @@ class ICNDataService {
     try {
       console.log(`Loading ICN data (sampling: ${this.useSampling})...`);
       
-      // In React Native, the JSON is already imported as a JavaScript object
       const data = ICNData as ICNItem[];
       
       if (!Array.isArray(data)) {
@@ -738,7 +558,6 @@ class ICNDataService {
       
       console.log(`Loaded ${data.length} ICN items`);
       
-      // Store raw items (filter out invalid ones)
       this.icnItems = data.filter(item => 
         item.Organizations && 
         item.Organizations.length > 0 &&
@@ -747,16 +566,12 @@ class ICNDataService {
       
       console.log(`Valid ICN items: ${this.icnItems.length}`);
       
-      // Convert to Company format with geocoding (now with optional sampling)
-      console.log('Starting geocoding process (using cache for existing addresses)...');
       this.companies = await convertICNDataToCompanies(this.icnItems, this.useSampling);
       
       this.isLoaded = true;
       this.lastLoadTime = new Date();
       
       console.log(`Loaded ${this.companies.length} companies with geocoded locations`);
-      
-      // Log statistics
       this.logStatistics();
       
     } catch (error) {
@@ -767,66 +582,14 @@ class ICNDataService {
     }
   }
   
-  /**
-   * Force refresh geocoding for all companies
-   */
-  async forceRefreshGeocoding(): Promise<void> {
-    if (!this.isLoaded) {
-      console.log('Data not loaded, cannot refresh geocoding');
-      return;
-    }
-    
-    console.log('Force refreshing all geocoded coordinates...');
-    
-    // Prepare addresses for batch geocoding
-    const addresses = this.companies.map(company => ({
-      orgId: company.id,
-      street: company.billingAddress?.street || '',
-      city: company.billingAddress?.city || '',
-      state: company.billingAddress?.state || 'NSW',
-      postcode: company.billingAddress?.postcode || ''
-    }));
-    
-    // Force refresh all coordinates
-    const coordinates = await geocodeCacheService.batchGeocodeWithCache(
-      addresses.map(a => ({
-        street: a.street,
-        city: a.city,
-        state: a.state,
-        postcode: a.postcode
-      })),
-      true // Force refresh
-    );
-    
-    // Update company coordinates
-    addresses.forEach((address, index) => {
-      const company = this.companies.find(c => c.id === address.orgId);
-      if (company) {
-        company.latitude = coordinates[index].latitude;
-        company.longitude = coordinates[index].longitude;
-      }
-    });
-    
-    console.log('Geocoding refresh complete');
-  }
-  
-  /**
-   * Get all companies
-   */
   getCompanies(): Company[] {
     return this.companies;
   }
   
-  /**
-   * Get all ICN items (raw data)
-   */
   getICNItems(): ICNItem[] {
     return this.icnItems;
   }
   
-  /**
-   * Search companies
-   */
   searchCompanies(searchText: string): Company[] {
     const searchLower = searchText.toLowerCase().trim();
     
@@ -843,9 +606,6 @@ class ICNDataService {
     );
   }
   
-  /**
-   * Filter companies by state
-   */
   filterByState(state: string): Company[] {
     return this.companies.filter(company => 
       company.billingAddress?.state === state
@@ -853,75 +613,139 @@ class ICNDataService {
   }
   
   /**
-   * Filter companies by capability type
+   * Filter companies by company type (FIXED VERSION)
    */
-  filterByCapabilityType(type: 'Supplier' | 'Manufacturer'): Company[] {
-    return this.companies.filter(company =>
-      company.icnCapabilities?.some(cap => cap.capabilityType === type)
-    );
+  filterByCompanyType(type: 'supplier' | 'manufacturer' | 'both'): Company[] {
+    return this.companies.filter(company => {
+      const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
+      
+      if (type === 'both') {
+        const hasSupplier = capabilityTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.supplier.includes(capType)
+        );
+        const hasManufacturer = capabilityTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.manufacturer.includes(capType)
+        );
+        return hasSupplier && hasManufacturer;
+      } else if (type === 'supplier') {
+        return capabilityTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.supplier.includes(capType)
+        );
+      } else if (type === 'manufacturer') {
+        return capabilityTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.manufacturer.includes(capType)
+        );
+      }
+      
+      return false;
+    });
   }
   
   /**
-   * Filter companies by sector
+   * Filter by specific capability types
    */
+  filterByCapabilityTypes(types: string[]): Company[] {
+    if (!types || types.length === 0) return this.companies;
+    
+    return this.companies.filter(company => {
+      const companyCapTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
+      
+      // Check for special "Both" type
+      if (types.includes('Both')) {
+        const hasSupplier = companyCapTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.supplier.includes(capType)
+        );
+        const hasManufacturer = companyCapTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.manufacturer.includes(capType)
+        );
+        if (hasSupplier && hasManufacturer) return true;
+      }
+      
+      // Check for grouped types
+      if (types.some(t => CAPABILITY_TYPE_GROUPS.supplier.some(st => st === t))) {
+        if (companyCapTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.supplier.includes(capType))) {
+          return true;
+        }
+      }
+      
+      if (types.some(t => CAPABILITY_TYPE_GROUPS.manufacturer.some(mt => mt === t))) {
+        if (companyCapTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.manufacturer.includes(capType))) {
+          return true;
+        }
+      }
+      
+      if (types.some(t => CAPABILITY_TYPE_GROUPS.service.some(st => st === t))) {
+        if (companyCapTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.service.includes(capType))) {
+          return true;
+        }
+      }
+      
+      if (types.some(t => CAPABILITY_TYPE_GROUPS.retail.some(rt => rt === t))) {
+        if (companyCapTypes.some((capType: CapabilityType) => 
+          CAPABILITY_TYPE_GROUPS.retail.includes(capType))) {
+          return true;
+        }
+      }
+      
+      // Direct capability type match
+      return companyCapTypes.some(capType => types.includes(capType));
+    });
+  }
+  
   filterBySector(sector: string): Company[] {
     return this.companies.filter(company =>
       company.keySectors.includes(sector)
     );
   }
   
-  /**
-   * Get company by ID
-   */
   getCompanyById(id: string): Company | undefined {
     return this.companies.find(company => company.id === id);
   }
   
-  /**
-   * Get companies by IDs
-   */
   getCompaniesByIds(ids: string[]): Company[] {
     return this.companies.filter(company => ids.includes(company.id));
   }
   
-  /**
-   * Get filter options (cleaned and validated)
-   */
   getFilterOptions() {
     const sectors = new Set<string>();
     const states = new Set<string>();
     const cities = new Set<string>();
     const capabilities = new Set<string>();
+    const capabilityTypes = new Set<string>();
     
     this.companies.forEach(company => {
-      // Collect sectors (exclude placeholders)
       company.keySectors.forEach(sector => {
         if (sector !== 'General') {
           sectors.add(sector);
         }
       });
       
-      // Collect valid states/territories only
       if (company.billingAddress?.state && STANDARD_STATES_TERRITORIES.includes(company.billingAddress.state)) {
         states.add(company.billingAddress.state);
       }
       
-      // Collect cities (exclude placeholders)
       if (company.billingAddress?.city && 
           company.billingAddress.city !== 'City Not Available' &&
           !isInvalidValue(company.billingAddress.city)) {
         cities.add(company.billingAddress.city);
       }
       
-      // Collect capabilities (exclude placeholders)
       company.capabilities?.forEach(cap => {
         if (cap !== 'Service' && !isInvalidValue(cap)) {
           capabilities.add(cap);
         }
       });
+      
+      company.icnCapabilities?.forEach(icnCap => {
+        if (icnCap.capabilityType) {
+          capabilityTypes.add(icnCap.capabilityType);
+        }
+      });
     });
     
-    // Return states in standard order
     const orderedStates = [
       ...AUSTRALIAN_STATES.filter(state => states.has(state)),
       ...NEW_ZEALAND_TERRITORIES.filter(state => states.has(state))
@@ -931,13 +755,11 @@ class ICNDataService {
       sectors: Array.from(sectors).sort(),
       states: orderedStates,
       cities: Array.from(cities).sort(),
-      capabilities: Array.from(capabilities).sort().slice(0, 100)
+      capabilities: Array.from(capabilities).sort().slice(0, 100),
+      capabilityTypes: Array.from(capabilityTypes).sort()
     };
   }
   
-  /**
-   * Get territory statistics showing coverage
-   */
   getTerritoryStatistics() {
     const territoryCounts: Record<string, number> = {};
     
@@ -970,9 +792,6 @@ class ICNDataService {
     };
   }
   
-  /**
-   * Get statistics
-   */
   getStatistics() {
     const stats = {
       totalCompanies: this.companies.length,
@@ -982,8 +801,11 @@ class ICNDataService {
       suppliers: 0,
       manufacturers: 0,
       both: 0,
+      services: 0,
+      retail: 0,
       byState: {} as Record<string, number>,
       bySector: {} as Record<string, number>,
+      byCapabilityType: {} as Record<string, number>,
       avgCapabilitiesPerCompany: 0,
       topCities: [] as Array<{ city: string; count: number }>,
       dataQuality: {
@@ -998,16 +820,26 @@ class ICNDataService {
     const cityCount: Record<string, number> = {};
     
     this.companies.forEach(company => {
-      // Verification status
       if (company.verificationStatus === 'verified') {
         stats.verified++;
       } else {
         stats.unverified++;
       }
       
-      // Company types
-      const hasSupplier = company.icnCapabilities?.some(cap => cap.capabilityType === 'Supplier');
-      const hasManufacturer = company.icnCapabilities?.some(cap => cap.capabilityType === 'Manufacturer');
+      const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
+      
+      const hasSupplier = capabilityTypes.some((type: CapabilityType) => 
+        CAPABILITY_TYPE_GROUPS.supplier.includes(type)
+      );
+      const hasManufacturer = capabilityTypes.some((type: CapabilityType) => 
+        CAPABILITY_TYPE_GROUPS.manufacturer.includes(type)
+      );
+      const hasService = capabilityTypes.some((type: CapabilityType) => 
+        CAPABILITY_TYPE_GROUPS.service.includes(type)
+      );
+      const hasRetail = capabilityTypes.some((type: CapabilityType) => 
+        CAPABILITY_TYPE_GROUPS.retail.includes(type)
+      );
       
       if (hasSupplier && hasManufacturer) {
         stats.both++;
@@ -1017,31 +849,33 @@ class ICNDataService {
         stats.manufacturers++;
       }
       
-      // By state (only valid states)
+      if (hasService) stats.services++;
+      if (hasRetail) stats.retail++;
+      
+      capabilityTypes.forEach(type => {
+        stats.byCapabilityType[type] = (stats.byCapabilityType[type] || 0) + 1;
+      });
+      
       const state = company.billingAddress?.state;
       if (state && ALL_VALID_REGIONS.includes(state)) {
         stats.byState[state] = (stats.byState[state] || 0) + 1;
       }
       
-      // By city (exclude placeholders)
       const city = company.billingAddress?.city;
       if (city && city !== 'City Not Available') {
         cityCount[city] = (cityCount[city] || 0) + 1;
       }
       
-      // By sector (exclude placeholders)
       company.keySectors.forEach(sector => {
         if (sector !== 'General') {
           stats.bySector[sector] = (stats.bySector[sector] || 0) + 1;
         }
       });
       
-      // Capabilities count
       if (company.icnCapabilities) {
         totalCapabilities += company.icnCapabilities.length;
       }
       
-      // Data quality metrics
       if (company.email) stats.dataQuality.withEmail++;
       if (company.phoneNumber) stats.dataQuality.withPhone++;
       if (company.website) stats.dataQuality.withWebsite++;
@@ -1050,12 +884,10 @@ class ICNDataService {
       }
     });
     
-    // Calculate average capabilities
     stats.avgCapabilitiesPerCompany = stats.totalCompanies > 0 
       ? Number((totalCapabilities / stats.totalCompanies).toFixed(2))
       : 0;
     
-    // Top cities
     stats.topCities = Object.entries(cityCount)
       .map(([city, count]) => ({ city, count }))
       .sort((a, b) => b.count - a.count)
@@ -1064,24 +896,52 @@ class ICNDataService {
     return stats;
   }
   
-  /**
-   * Get geocode cache statistics
-   */
+  async forceRefreshGeocoding(): Promise<void> {
+    if (!this.isLoaded) {
+      console.log('Data not loaded, cannot refresh geocoding');
+      return;
+    }
+    
+    console.log('Force refreshing all geocoded coordinates...');
+    
+    const addresses = this.companies.map(company => ({
+      orgId: company.id,
+      street: company.billingAddress?.street || '',
+      city: company.billingAddress?.city || '',
+      state: company.billingAddress?.state || 'NSW',
+      postcode: company.billingAddress?.postcode || ''
+    }));
+    
+    const coordinates = await geocodeCacheService.batchGeocodeWithCache(
+      addresses.map(a => ({
+        street: a.street,
+        city: a.city,
+        state: a.state,
+        postcode: a.postcode
+      })),
+      true
+    );
+    
+    addresses.forEach((address, index) => {
+      const company = this.companies.find(c => c.id === address.orgId);
+      if (company) {
+        company.latitude = coordinates[index].latitude;
+        company.longitude = coordinates[index].longitude;
+      }
+    });
+    
+    console.log('Geocoding refresh complete');
+  }
+  
   getGeocodeCacheStats() {
     return geocodeCacheService.getCacheStats();
   }
   
-  /**
-   * Clear geocode cache
-   */
   async clearGeocodeCache(): Promise<void> {
     await geocodeCacheService.clearCache();
     console.log('Geocode cache cleared');
   }
   
-  /**
-   * Export all data including geocode cache
-   */
   async exportAllData(): Promise<{
     companies: Company[];
     geocodeCache: string | null;
@@ -1096,16 +956,10 @@ class ICNDataService {
     };
   }
   
-  /**
-   * Import geocode cache
-   */
   async importGeocodeCache(jsonData: string): Promise<boolean> {
     return await geocodeCacheService.importCache(jsonData);
   }
   
-  /**
-   * Log statistics to console
-   */
   private logStatistics() {
     const stats = this.getStatistics();
     const territoryStats = this.getTerritoryStatistics();
@@ -1119,8 +973,11 @@ class ICNDataService {
       'Suppliers Only': stats.suppliers,
       'Manufacturers Only': stats.manufacturers,
       'Both Supplier & Manufacturer': stats.both,
+      'Service Providers': stats.services,
+      'Retail/Wholesale': stats.retail,
       'Avg Capabilities': stats.avgCapabilitiesPerCompany
     });
+    console.log('Capability Type Distribution:', stats.byCapabilityType);
     console.log('Australian States:', territoryStats.australian);
     console.log('New Zealand Territories:', territoryStats.newZealand);
     console.log('Territory Distribution:', territoryStats.byTerritory);
@@ -1130,9 +987,6 @@ class ICNDataService {
     console.groupEnd();
   }
   
-  /**
-   * Clear cached data
-   */
   clearCache() {
     this.companies = [];
     this.icnItems = [];
@@ -1140,31 +994,22 @@ class ICNDataService {
     this.lastLoadTime = null;
   }
   
-  /**
-   * Check if data is loaded
-   */
   isDataLoaded(): boolean {
     return this.isLoaded;
   }
   
-  /**
-   * Get last load time
-   */
   getLastLoadTime(): Date | null {
     return this.lastLoadTime;
   }
 }
 
-// Export singleton instance
 const icnDataService = ICNDataService.getInstance();
 export default icnDataService;
 
-// Export class and helper functions for testing
 export { 
   ICNDataService, 
   convertICNDataToCompanies, 
-  convertICNDateToISO, 
-  getCoordinatesWithGeocoding,
+  convertICNDateToISO,
   normalizeStateTerritory,
   isInvalidValue,
   autoCorrectData,
@@ -1175,5 +1020,7 @@ export {
   AUSTRALIAN_STATES,
   NEW_ZEALAND_TERRITORIES,
   DATA_CORRECTIONS,
-  TYPO_CORRECTIONS
+  TYPO_CORRECTIONS,
+  CAPABILITY_TYPES,
+  CAPABILITY_TYPE_GROUPS
 };
