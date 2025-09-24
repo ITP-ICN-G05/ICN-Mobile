@@ -152,7 +152,9 @@ export default function CompanyCard({
               </View>
             ))}
             {company.keySectors.length > 2 && (
-              <Text style={styles.moreSectors}>+{company.keySectors.length - 2} more sectors</Text>
+              <View style={styles.moreSectorsChip}>
+                <Text style={styles.moreSectorsText}>+{company.keySectors.length - 2} more</Text>
+              </View>
             )}
           </View>
         )}
@@ -255,16 +257,18 @@ const styles = StyleSheet.create({
   },
   capabilities: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: 6,
     marginBottom: 8,
+    alignItems: 'center',
   },
   capabilityChip: {
     backgroundColor: Colors.orange400,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    maxWidth: 140,
+    maxWidth: 120,
+    flexShrink: 1,
   },
   capabilityText: {
     fontSize: 11,
@@ -272,19 +276,20 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   moreChip: {
-    backgroundColor: Colors.orange400,
+    backgroundColor: 'rgba(128, 128, 128, 0.15)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    justifyContent: 'center',
   },
   moreText: {
     fontSize: 11,
-    color: Colors.text,
-    fontWeight: '600',
+    color: '#666666',
+    fontWeight: '500',
   },
   sectors: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     gap: 6,
   },
@@ -293,16 +298,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    maxWidth: 120,
+    flexShrink: 1,
   },
   sectorText: {
     fontSize: 11,
     color: Colors.text,
     fontWeight: '500',
   },
-  moreSectors: {
+  moreSectorsChip: {
+    backgroundColor: 'rgba(128, 128, 128, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  moreSectorsText: {
     fontSize: 11,
-    color: Colors.black50,
-    fontStyle: 'italic',
+    fontWeight: '500',
+    color: '#666666',
   },
   rightSection: {
     justifyContent: 'center',
