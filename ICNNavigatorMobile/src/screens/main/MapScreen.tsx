@@ -1,16 +1,16 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated, Image } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
-import { Colors, Spacing } from '../../constants/colors';
+import { Colors } from '../../constants/colors';
 import { Company } from '../../types';
-import { mockCompanies } from '../../data/mockCompanies';
 import { useUserTier } from '../../contexts/UserTierContext';
+import icnDataService from '../../services/icnDataService';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -19,95 +19,187 @@ const MELBOURNE_REGION: Region = {
   longitudeDelta: 0.0421,
 };
 
+const CARD_RAISE = 330; // keep in sync with rightButtonsWithCompanyDetail.bottom
+
+const toNumber = (v: any) => (typeof v === 'string' ? parseFloat(v) : v);
+const hasValidCoords = (c: Company) => Number.isFinite(toNumber(c.latitude)) && Number.isFinite(toNumber(c.longitude));
+
 export default function MapScreen() {
-  // Navigation hook
   const navigation = useNavigation<any>();
-  const { currentTier, features } = useUserTier();
-  
-  // Safe area insets for different devices
+  const { features } = useUserTier();
   const insets = useSafeAreaInsets();
+
   
-  // Get actual bottom tab bar height
   const tabBarHeight = useBottomTabBarHeight();
   
+
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const slideAnimation = useRef(new Animated.Value(300)).current; // Animation value for slide-in effect
+  const slideAnimation = useRef(new Animated.Value(300)).current;
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
-  
-  // Update filter state to use EnhancedFilterOptions
+
+  // ICN Data state
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterOptions, setFilterOptions] = useState<{
+    sectors: string[];
+    states: string[];
+    cities: string[];
+    capabilities: string[];
+  }>({ sectors: [], states: [], cities: [], capabilities: [] });
+
+  // Filters
   const [filters, setFilters] = useState<EnhancedFilterOptions>({
     capabilities: [],
     sectors: [],
     distance: 'All',
   });
 
-  // Filter companies based on search text and filters
-  const filteredCompanies = useMemo(() => {
-    let filtered = [...mockCompanies];
+  // Debounce helper for camera updates
+  const zoomTimeout = useRef<NodeJS.Timeout | null>(null);
+  const scheduleZoom = (delay = 250) => {
+    if (zoomTimeout.current) clearTimeout(zoomTimeout.current);
+    zoomTimeout.current = setTimeout(() => {
+      zoomToFilteredResults();
+    }, delay);
+  };
+  useEffect(() => () => {
+    if (zoomTimeout.current) clearTimeout(zoomTimeout.current);
+  }, []);
 
-    // Apply search text filter
-    if (searchText) {
-      filtered = filtered.filter(company =>
-        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        company.address.toLowerCase().includes(searchText.toLowerCase()) ||
-        company.keySectors.some(sector => 
-          sector.toLowerCase().includes(searchText.toLowerCase())
-        )
-      );
+  // Load ICN data
+  useEffect(() => {
+    (async () => {
+      try {
+        setIsLoading(true);
+        await icnDataService.loadData();
+        const loadedCompanies = icnDataService.getCompanies();
+        const options = icnDataService.getFilterOptions();
+        setCompanies(loadedCompanies);
+        setFilterOptions(options);
+        if (loadedCompanies.length > 0) setTimeout(() => zoomToAllCompanies(loadedCompanies), 400);
+      } catch (e) {
+        console.error('Error loading ICN data:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  const zoomToAllCompanies = (list: Company[]) => {
+    const coords = list
+      .filter(hasValidCoords)
+      .map(c => ({ latitude: toNumber(c.latitude), longitude: toNumber(c.longitude) }));
+    if (coords.length === 0) return;
+    if (coords.length === 1) {
+      mapRef.current?.animateToRegion({
+        latitude: coords[0].latitude,
+        longitude: coords[0].longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }, 500);
+      return;
     }
+    mapRef.current?.fitToCoordinates(coords, {
+      edgePadding: { top: 80, right: 80, bottom: CARD_RAISE + 60, left: 80 },
+      animated: true,
+    });
+  };
 
-    // Apply capability filter (multi-select)
+  // Derived list
+  const filteredCompanies = useMemo(() => {
+    let filtered = [...companies];
+
+    // Search
+    if (searchText) filtered = icnDataService.searchCompanies(searchText);
+
+    // Capabilities
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
-        filters.capabilities.some(capability => 
-          company.keySectors.includes(capability) ||
-          company.keySectors.some(sector => 
-            sector.toLowerCase().includes(capability.toLowerCase())
+        filters.capabilities.some(capability =>
+          company.capabilities?.includes(capability) ||
+          company.icnCapabilities?.some(cap =>
+            cap.itemName.toLowerCase().includes(capability.toLowerCase()) ||
+            cap.detailedItemName.toLowerCase().includes(capability.toLowerCase())
           )
         )
       );
     }
 
-    // Apply sector filter
+    // Sectors
     if (filters.sectors && filters.sectors.length > 0) {
       filtered = filtered.filter(company =>
         filters.sectors.some(sector =>
-          company.keySectors.some(keySector =>
-            keySector.toLowerCase().includes(sector.toLowerCase())
-          )
+          company.keySectors.some(keySector => keySector.toLowerCase().includes(sector.toLowerCase()))
         )
       );
     }
 
-    // Apply distance filter (single-select)
-    if (filters.distance !== 'All' && region) {
-      let maxDistance = 50; // default max
-      
-      // Parse distance string
-      if (filters.distance.includes('500m')) {
-        maxDistance = 0.5;
-      } else if (filters.distance.includes('km')) {
-        maxDistance = parseInt(filters.distance);
-      }
-      
-      const kmToDegrees = maxDistance / 111; // Rough conversion
-      
+    // State
+    if (filters.state && filters.state !== 'All') {
+      filtered = filtered.filter(company => company.billingAddress?.state === filters.state);
+    }
+
+    // Company type
+    if (filters.companyTypes && filters.companyTypes.length > 0) {
       filtered = filtered.filter(company => {
-        const latDiff = Math.abs(company.latitude - region.latitude);
-        const lonDiff = Math.abs(company.longitude - region.longitude);
-        const distance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
-        return distance <= kmToDegrees;
+
+        const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
+        
+        for (const filterType of filters.companyTypes!) {
+          // Handle special "Both" case
+          if (filterType === 'Both') {
+            const hasSupplier = capabilityTypes.some(t => 
+              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
+            );
+            const hasManufacturer = capabilityTypes.some(t => 
+              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
+            );
+            if (hasSupplier && hasManufacturer) return true;
+          }
+          // Direct capability type match
+          else if (capabilityTypes.includes(filterType as any)) {
+            return true;
+          }
+          // Check for supplier group
+          else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
+            if (capabilityTypes.some(t => 
+              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
+            )) return true;
+          }
+          // Check for manufacturer group
+          else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
+            if (capabilityTypes.some(t => 
+              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
+            )) return true;
+          }
+        }
+        return false;
       });
     }
 
-    // Apply company size filter (Plus tier only)
+    // Distance (rough)
+    if (filters.distance !== 'All' && region) {
+      let maxKm = 50;
+      if (filters.distance.includes('500m')) maxKm = 0.5;
+      else if (filters.distance.includes('km')) maxKm = parseInt(filters.distance);
+      const kmToDeg = maxKm / 111;
+      filtered = filtered.filter(company => {
+        if (!hasValidCoords(company)) return false;
+        const latDiff = Math.abs(toNumber(company.latitude) - region.latitude);
+        const lonDiff = Math.abs(toNumber(company.longitude) - region.longitude);
+        const approx = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
+        return approx <= kmToDeg;
+      });
+    }
+
+    // Size (Plus)
     if (filters.companySize && filters.companySize !== 'All' && features.canFilterBySize) {
       filtered = filtered.filter(company => {
-        switch(filters.companySize) {
+        switch (filters.companySize) {
           case 'SME (1-50)':
             return !company.employeeCount || company.employeeCount <= 50;
           case 'Medium (51-200)':
@@ -122,265 +214,148 @@ export default function MapScreen() {
       });
     }
 
-    // Apply certification filter (Plus tier only)
+    // Certifications (Plus)
     if (filters.certifications?.length && features.canFilterByCertifications) {
-      filtered = filtered.filter(company =>
-        company.certifications?.some(cert => 
-          filters.certifications?.includes(cert)
-        )
-      );
+      filtered = filtered.filter(company => company.certifications?.some(cert => filters.certifications?.includes(cert)));
     }
 
-    // Apply ownership type filter (Premium tier only)
+    // Diversity (Premium)
     if (filters.ownershipType?.length && features.canFilterByDiversity) {
-      filtered = filtered.filter(company =>
-        company.ownershipType?.some(ownership =>
-          filters.ownershipType?.includes(ownership)
-        )
-      );
+      filtered = filtered.filter(company => company.ownershipType?.some(o => filters.ownershipType?.includes(o)));
     }
-
-    // Apply social enterprise filter (Premium tier only)
     if (filters.socialEnterprise && features.canFilterByDiversity) {
       filtered = filtered.filter(company => company.socialEnterprise === true);
     }
-
-    // Apply Australian Disability Enterprise filter (Premium tier only)
     if (filters.australianDisability && features.canFilterByDiversity) {
       filtered = filtered.filter(company => company.australianDisabilityEnterprise === true);
     }
 
-    // Apply revenue filter (Premium tier only) - NEW
+    // Revenue/Employees/Local content (Premium)
     if (filters.revenue && features.canFilterByRevenue) {
-      const { min = 0, max = 10000000 } = filters.revenue;
-      filtered = filtered.filter(company =>
-        company.revenue !== undefined && 
-        company.revenue >= min && 
-        company.revenue <= max
-      );
+      const { min = 0, max = 10_000_000 } = filters.revenue;
+      filtered = filtered.filter(company => company.revenue !== undefined && company.revenue >= min && company.revenue <= max);
     }
-
-    // Apply employee count filter (Premium tier only) - NEW
     if (filters.employeeCount && features.canFilterByRevenue) {
       const { min = 0, max = 1000 } = filters.employeeCount;
-      filtered = filtered.filter(company =>
-        company.employeeCount !== undefined && 
-        company.employeeCount >= min && 
-        company.employeeCount <= max
-      );
+      filtered = filtered.filter(company => company.employeeCount !== undefined && company.employeeCount >= min && company.employeeCount <= max);
     }
-
-    // Apply local content percentage filter (Premium tier only) - NEW
     if (filters.localContentPercentage && filters.localContentPercentage > 0 && features.canFilterByRevenue) {
-      const minLocalContent = filters.localContentPercentage;
-      filtered = filtered.filter(company =>
-        company.localContentPercentage !== undefined && 
-        company.localContentPercentage >= minLocalContent
-      );
+      filtered = filtered.filter(company => company.localContentPercentage !== undefined && company.localContentPercentage >= (filters.localContentPercentage as number));
     }
 
-    return filtered;
-  }, [searchText, filters, region, features]);
+    return filtered.filter(hasValidCoords);
+  }, [searchText, filters, region, features, companies]);
 
-  const hasActiveFilters = () => {
-    return filters.capabilities.length > 0 || 
-           (filters.sectors && filters.sectors.length > 0) ||
-           filters.distance !== 'All' ||
-           (filters.companySize && filters.companySize !== 'All') ||
-           (filters.certifications && filters.certifications.length > 0) ||
-           (filters.ownershipType && filters.ownershipType.length > 0) ||
-           filters.socialEnterprise ||
-           filters.australianDisability ||
-           (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) ||
-           (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) ||
-           (filters.localContentPercentage && filters.localContentPercentage > 0);
-  };
-
-  const getActiveFilterCount = () => {
-    let count = 0;
-    if (filters.capabilities.length > 0) count++;
-    if (filters.sectors && filters.sectors.length > 0) count++;
-    if (filters.distance !== 'All') count++;
-    if (filters.companySize && filters.companySize !== 'All') count++;
-    if (filters.certifications && filters.certifications.length > 0) count++;
-    if (filters.ownershipType && filters.ownershipType.length > 0) count++;
-    if (filters.socialEnterprise) count++;
-    if (filters.australianDisability) count++;
-    if (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) count++;
-    if (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) count++;
-    if (filters.localContentPercentage && filters.localContentPercentage > 0) count++;
-    return count;
-  };
+  // Auto-zoom on dataset changes unless we're in a selection flow
+  useEffect(() => {
+    if (!isLoading && !isFromDropdownSelection) scheduleZoom(250);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredCompanies, isLoading]);
 
   const zoomToFilteredResults = () => {
-    if (filteredCompanies.length === 0) return;
-
-    if (filteredCompanies.length === 1) {
+    const coords: LatLng[] = filteredCompanies.map(c => ({ latitude: toNumber(c.latitude), longitude: toNumber(c.longitude) }));
+    if (coords.length === 0) return;
+    if (coords.length === 1) {
       mapRef.current?.animateToRegion({
-        latitude: filteredCompanies[0].latitude,
-        longitude: filteredCompanies[0].longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      }, 500);
+        latitude: coords[0].latitude,
+        longitude: coords[0].longitude,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      }, 400);
     } else {
-      const lats = filteredCompanies.map(c => c.latitude);
-      const lons = filteredCompanies.map(c => c.longitude);
-      
-      const minLat = Math.min(...lats);
-      const maxLat = Math.max(...lats);
-      const minLon = Math.min(...lons);
-      const maxLon = Math.max(...lons);
-      
-      mapRef.current?.animateToRegion({
-        latitude: (minLat + maxLat) / 2,
-        longitude: (minLon + maxLon) / 2,
-        latitudeDelta: (maxLat - minLat) * 1.5,
-        longitudeDelta: (maxLon - minLon) * 1.5,
-      }, 500);
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 80, right: 80, bottom: CARD_RAISE + 60, left: 80 },
+        animated: true,
+      });
     }
   };
 
   const handleMarkerPress = (company: Company) => {
     setSelectedCompany(company);
     setIsFromDropdownSelection(false);
-    
-    // Start slide-in animation from bottom
-    Animated.timing(slideAnimation, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-    
+    Animated.timing(slideAnimation, { toValue: 0, duration: 300, useNativeDriver: true }).start();
     mapRef.current?.animateToRegion({
-      latitude: company.latitude,
-      longitude: company.longitude,
+      latitude: toNumber(company.latitude),
+      longitude: toNumber(company.longitude),
       latitudeDelta: 0.01,
       longitudeDelta: 0.01,
-    }, 500);
+    }, 400);
   };
 
-  // Navigate to company detail
-  const navigateToDetail = (company: Company) => {
-    console.log('Navigating to detail for:', company.name); // Debug log
-    navigation.navigate('CompanyDetail', { company });
-  };
+  const navigateToDetail = (company: Company) => navigation.navigate('CompanyDetail', { company });
+  const handleCalloutPress = (company: Company) => navigateToDetail(company);
 
-  // Handle callout press (alternative approach)
-  const handleCalloutPress = (company: Company) => {
-    console.log('Callout pressed for:', company.name); // Debug log
-    navigateToDetail(company);
-  };
-
-  // Handler for company selection from dropdown
+  // Selecting from search mirrors a pin tap & keeps text visible
   const handleCompanySelection = (company: Company) => {
-    // Set flag to hide filter bar
     setIsFromDropdownSelection(true);
-    
-    // Zoom to selected company with closer view
-    mapRef.current?.animateToRegion({
-      latitude: company.latitude,
-      longitude: company.longitude,
-      latitudeDelta: 0.005,
-      longitudeDelta: 0.005,
-    }, 500);
-    
-    // Show company details
-    setSelectedCompany(company);
-    
-    // Clear search text after short delay
-    setTimeout(() => {
-      setSearchText('');
-      setIsFromDropdownSelection(false);
-    }, 1500);
+    setSearchText(company.name);
+    handleMarkerPress(company);
+    setTimeout(() => setIsFromDropdownSelection(false), 400);
   };
 
-  const handleRegionChangeComplete = (newRegion: Region) => {
-    setRegion(newRegion);
-  };
+  const handleRegionChangeComplete = (newRegion: Region) => setRegion(newRegion);
+  const handleApplyFilters = (newFilters: EnhancedFilterOptions) => { setFilters(newFilters); setFilterModalVisible(false); scheduleZoom(250); };
+  const handleSearchChange = (text: string) => { setSearchText(text); setIsFromDropdownSelection(false); if (text === '' || text.length > 2) scheduleZoom(250); };
 
-  const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
-    setFilters(newFilters);
-    setFilterModalVisible(false);
-    setTimeout(zoomToFilteredResults, 300);
-  };
+  const getMarkerColor = (company: Company) => (searchText && company.name.toLowerCase().includes(searchText.toLowerCase()) ? Colors.warning : (company.verificationStatus === 'verified' ? Colors.success : Colors.primary));
+  const clearFilters = () => { setIsFromDropdownSelection(false); setFilters({ capabilities: [], sectors: [], distance: 'All' }); mapRef.current?.animateToRegion(MELBOURNE_REGION, 400); };
 
-  const handleSearchChange = (text: string) => {
-    setSearchText(text);
-    setIsFromDropdownSelection(false);
+  const hasAnyFilters = (
+    filters.capabilities.length > 0 ||
+    (filters.sectors && filters.sectors.length > 0) ||
+    filters.distance !== 'All' ||
+    (filters.state && filters.state !== 'All') ||
+    (filters.companyTypes && filters.companyTypes.length > 0) ||
+    (filters.companySize && filters.companySize !== 'All') ||
+    (filters.certifications && filters.certifications.length > 0) ||
+    (filters.ownershipType && filters.ownershipType.length > 0) ||
+    filters.socialEnterprise ||
+    filters.australianDisability ||
+    (filters.revenue && (filters.revenue.min > 0 || filters.revenue.max < 10000000)) ||
+    (filters.employeeCount && (filters.employeeCount.min > 0 || filters.employeeCount.max < 1000)) ||
+    (filters.localContentPercentage && filters.localContentPercentage > 0)
+  );
+  const shouldShowFilterBar = hasAnyFilters && !isFromDropdownSelection;
 
-    if (text === '' || text.length > 2) {
-      setTimeout(zoomToFilteredResults, 500);
-    }
-  };
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading ICN Companies...</Text>
+      </View>
+    );
+  }
 
-  const getMarkerColor = (company: Company) => {
-    if (searchText && company.name.toLowerCase().includes(searchText.toLowerCase())) {
-      return Colors.warning;
-    }
-    return company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
-  };
-
-  const clearFilters = () => {
-    setIsFromDropdownSelection(false);
-    setFilters({
-      capabilities: [],
-      sectors: [],
-      distance: 'All',
-    });
-    mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
-  };
-
-  const handleNavigateToPayment = () => {
-    navigation.navigate('Payment');
-  };
-
-  // Determine if filter bar should be shown
-  const shouldShowFilterBar = hasActiveFilters() && !isFromDropdownSelection;
+  // Always render the watermark. When a card is open, lift it above the card area; when idle (nothing clicked), keep it near safe-area bottom.
+  const watermarkBottom = selectedCompany ? CARD_RAISE + 16 : (insets?.bottom ?? 0) + 24;
 
   return (
     <View style={styles.container}>
-      {/* Map as background layer, fills entire screen */}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={MELBOURNE_REGION}
         onRegionChangeComplete={handleRegionChangeComplete}
-        showsUserLocation={true}
+        showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
       >
-        {filteredCompanies.map((company) => (
+        {filteredCompanies.map(company => (
           <Marker
             key={company.id}
-            coordinate={{
-              latitude: company.latitude,
-              longitude: company.longitude,
-            }}
-            onPress={() => {
-              console.log('Marker pressed:', company.name); // Debug log
-              handleMarkerPress(company);
-            }}
-            onCalloutPress={() => {
-              console.log('Callout pressed:', company.name); // Debug log
-              handleCalloutPress(company);
-            }}
+            coordinate={{ latitude: toNumber(company.latitude), longitude: toNumber(company.longitude) }}
+            onPress={() => handleMarkerPress(company)}
+            onCalloutPress={() => handleCalloutPress(company)}
             pinColor={getMarkerColor(company)}
             tracksViewChanges={false}
           >
-            <Callout 
-              style={styles.callout}
-              onPress={() => {
-                console.log('Callout onPress:', company.name); // Alternative method
-                navigateToDetail(company);
-              }}
-              tooltip={false}
-            >
+            <Callout style={styles.callout} onPress={() => navigateToDetail(company)} tooltip={false}>
               <View style={styles.calloutContent}>
-                <Text style={styles.calloutTitle}>{company.name}</Text>
-                <Text style={styles.calloutAddress}>{company.address}</Text>
+                <Text style={styles.calloutTitle} numberOfLines={1}>{company.name}</Text>
+                <Text style={styles.calloutAddress} numberOfLines={2}>{company.address}</Text>
                 <View style={styles.calloutSectors}>
-                  {company.keySectors.map((sector, index) => (
+                  {company.keySectors.slice(0, 3).map((sector, index) => (
                     <Text key={index} style={styles.calloutSector}>{sector}</Text>
                   ))}
                 </View>
@@ -402,32 +377,21 @@ export default function MapScreen() {
         ))}
       </MapView>
 
-      {/* Search bar - floating overlay above map */}
       <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
         <SearchBarWithDropdown
           value={searchText}
           onChangeText={handleSearchChange}
           onSelectCompany={handleCompanySelection}
-          onFilter={undefined} // Remove filter function, handled separately
-          companies={mockCompanies}
+          onFilter={undefined}
+          companies={companies}
           placeholder="Search companies, locations..."
         />
       </View>
-      
-      {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
+
       {shouldShowFilterBar && (
         <View style={[styles.filterBar, { top: insets.top + 80 }]}>
           <View style={styles.filterInfo}>
-            <Text style={styles.filterText}>
-              {filteredCompanies.length} companies
-            </Text>
-            {getActiveFilterCount() > 0 && (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>
-                  {getActiveFilterCount()} filters
-                </Text>
-              </View>
-            )}
+            <Text style={styles.filterText}>{filteredCompanies.length} of {companies.length} companies</Text>
           </View>
           <TouchableOpacity onPress={clearFilters}>
             <Text style={styles.clearText}>Clear</Text>
@@ -435,8 +399,7 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* No results overlay */}
-      {filteredCompanies.length === 0 && (
+      {filteredCompanies.length === 0 && !isLoading && (
         <View style={styles.noResultsOverlay}>
           <Ionicons name="search" size={48} color={Colors.black50} />
           <Text style={styles.noResultsText}>No companies found</Text>
@@ -447,74 +410,47 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Logo watermark positioned above bottom navigation bar */}
-      {/* Position: safe area + actual tab bar height + margin */}
-      <View style={[styles.logoWatermark, { bottom: tabBarHeight + 8 }]}>
-        <Image 
-          source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')} 
+
+      {/* Watermark — ALWAYS rendered. Non-interactive. */}
+      <View pointerEvents="none" style={[styles.logoWatermark, { bottom: watermarkBottom }]}>
+        <Image
+          source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')}
+
           style={styles.watermarkLogo}
           resizeMode="contain"
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
         />
       </View>
 
-
-      {/* Right side button container - includes filter and location buttons */}
-      <View style={[
-        styles.rightButtonsContainer,
-        selectedCompany && styles.rightButtonsWithCompanyDetail // Move container up when company detail is shown
-      ]}>
-        {/* Filter button */}
-        <TouchableOpacity
-          style={styles.filterFloatingButton}
-          onPress={() => setFilterModalVisible(true)}
-        >
+      <View style={[styles.rightButtonsContainer, selectedCompany && styles.rightButtonsWithCompanyDetail]}>
+        <TouchableOpacity style={styles.filterFloatingButton} onPress={() => setFilterModalVisible(true)}>
           <Ionicons name="filter" size={24} color={Colors.primary} />
-          {getActiveFilterCount() > 0 && (
-            <View style={styles.filterBadgeFloat}>
-              <Text style={styles.filterBadgeFloatText}>{getActiveFilterCount()}</Text>
-            </View>
-          )}
         </TouchableOpacity>
-
-        {/* Location button */}
-        <TouchableOpacity
-          style={styles.myLocationButton}
-          onPress={() => {
-            mapRef.current?.animateToRegion(MELBOURNE_REGION, 500);
-          }}
-        >
+        <TouchableOpacity style={styles.myLocationButton} onPress={() => mapRef.current?.animateToRegion(MELBOURNE_REGION, 400)}>
           <Ionicons name="locate" size={24} color={Colors.primary} />
         </TouchableOpacity>
       </View>
 
       {selectedCompany && (
-        <Animated.View 
-          style={[
-            styles.companyDetail,
-            {
-              transform: [{ translateY: slideAnimation }] // Apply slide animation transform
-            }
-          ]}
-        >
+        <Animated.View style={[styles.companyDetail, { transform: [{ translateY: slideAnimation }] }]}>
+          {/* Close button: true 44x44 dp, centered icon, generous hitSlop */}
           <TouchableOpacity
             style={styles.closeButton}
             onPress={() => {
-              // Start slide-out animation when closing
-              Animated.timing(slideAnimation, {
-                toValue: 300,
-                duration: 250,
-                useNativeDriver: true,
-              }).start(() => {
-                setSelectedCompany(null);
-              });
+              Animated.timing(slideAnimation, { toValue: 300, duration: 250, useNativeDriver: true }).start(() => setSelectedCompany(null));
             }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close company card"
           >
             <Ionicons name="close" size={24} color={Colors.black50} />
           </TouchableOpacity>
+
           <Text style={styles.detailName}>{selectedCompany.name}</Text>
           <Text style={styles.detailAddress}>{selectedCompany.address}</Text>
           <View style={styles.sectorContainer}>
-            {selectedCompany.keySectors.map((sector, index) => (
+            {selectedCompany.keySectors.slice(0, 4).map((sector, index) => (
               <View key={index} style={styles.sectorChip}>
                 <Text style={styles.sectorText}>{sector}</Text>
               </View>
@@ -526,322 +462,67 @@ export default function MapScreen() {
               <Text style={styles.verifiedText}>Verified Company</Text>
             </View>
           )}
-          <TouchableOpacity 
-            style={styles.viewDetailsButton}
-            onPress={() => navigateToDetail(selectedCompany)}
-          >
+          <TouchableOpacity style={styles.viewDetailsButton} onPress={() => navigateToDetail(selectedCompany)}>
             <Text style={styles.viewDetailsButtonText}>View Full Details</Text>
             <Ionicons name="arrow-forward" size={20} color="#D67635" />
           </TouchableOpacity>
         </Animated.View>
       )}
-      
+
       <EnhancedFilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
         onApply={handleApplyFilters}
         currentFilters={filters}
-        onNavigateToPayment={handleNavigateToPayment}
+        onNavigateToPayment={() => navigation.navigate('Payment')}
+        filterOptions={filterOptions}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject, // Map fills entire screen as background layer
-  },
-  searchOverlay: {
-    position: 'absolute', // Search bar as absolute positioned overlay
-    // top is now set dynamically using safe area insets
-    left: 0,
-    right: 0,
-    zIndex: 1000, // Ensure above map layer
-  },
-  filterBar: {
-    position: 'absolute',
-    // top is now set dynamically using safe area insets
-    left: 16,
-    right: 16,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  filterInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  filterText: {
-    fontSize: 14,
-    color: Colors.text,
-  },
-  filterBadge: {
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  filterBadgeText: {
-    fontSize: 12,
-    color: Colors.text,
-  },
-  clearText: {
-    fontSize: 14,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  noResultsOverlay: {
-    position: 'absolute',
-    top: '40%',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  noResultsText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginTop: 16,
-  },
-  noResultsSubText: {
-    fontSize: 14,
-    color: Colors.black50,
-    marginTop: 8,
-  },
-  clearButton: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: Colors.primary,
-    borderRadius: 20,
-  },
-  clearButtonText: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  callout: {
-    width: 220,
-  },
-  calloutContent: {
-    padding: 10,
-  },
-  calloutTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  calloutAddress: {
-    fontSize: 12,
-    color: Colors.black50,
-    marginBottom: 8,
-  },
-  calloutSectors: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 4,
-  },
-  calloutSector: {
-    fontSize: 10,
-    color: Colors.primary,
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  verifiedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  verifiedText: {
-    fontSize: 10,
-    color: Colors.success,
-    marginLeft: 4,
-  },
-  calloutButton: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.black20,
-    alignItems: 'center',
-  },
-  calloutButtonInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  calloutButtonText: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  rightButtonsContainer: {
-    position: 'absolute',
-    right: 16,
-    bottom: 120, // Base position of container
-    flexDirection: 'column', // Vertical layout
-    gap: 16, // Spacing between buttons
-    zIndex: 1001, // Ensure container is on top layer
-  },
-  rightButtonsWithCompanyDetail: {
-    bottom: 330, // Move entire container up when company detail is active
-  },
-  filterFloatingButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  filterButtonText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  filterBadgeFloat: {
-    position: 'absolute', // Absolute position at button top-right corner
-    top: -6,
-    right: -6,
-    backgroundColor: '#EF8059', // Orange background
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2, // White border
-    borderColor: Colors.white,
-  },
-  filterBadgeFloatText: {
-    color: Colors.white, // White text color
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  myLocationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  companyDetail: {
-    position: 'absolute',
-    bottom: 65, // Adjust this value to control upward movement distance
-    left: 0, // Align to screen left edge
-    right: 0, // Align to screen right edge
-    backgroundColor: Colors.white,
-    padding: 20,
-    borderTopLeftRadius: 20, // Top corners only
-    borderTopRightRadius: 20, // Top corners only
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.15, // Enhanced shadow intensity
-    shadowRadius: 8, // Enhanced shadow range
-    elevation: 8, // Enhanced Android shadow
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    padding: 5,
-  },
-  detailName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  detailAddress: {
-    fontSize: 14,
-    color: Colors.black50,
-    marginBottom: 12,
-  },
-  sectorContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectorChip: {
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  sectorText: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '500',
-  },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  viewDetailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F5DAB2', // Light orange background
-    borderWidth: 1.5, // Thin border width
-    borderColor: Colors.primary, // Orange border color
-    paddingVertical: 14, // Increased vertical padding
-    paddingHorizontal: 24, // Increased horizontal padding
-    borderRadius: 12, // Rounded corners
-    gap: 10, // Spacing between icon and text
-    marginTop: 16, // Top margin
-    shadowColor: '#EF8059', // Orange shadow color
-    shadowOffset: { width: 0, height: 3 }, // Shadow offset
-    shadowOpacity: 0.2, // Shadow opacity
-    shadowRadius: 6, // Shadow blur radius
-    elevation: 4, // Android shadow elevation
-  },
-  viewDetailsButtonText: {
-    fontSize: 17, // Slightly larger font size
-    fontWeight: '700', // Bold font weight
-    color: '#D67635', // Darker orange color for better contrast
-    letterSpacing: 0.5, // Letter spacing for better readability
-  },
-  logoWatermark: {
-    position: 'absolute',
-    left: 16,
-    // bottom is set dynamically using safe area insets
-    zIndex: 100,
-    opacity: 0.8,
-  },
-  watermarkLogo: {
-    width: 90,
-    height: 36,
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.white },
+  loadingText: { marginTop: 12, fontSize: 16, color: Colors.text },
+  map: { ...StyleSheet.absoluteFillObject },
+  searchOverlay: { position: 'absolute', left: 0, right: 0, zIndex: 1000 },
+  filterBar: { position: 'absolute', left: 16, right: 16, backgroundColor: Colors.white, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 5 },
+  filterInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  filterText: { fontSize: 14, color: Colors.text },
+  clearText: { fontSize: 14, color: Colors.primary, fontWeight: '600' },
+  noResultsOverlay: { position: 'absolute', top: '40%', left: 0, right: 0, alignItems: 'center' },
+  noResultsText: { fontSize: 18, fontWeight: '600', color: Colors.text, marginTop: 16 },
+  noResultsSubText: { fontSize: 14, color: Colors.black50, marginTop: 8 },
+  clearButton: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.primary, borderRadius: 20 },
+  clearButtonText: { color: Colors.white, fontWeight: '600' },
+  callout: { width: 220 },
+  calloutContent: { padding: 10 },
+  calloutTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  calloutAddress: { fontSize: 12, color: Colors.black50, marginBottom: 8 },
+  calloutSectors: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 4 },
+  calloutSector: { fontSize: 10, color: Colors.primary, backgroundColor: Colors.orange[400], paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  verifiedIndicator: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  verifiedText: { fontSize: 10, color: Colors.success, marginLeft: 4 },
+  calloutButton: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: Colors.black20, alignItems: 'center' },
+  calloutButtonInner: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.orange[400], paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  calloutButtonText: { fontSize: 12, color: Colors.primary, fontWeight: '600', textAlign: 'center' },
+  rightButtonsContainer: { position: 'absolute', right: 16, bottom: 120, flexDirection: 'column', gap: 16, zIndex: 1001 },
+  rightButtonsWithCompanyDetail: { bottom: CARD_RAISE },
+  filterFloatingButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
+  myLocationButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
+  companyDetail: { zIndex: 1002, position: 'absolute', bottom: 65, left: 0, right: 0, backgroundColor: Colors.white, padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
+  // Close button: true 44x44 dp target and centered icon
+  closeButton: { position: 'absolute', top: 4, right: 4, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', zIndex: 1003 },
+  detailName: { fontSize: 18, fontWeight: 'bold', color: Colors.text, marginBottom: 4 },
+  detailAddress: { fontSize: 14, color: Colors.black50, marginBottom: 12 },
+  sectorContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  sectorChip: { backgroundColor: Colors.orange[400], paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  sectorText: { fontSize: 12, color: Colors.primary, fontWeight: '500' },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  viewDetailsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5DAB2', borderWidth: 1.5, borderColor: Colors.primary, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, gap: 10, marginTop: 16, shadowColor: '#EF8059', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4 },
+  viewDetailsButtonText: { fontSize: 17, fontWeight: '700', color: '#D67635', letterSpacing: 0.5 },
+  // Watermark stays above the map; non-interactive
+  logoWatermark: { position: 'absolute', left: 16, opacity: 0.9, zIndex: 100, elevation: 10 },
+  watermarkLogo: { width: 96, height: 40 },
 });

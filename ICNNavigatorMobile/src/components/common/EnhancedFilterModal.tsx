@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,11 +16,27 @@ import FilterDropdown from './FilterDropdown';
 import { Colors, Spacing } from '../../constants/colors';
 import { useUserTier } from '../../contexts/UserTierContext';
 
+// Standardized Australian States/Territories + New Zealand
+const STANDARD_STATES_TERRITORIES = [
+  'VIC',  // Victoria
+  'NSW',  // New South Wales
+  'QLD',  // Queensland
+  'SA',   // South Australia
+  'WA',   // Western Australia
+  'NT',   // Northern Territory
+  'TAS',  // Tasmania
+  'ACT',  // Australian Capital Territory
+  'NI',   // North Island, New Zealand
+  'SI'    // South Island, New Zealand
+];
+
 export interface EnhancedFilterOptions {
   // Basic filters (all tiers)
   capabilities: string[];
   distance: string;
   sectors: string[];
+  state?: string;  // Only valid state codes
+  companyTypes?: string[];
   
   // Plus tier filters
   companySize?: string;
@@ -28,94 +44,191 @@ export interface EnhancedFilterOptions {
   
   // Premium tier filters
   ownershipType?: string[];
-  revenue?: { min: number; max: number }; // NEW: Revenue range
-  employeeCount?: { min: number; max: number }; // NEW: Employee count range
+  revenue?: { min: number; max: number };
+  employeeCount?: { min: number; max: number };
   socialEnterprise?: boolean;
   australianDisability?: boolean;
-  localContentPercentage?: number; // NEW: Minimum local content percentage
+  localContentPercentage?: number;
 }
 
-const CAPABILITY_OPTIONS = [
-  'Service Provider',
-  'Item Supplier', 
-  'Manufacturer',
-  'Retailer',
-  'Consulting',
-  'Engineering',
-  'Technology',
-  'Construction',
-];
-
-const SECTOR_OPTIONS = [
-  'Construction',
-  'Manufacturing',
-  'Healthcare',
-  'Education',
-  'Technology',
-  'Mining',
-  'Agriculture',
-  'Transport',
-];
-
-const SIZE_OPTIONS = [
-  'SME (1-50)',
-  'Medium (51-200)',
-  'Large (201-500)',
-  'Enterprise (500+)',
-];
-
-const CERTIFICATION_OPTIONS = [
-  'ISO 9001',
-  'ISO 14001',
-  'AS/NZS 4801',
-  'Quality Assurance',
-  'Environmental',
-];
-
-const OWNERSHIP_OPTIONS = [
-  'Female-owned',
-  'First Nations-owned',
-  'Veteran-owned',
-  'Minority-owned',
-];
-
-interface LockedFeatureProps {
-  featureName: string;
-  requiredTier: 'plus' | 'premium';
-  onUpgrade: () => void;
+interface FilterOptionsFromICN {
+  sectors: string[];
+  states: string[];
+  cities: string[];
+  capabilities: string[];
+  capabilityTypes?: string[];
 }
 
-const LockedFeature = ({ featureName, requiredTier, onUpgrade }: LockedFeatureProps) => (
-  <TouchableOpacity style={styles.lockedFeature} onPress={onUpgrade}>
-    <View style={styles.lockedContent}>
-      <MaterialIcons name="lock" size={20} color={Colors.black50} />
-      <Text style={styles.lockedText}>{featureName}</Text>
-      <View style={styles.tierBadge}>
-        <Text style={styles.tierBadgeText}>
-          {requiredTier === 'plus' ? 'Plus' : 'Premium'}
-        </Text>
-      </View>
-    </View>
-    <Text style={styles.upgradeHint}>Tap to upgrade</Text>
-  </TouchableOpacity>
-);
+// Utility function to validate data
+const isValidData = (value: any): boolean => {
+  if (!value) return false;
+  const stringValue = String(value).trim();
+  return (
+    stringValue !== '' &&
+    stringValue !== '#N/A' &&
+    stringValue !== '0' &&
+    stringValue !== 'null' &&
+    stringValue !== 'undefined' &&
+    stringValue !== 'N/A' &&
+    stringValue.toLowerCase() !== 'na'
+  );
+};
+
+// Normalize state codes
+const normalizeState = (state: string): string | null => {
+  const upperState = state.toUpperCase().trim();
+  
+  // Map common variations to standard codes
+  const stateMap: Record<string, string> = {
+    'VICTORIA': 'VIC',
+    'NEW SOUTH WALES': 'NSW',
+    'QUEENSLAND': 'QLD',
+    'SOUTH AUSTRALIA': 'SA',
+    'WESTERN AUSTRALIA': 'WA',
+    'NORTHERN TERRITORY': 'NT',
+    'TASMANIA': 'TAS',
+    'AUSTRALIAN CAPITAL TERRITORY': 'ACT',
+    'NORTH ISLAND': 'NI',
+    'NORTH ISLAND NZ': 'NI',
+    'NORTH ISLAND NEW ZEALAND': 'NI',
+    'SOUTH ISLAND': 'SI',
+    'SOUTH ISLAND NZ': 'SI',
+    'SOUTH ISLAND NEW ZEALAND': 'SI'
+  };
+  
+  // Check if it's already a standard code
+  if (STANDARD_STATES_TERRITORIES.includes(upperState)) {
+    return upperState;
+  }
+  
+  // Try to map it
+  return stateMap[upperState] || null;
+};
 
 export default function EnhancedFilterModal({ 
   visible, 
   onClose, 
   onApply,
   currentFilters,
-  onNavigateToPayment
+  onNavigateToPayment,
+  filterOptions
 }: {
   visible: boolean;
   onClose: () => void;
   onApply: (filters: EnhancedFilterOptions) => void;
   currentFilters?: EnhancedFilterOptions;
   onNavigateToPayment?: () => void;
+  filterOptions?: FilterOptionsFromICN;
 }) {
-  const { currentTier, features, checkFeatureAccess } = useUserTier();
+  const { currentTier, features } = useUserTier();
   
-  // Basic filters (all tiers)
+  // Updated CAPABILITY_OPTIONS to include all actual capability types from the data
+  const CAPABILITY_OPTIONS = useMemo(() => {
+    if (filterOptions?.capabilityTypes && filterOptions.capabilityTypes.length > 0) {
+      // Use actual capability types from the data if available
+      return filterOptions.capabilityTypes
+        .filter(cap => isValidData(cap))
+        .sort();
+    } else if (filterOptions?.capabilities) {
+      // Fall back to capabilities list
+      return filterOptions.capabilities
+        .filter(cap => isValidData(cap))
+        .slice(0, 50)
+        .sort();
+    }
+    // Default capability types based on Excel data analysis
+    return [
+      'Service Provider',
+      'Manufacturer',
+      'Item Supplier',
+      'Supplier',
+      'Designer',
+      'Parts Supplier',
+      'Assembler',
+      'Retailer',
+      'Wholesaler',
+      'Project Management',
+      'Manufacturer (Parts)'
+    ];
+  }, [filterOptions?.capabilities, filterOptions?.capabilityTypes]);
+
+  const SECTOR_OPTIONS = useMemo(() => {
+    if (filterOptions?.sectors) {
+      return filterOptions.sectors
+        .filter(sector => isValidData(sector))
+        .sort();
+    }
+    return [
+      'Construction',
+      'Manufacturing',
+      'Healthcare',
+      'Education',
+      'Technology',
+      'Mining',
+      'Agriculture',
+      'Transport',
+    ];
+  }, [filterOptions?.sectors]);
+
+  // Validate and normalize states from ICN data
+  const STATE_OPTIONS = useMemo(() => {
+    if (filterOptions?.states) {
+      const validatedStates = filterOptions.states
+        .map(state => {
+          if (!isValidData(state)) return null;
+          return normalizeState(state);
+        })
+        .filter((state): state is string => state !== null)
+        .filter(state => STANDARD_STATES_TERRITORIES.includes(state));
+
+      // Remove duplicates and return in standard order
+      const uniqueStates = Array.from(new Set(validatedStates));
+      return STANDARD_STATES_TERRITORIES.filter(state => uniqueStates.includes(state));
+    }
+    return STANDARD_STATES_TERRITORIES;
+  }, [filterOptions?.states]);
+
+  // Updated COMPANY_TYPE_OPTIONS to reflect actual data structure
+  const COMPANY_TYPE_OPTIONS = [
+    'Supplier (All)',
+    'Manufacturer (All)',
+    'Service Provider',
+    'Both (Supplier & Manufacturer)',
+    'Supplier',
+    'Item Supplier',
+    'Parts Supplier',
+    'Manufacturer',
+    'Manufacturer (Parts)',
+    'Assembler',
+    'Designer',
+    'Project Management',
+    'Retailer',
+    'Wholesaler'
+  ];
+
+  const SIZE_OPTIONS = [
+    'SME (1-50)',
+    'Medium (51-200)',
+    'Large (201-500)',
+    'Enterprise (500+)',
+  ];
+
+  const CERTIFICATION_OPTIONS = [
+    'ISO 9001',
+    'ISO 14001',
+    'AS/NZS 4801',
+    'Quality Assurance',
+    'Environmental',
+  ];
+
+  const OWNERSHIP_OPTIONS = [
+    'Female-owned',
+    'First Nations-owned',
+    'Veteran-owned',
+    'Minority-owned',
+  ];
+  
+  // State management for filters
   const [capabilities, setCapabilities] = useState<string[]>(
     currentFilters?.capabilities || []
   );
@@ -125,16 +238,18 @@ export default function EnhancedFilterModal({
   const [distance, setDistance] = useState<string>(
     currentFilters?.distance || 'All'
   );
-  
-  // Plus tier filters
+  const [state, setState] = useState<string>(
+    currentFilters?.state || 'All'
+  );
+  const [companyTypes, setCompanyTypes] = useState<string[]>(
+    currentFilters?.companyTypes || []
+  );
   const [companySize, setCompanySize] = useState<string>(
     currentFilters?.companySize || 'All'
   );
   const [certifications, setCertifications] = useState<string[]>(
     currentFilters?.certifications || []
   );
-  
-  // Premium tier filters
   const [ownershipType, setOwnershipType] = useState<string[]>(
     currentFilters?.ownershipType || []
   );
@@ -162,27 +277,76 @@ export default function EnhancedFilterModal({
 
   const handleApplyAll = () => {
     const filters: EnhancedFilterOptions = {
-      capabilities,
-      sectors,
+      capabilities: capabilities.filter(cap => isValidData(cap)),
+      sectors: sectors.filter(sec => isValidData(sec)),
       distance,
+      state: (state && state !== 'All' && STANDARD_STATES_TERRITORIES.includes(state)) ? state : undefined,
     };
 
-    // Only include Plus/Premium filters if user has access
+    // Map the selected company types to filter values
+    const mappedCompanyTypes: string[] = [];
+    companyTypes.forEach(type => {
+      switch(type) {
+        case 'Supplier (All)':
+          // Include all supplier-related types
+          mappedCompanyTypes.push('Supplier', 'Item Supplier', 'Parts Supplier');
+          break;
+        case 'Manufacturer (All)':
+          // Include all manufacturer-related types
+          mappedCompanyTypes.push('Manufacturer', 'Manufacturer (Parts)', 'Assembler');
+          break;
+        case 'Both (Supplier & Manufacturer)':
+          // This will be handled specially in the filter logic
+          mappedCompanyTypes.push('Both');
+          break;
+        default:
+          // Direct capability type
+          mappedCompanyTypes.push(type);
+      }
+    });
+
+    // Remove duplicates
+    const uniqueCompanyTypes = Array.from(new Set(mappedCompanyTypes));
+    filters.companyTypes = uniqueCompanyTypes.length > 0 ? uniqueCompanyTypes : undefined;
+
+    // Validate state selection
+    if (filters.state && !STANDARD_STATES_TERRITORIES.includes(filters.state)) {
+      Alert.alert(
+        'Invalid State Selection',
+        'Please select a valid Australian state or territory.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Add tier-based filters with validation
     if (features.canFilterBySize) {
-      filters.companySize = companySize;
-      filters.certifications = certifications;
+      filters.companySize = (companySize && companySize !== 'All') ? companySize : undefined;
+      filters.certifications = certifications.filter(cert => isValidData(cert));
     }
     
     if (features.canFilterByDiversity) {
-      filters.ownershipType = ownershipType;
-      filters.socialEnterprise = socialEnterprise;
-      filters.australianDisability = australianDisability;
+      filters.ownershipType = ownershipType.filter(owner => isValidData(owner));
+      filters.socialEnterprise = socialEnterprise || undefined;
+      filters.australianDisability = australianDisability || undefined;
     }
 
     if (features.canFilterByRevenue) {
-      filters.revenue = { min: revenueMin, max: revenueMax };
-      filters.employeeCount = { min: employeeMin, max: employeeMax };
-      filters.localContentPercentage = localContentPercentage;
+      if (revenueMin >= 0 && revenueMax > revenueMin) {
+        filters.revenue = (revenueMin > 0 || revenueMax < 10000000) 
+          ? { min: revenueMin, max: revenueMax } 
+          : undefined;
+      }
+      
+      if (employeeMin >= 0 && employeeMax > employeeMin) {
+        filters.employeeCount = (employeeMin > 0 || employeeMax < 1000)
+          ? { min: employeeMin, max: employeeMax }
+          : undefined;
+      }
+      
+      filters.localContentPercentage = (localContentPercentage > 0 && localContentPercentage <= 100) 
+        ? localContentPercentage 
+        : undefined;
     }
 
     onApply(filters);
@@ -210,6 +374,8 @@ export default function EnhancedFilterModal({
     setCapabilities([]);
     setSectors([]);
     setDistance('All');
+    setState('All');
+    setCompanyTypes([]);
     setCompanySize('All');
     setCertifications([]);
     setOwnershipType([]);
@@ -222,7 +388,7 @@ export default function EnhancedFilterModal({
     setLocalContentPercentage(0);
   };
 
-  // Wrapper functions to handle the onApply callbacks properly
+  // Handler functions for filters
   const handleCapabilitiesChange = (selected: string | string[]) => {
     setCapabilities(Array.isArray(selected) ? selected : [selected]);
   };
@@ -233,6 +399,14 @@ export default function EnhancedFilterModal({
 
   const handleDistanceChange = (selected: string | string[]) => {
     setDistance(typeof selected === 'string' ? selected : selected[0] || 'All');
+  };
+
+  const handleStateChange = (selected: string | string[]) => {
+    setState(typeof selected === 'string' ? selected : selected[0] || 'All');
+  };
+
+  const handleCompanyTypesChange = (selected: string | string[]) => {
+    setCompanyTypes(Array.isArray(selected) ? selected : [selected]);
   };
 
   const handleCompanySizeChange = (selected: string | string[]) => {
@@ -247,14 +421,26 @@ export default function EnhancedFilterModal({
     setOwnershipType(Array.isArray(selected) ? selected : [selected]);
   };
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(1)}M`;
-    } else if (value >= 1000) {
-      return `$${(value / 1000).toFixed(0)}K`;
-    }
-    return `$${value}`;
+  // Count active filters
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (capabilities.length > 0) count++;
+    if (sectors.length > 0) count++;
+    if (state !== 'All') count++;
+    if (companyTypes.length > 0) count++;
+    if (distance !== 'All') count++;
+    if (companySize !== 'All' && features.canFilterBySize) count++;
+    if (certifications.length > 0 && features.canFilterByCertifications) count++;
+    if (ownershipType.length > 0 && features.canFilterByDiversity) count++;
+    if (socialEnterprise && features.canFilterByDiversity) count++;
+    if (australianDisability && features.canFilterByDiversity) count++;
+    if ((revenueMin > 0 || revenueMax < 10000000) && features.canFilterByRevenue) count++;
+    if ((employeeMin > 0 || employeeMax < 1000) && features.canFilterByRevenue) count++;
+    if (localContentPercentage > 0 && features.canFilterByRevenue) count++;
+    return count;
   };
+
+  const activeFilterCount = getActiveFilterCount();
 
   return (
     <Modal
@@ -266,7 +452,9 @@ export default function EnhancedFilterModal({
       <View style={styles.container}>
         <SafeAreaView style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Filters</Text>
+            <Text style={styles.title}>
+              Filters {activeFilterCount > 0 && `(${activeFilterCount} active)`}
+            </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
@@ -276,11 +464,20 @@ export default function EnhancedFilterModal({
             style={styles.body}
             showsVerticalScrollIndicator={false}
           >
-            {/* Basic Filters - Available to all */}
+            {/* Basic Filters Section */}
             <Text style={styles.sectionTitle}>Basic Filters</Text>
 
             <FilterDropdown
-              title="Capability Types"
+              title="Company Type"
+              options={COMPANY_TYPE_OPTIONS}
+              selected={companyTypes}
+              onApply={handleCompanyTypesChange}
+              multiSelect={true}
+              showLimit={5}
+            />
+
+            <FilterDropdown
+              title="Capabilities"
               options={CAPABILITY_OPTIONS}
               selected={capabilities}
               onApply={handleCapabilitiesChange}
@@ -288,16 +485,32 @@ export default function EnhancedFilterModal({
             />
 
             <FilterDropdown
-              title="Sectors"
+              title="Industry Sectors"
               options={SECTOR_OPTIONS}
               selected={sectors}
               onApply={handleSectorsChange}
               multiSelect={true}
             />
 
+            {/* State Filter with validation info */}
             <FilterDropdown
-              title="Distance"
-              options={['All', '500m', '1km', '5km', '10km', '50km']}
+              title="State/Territory"
+              options={['All', ...STATE_OPTIONS]}
+              selected={state}
+              onApply={handleStateChange}
+              multiSelect={false}
+            />
+            
+            {/* Show state filter info */}
+            <View style={styles.filterInfo}>
+              <Text style={styles.filterInfoText}>
+                Showing {STATE_OPTIONS.length} territories (AU/NZ)
+              </Text>
+            </View>
+
+            <FilterDropdown
+              title="Distance from Location"
+              options={['All', '500m', '1km', '5km', '10km', '50km', '100km']}
               selected={distance}
               onApply={handleDistanceChange}
               multiSelect={false}
@@ -309,7 +522,7 @@ export default function EnhancedFilterModal({
             {features.canFilterBySize ? (
               <FilterDropdown
                 title="Company Size"
-                options={SIZE_OPTIONS}
+                options={['All', ...SIZE_OPTIONS]}
                 selected={companySize}
                 onApply={handleCompanySizeChange}
                 multiSelect={false}
@@ -385,7 +598,7 @@ export default function EnhancedFilterModal({
               />
             )}
 
-            {/* Premium Financial Filters - NEW */}
+            {/* Premium Financial Filters */}
             <Text style={styles.sectionTitle}>Financial & Scale Filters</Text>
             
             {features.canFilterByRevenue ? (
@@ -424,35 +637,6 @@ export default function EnhancedFilterModal({
                       />
                     </View>
                   </View>
-                  <View style={styles.quickSelectContainer}>
-                    <Text style={styles.quickSelectLabel}>Quick select:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setRevenueMin(0); setRevenueMax(1000000); }}
-                      >
-                        <Text style={styles.quickSelectText}>$0 - $1M</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setRevenueMin(1000000); setRevenueMax(5000000); }}
-                      >
-                        <Text style={styles.quickSelectText}>$1M - $5M</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setRevenueMin(5000000); setRevenueMax(10000000); }}
-                      >
-                        <Text style={styles.quickSelectText}>$5M - $10M</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setRevenueMin(10000000); setRevenueMax(50000000); }}
-                      >
-                        <Text style={styles.quickSelectText}>$10M+</Text>
-                      </TouchableOpacity>
-                    </ScrollView>
-                  </View>
                 </View>
 
                 {/* Employee Count Range Filter */}
@@ -489,35 +673,6 @@ export default function EnhancedFilterModal({
                       />
                     </View>
                   </View>
-                  <View style={styles.quickSelectContainer}>
-                    <Text style={styles.quickSelectLabel}>Quick select:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setEmployeeMin(1); setEmployeeMax(50); }}
-                      >
-                        <Text style={styles.quickSelectText}>1-50 (SME)</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setEmployeeMin(51); setEmployeeMax(200); }}
-                      >
-                        <Text style={styles.quickSelectText}>51-200</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setEmployeeMin(201); setEmployeeMax(500); }}
-                      >
-                        <Text style={styles.quickSelectText}>201-500</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => { setEmployeeMin(501); setEmployeeMax(10000); }}
-                      >
-                        <Text style={styles.quickSelectText}>500+</Text>
-                      </TouchableOpacity>
-                    </ScrollView>
-                  </View>
                 </View>
 
                 {/* Local Content Percentage Filter */}
@@ -538,41 +693,6 @@ export default function EnhancedFilterModal({
                     />
                     <Text style={styles.percentageSymbol}>%</Text>
                   </View>
-                  <View style={styles.quickSelectContainer}>
-                    <Text style={styles.quickSelectLabel}>Quick select:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => setLocalContentPercentage(0)}
-                      >
-                        <Text style={styles.quickSelectText}>Any</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => setLocalContentPercentage(25)}
-                      >
-                        <Text style={styles.quickSelectText}>25%+</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => setLocalContentPercentage(50)}
-                      >
-                        <Text style={styles.quickSelectText}>50%+</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => setLocalContentPercentage(75)}
-                      >
-                        <Text style={styles.quickSelectText}>75%+</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.quickSelectButton}
-                        onPress={() => setLocalContentPercentage(100)}
-                      >
-                        <Text style={styles.quickSelectText}>100%</Text>
-                      </TouchableOpacity>
-                    </ScrollView>
-                  </View>
                 </View>
               </>
             ) : (
@@ -581,6 +701,23 @@ export default function EnhancedFilterModal({
                 requiredTier="premium"
                 onUpgrade={() => handleUpgradePrompt('premium')}
               />
+            )}
+            
+            {/* Filter Statistics */}
+            {filterOptions && (
+              <View style={styles.statsInfo}>
+                <Text style={styles.statsTitle}>Filter Statistics</Text>
+                <Text style={styles.statsText}>
+                  {CAPABILITY_OPTIONS.length} capabilities • {' '}
+                  {SECTOR_OPTIONS.length} sectors • {' '}
+                  {STATE_OPTIONS.length}/{STANDARD_STATES_TERRITORIES.length} territories
+                </Text>
+                {STATE_OPTIONS.length < STANDARD_STATES_TERRITORIES.length && (
+                  <Text style={styles.statsWarning}>
+                    Some territories may have limited data
+                  </Text>
+                )}
+              </View>
             )}
           </ScrollView>
 
@@ -595,7 +732,9 @@ export default function EnhancedFilterModal({
               style={styles.applyButton} 
               onPress={handleApplyAll}
             >
-              <Text style={styles.applyText}>Apply Filters</Text>
+              <Text style={styles.applyText}>
+                Apply {activeFilterCount > 0 ? `(${activeFilterCount})` : 'Filters'}
+              </Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -603,6 +742,28 @@ export default function EnhancedFilterModal({
     </Modal>
   );
 }
+
+// Locked feature component
+interface LockedFeatureProps {
+  featureName: string;
+  requiredTier: 'plus' | 'premium';
+  onUpgrade: () => void;
+}
+
+const LockedFeature = ({ featureName, requiredTier, onUpgrade }: LockedFeatureProps) => (
+  <TouchableOpacity style={styles.lockedFeature} onPress={onUpgrade}>
+    <View style={styles.lockedContent}>
+      <MaterialIcons name="lock" size={20} color={Colors.black50} />
+      <Text style={styles.lockedText}>{featureName}</Text>
+      <View style={styles.tierBadge}>
+        <Text style={styles.tierBadgeText}>
+          {requiredTier === 'plus' ? 'Plus' : 'Premium'}
+        </Text>
+      </View>
+    </View>
+    <Text style={styles.upgradeHint}>Tap to upgrade</Text>
+  </TouchableOpacity>
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -646,6 +807,17 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 8,
   },
+  filterInfo: {
+    backgroundColor: Colors.orange[400],
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 12,
+  },
+  filterInfoText: {
+    fontSize: 12,
+    color: Colors.text,
+    textAlign: 'center',
+  },
   rangeSection: {
     backgroundColor: Colors.white,
     borderRadius: 8,
@@ -684,26 +856,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.black50,
     marginHorizontal: 8,
-  },
-  quickSelectContainer: {
-    marginTop: 12,
-  },
-  quickSelectLabel: {
-    fontSize: 12,
-    color: Colors.black50,
-    marginBottom: 8,
-  },
-  quickSelectButton: {
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  quickSelectText: {
-    fontSize: 13,
-    color: Colors.text,
-    fontWeight: '500',
   },
   percentageInputContainer: {
     flexDirection: 'row',
@@ -788,6 +940,29 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 15,
     color: Colors.text,
+  },
+  statsInfo: {
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  statsTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.black50,
+    marginBottom: 4,
+  },
+  statsText: {
+    fontSize: 11,
+    color: Colors.black50,
+  },
+  statsWarning: {
+    fontSize: 11,
+    color: Colors.warning,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   footer: {
     flexDirection: 'row',

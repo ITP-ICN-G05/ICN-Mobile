@@ -15,6 +15,8 @@ const Colors = {
   verified: '#E8F5E8', // Light green background
   arrow: '#CCCCCC',
   avatarBg: '#E0E0E0', // Gray avatar background
+  supplier: '#E3F2FD', // Light blue for supplier
+  manufacturer: '#FCE4EC', // Light pink for manufacturer
 };
 
 interface CompanyCardProps {
@@ -30,6 +32,61 @@ export default function CompanyCard({
   onBookmark,
   isBookmarked = false 
 }: CompanyCardProps) {
+  
+  // Format the verification date properly
+  const formatVerificationDate = (date?: string) => {
+    if (!date) return '';
+    // Handle both ISO and d/MM/yyyy formats
+    if (date.includes('-')) {
+      // ISO format
+      return new Date(date).toLocaleDateString('en-AU', { 
+        day: 'numeric', 
+        month: 'short', 
+        year: 'numeric' 
+      });
+    }
+    // Already in d/MM/yyyy format
+    return date;
+  };
+
+  // Get display name (handle placeholder names from ICN)
+  const displayName = company.name === 'Organisation Name' 
+    ? `Company ${company.id.slice(-4)}` 
+    : company.name;
+
+  // Get company type badge color
+  const getCompanyTypeBadge = () => {
+    if (!company.companyType) return null;
+    
+    const typeColors = {
+      supplier: Colors.supplier,
+      manufacturer: Colors.manufacturer,
+      service: Colors.orange300,
+      consultant: Colors.orange400,
+    };
+
+    return (
+      <View style={[styles.typeBadge, { backgroundColor: typeColors[company.companyType] || Colors.orange400 }]}>
+        <Text style={styles.typeBadgeText}>
+          {company.companyType.charAt(0).toUpperCase() + company.companyType.slice(1)}
+        </Text>
+      </View>
+    );
+  };
+
+  // Get location display (city and state from billing address if available)
+  const getLocationDisplay = () => {
+    if (company.billingAddress) {
+      return `${company.billingAddress.city}, ${company.billingAddress.state}`;
+    }
+    // Fallback to parsing address string
+    const parts = company.address.split(',');
+    if (parts.length >= 2) {
+      return `${parts[parts.length - 2].trim()}, ${parts[parts.length - 1].trim().split(' ')[0]}`;
+    }
+    return company.address;
+  };
+
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.9}>
       {onBookmark && (
@@ -46,31 +103,59 @@ export default function CompanyCard({
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarText}>
-              {company.name.charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.info}>
-            <Text style={styles.name} numberOfLines={1}>{company.name}</Text>
-            <Text style={styles.address} numberOfLines={1}>{company.address}</Text>
+            <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.address} numberOfLines={1}>{getLocationDisplay()}</Text>
           </View>
         </View>
         
-        {company.verificationStatus === 'verified' && (
-          <View style={styles.verifiedBadge}>
-            <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-            <Text style={styles.verifiedText}>
-              Verified on {company.verificationDate || '1/07/2025'}
-            </Text>
+        <View style={styles.badges}>
+          {company.verificationStatus === 'verified' && (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+              <Text style={styles.verifiedText}>
+                Verified {company.verificationDate ? `on ${formatVerificationDate(company.verificationDate)}` : ''}
+              </Text>
+            </View>
+          )}
+          
+          {getCompanyTypeBadge()}
+        </View>
+        
+        {/* Show capabilities if from ICN data */}
+        {company.icnCapabilities && company.icnCapabilities.length > 0 && (
+          <View style={styles.capabilities}>
+            {company.icnCapabilities.slice(0, 2).map((cap, index) => (
+              <View key={`${cap.itemId}-${index}`} style={styles.capabilityChip}>
+                <Text style={styles.capabilityText} numberOfLines={1}>
+                  {cap.itemName}
+                </Text>
+              </View>
+            ))}
+            {company.icnCapabilities.length > 2 && (
+              <View style={styles.moreChip}>
+                <Text style={styles.moreText}>+{company.icnCapabilities.length - 2} more</Text>
+              </View>
+            )}
           </View>
         )}
         
-        <View style={styles.sectors}>
-          {company.keySectors.slice(0, 2).map((sector, index) => (
-            <View key={index} style={styles.sectorChip}>
-              <Text style={styles.sectorText}>{sector}</Text>
-            </View>
-          ))}
-        </View>
+        {/* Show sectors */}
+        {company.keySectors.length > 0 && (
+          <View style={styles.sectors}>
+            {company.keySectors.slice(0, 2).map((sector, index) => (
+              <View key={index} style={styles.sectorChip}>
+                <Text style={styles.sectorText}>{sector}</Text>
+              </View>
+            ))}
+            {company.keySectors.length > 2 && (
+              <Text style={styles.moreSectors}>+{company.keySectors.length - 2} more sectors</Text>
+            )}
+          </View>
+        )}
       </View>
       
       <View style={styles.rightSection}>
@@ -108,12 +193,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.avatarBg,
     justifyContent: 'center',
     alignItems: 'center',
@@ -128,34 +213,79 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 2,
+    marginBottom: 3,
   },
   address: {
     fontSize: 14,
     color: Colors.black50,
+    lineHeight: 18,
+  },
+  badges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
   },
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.verified,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 25,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
   verifiedText: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.success,
-    marginLeft: 5,
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  typeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  typeBadgeText: {
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  capabilities: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  capabilityChip: {
+    backgroundColor: Colors.orange400,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    maxWidth: 140,
+  },
+  capabilityText: {
+    fontSize: 11,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  moreChip: {
+    backgroundColor: Colors.orange400,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  moreText: {
+    fontSize: 11,
+    color: Colors.text,
     fontWeight: '600',
   },
   sectors: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 6,
   },
   sectorChip: {
@@ -168,6 +298,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.text,
     fontWeight: '500',
+  },
+  moreSectors: {
+    fontSize: 11,
+    color: Colors.black50,
+    fontStyle: 'italic',
   },
   rightSection: {
     justifyContent: 'center',
