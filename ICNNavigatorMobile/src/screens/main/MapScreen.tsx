@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors } from '../../constants/colors';
@@ -27,6 +28,10 @@ export default function MapScreen() {
   const navigation = useNavigation<any>();
   const { features } = useUserTier();
   const insets = useSafeAreaInsets();
+
+  
+  const tabBarHeight = useBottomTabBarHeight();
+  
 
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
@@ -405,10 +410,12 @@ export default function MapScreen() {
         </View>
       )}
 
+
       {/* Watermark — ALWAYS rendered. Non-interactive. */}
       <View pointerEvents="none" style={[styles.logoWatermark, { bottom: watermarkBottom }]}>
         <Image
           source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')}
+
           style={styles.watermarkLogo}
           resizeMode="contain"
           accessible={false}

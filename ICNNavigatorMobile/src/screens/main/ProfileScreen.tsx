@@ -30,12 +30,27 @@ import DataExportService from '../../services/dataExportService';
 interface ProfileSectionProps {
   title: string;
   children: React.ReactNode;
+  isCollapsed?: boolean;
+  onToggle?: () => void;
 }
 
-const ProfileSection = ({ title, children }: ProfileSectionProps) => (
+const ProfileSection = ({ title, children, isCollapsed = false, onToggle }: ProfileSectionProps) => (
   <View style={styles.section}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    <View style={styles.sectionContent}>{children}</View>
+    <TouchableOpacity 
+      style={styles.sectionHeader} 
+      onPress={onToggle}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Ionicons 
+        name={isCollapsed ? "chevron-down" : "chevron-up"} 
+        size={20} 
+        color="#1B3E6F" 
+      />
+    </TouchableOpacity>
+    {!isCollapsed && (
+      <View style={styles.sectionContent}>{children}</View>
+    )}
   </View>
 );
 
@@ -70,7 +85,7 @@ const SettingItem = ({
   >
     <View style={styles.settingLeft}>
       <View style={styles.iconContainer}>
-        <Ionicons name={icon} size={20} color={Colors.primary} />
+        <Ionicons name={icon} size={20} color="#1B3E6F" />
       </View>
       <Text style={styles.settingTitle}>{title}</Text>
     </View>
@@ -83,13 +98,13 @@ const SettingItem = ({
         <Switch
           value={switchValue}
           onValueChange={onSwitchChange}
-          trackColor={{ false: Colors.black20, true: Colors.primary }}
+          trackColor={{ false: Colors.black20, true: '#1B3E6F' }}
           thumbColor={switchValue ? Colors.white : Colors.black50}
           disabled={disabled}
         />
       )}
       {showArrow && !isSwitch && (
-        <Ionicons name="chevron-forward" size={20} color={Colors.black50} />
+        <Ionicons name="chevron-forward" size={16} color="rgba(0, 0, 0, 0.3)" />
       )}
     </View>
   </TouchableOpacity>
@@ -117,6 +132,23 @@ export default function ProfileScreen() {
     autoSync: false,
   });
 
+  // Collapsible sections state - default to collapsed (true)
+  const [collapsedSections, setCollapsedSections] = useState({
+    account: true,
+    preferences: true,
+    dataPrivacy: true,
+    support: true,
+    about: true,
+  });
+
+  // Toggle section collapse
+  const toggleSection = (section: keyof typeof collapsedSections) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
   // Refresh data when screen focuses
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -132,7 +164,7 @@ export default function ProfileScreen() {
     const tier = subscription?.tier || currentTier;
     switch(tier) {
       case 'premium':
-        return { saved: 'Unlimited', searches: 'Unlimited', exports: 'Unlimited' };
+        return { saved: '∞', searches: '∞', exports: '∞' };
       case 'plus':
         return { saved: '50', searches: '500/mo', exports: '50/mo' };
       default:
@@ -178,7 +210,7 @@ export default function ProfileScreen() {
       case 'premium':
         return { 
           name: 'Premium', 
-          color: Colors.warning,
+          color: '#1B3E6F', // Match blue theme
           icon: 'star',
           price: getPrice(),
           nextBilling: formatDate(subscription.nextBillingDate)
@@ -186,7 +218,7 @@ export default function ProfileScreen() {
       case 'plus':
         return { 
           name: 'Plus', 
-          color: Colors.primary,
+          color: '#1B3E6F', // Match Profile page blue theme
           icon: 'star-half',
           price: getPrice(),
           nextBilling: formatDate(subscription.nextBillingDate)
@@ -544,7 +576,7 @@ export default function ProfileScreen() {
   if (userLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color="#1B3E6F" />
         <Text style={styles.loadingMessage}>Loading profile...</Text>
       </View>
     );
@@ -565,56 +597,78 @@ export default function ProfileScreen() {
 
   return (
     <>
-      <ScrollView 
-        style={styles.container}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* User Profile Card with Avatar */}
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Background Logo */}
+        <Image 
+          source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+          style={styles.backgroundLogo}
+          resizeMode="cover"
+        />
+        
+        <ScrollView 
+          style={styles.container}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+        {/* User Profile Card with Avatar - Horizontal Layout */}
         <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
-              {avatarLoading ? (
-                <View style={styles.avatar}>
-                  <ActivityIndicator size="large" color={Colors.white} />
+          <View style={styles.profileHeader}>
+            {/* Left: Avatar */}
+            <View style={styles.avatarContainer}>
+              <TouchableOpacity onPress={showAvatarOptions} disabled={avatarLoading}>
+                {avatarLoading ? (
+                  <View style={styles.avatar}>
+                    <ActivityIndicator size="large" color={Colors.white} />
+                  </View>
+                ) : user.avatar ? (
+                  <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                    {user.name.split(' ').map((n: string) => n[0]).join('')}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.editAvatarButton} 
+                onPress={showAvatarOptions}
+                disabled={avatarLoading}
+              >
+                <Ionicons name="camera" size={16} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Right: User Info */}
+            <View style={styles.userInfo}>
+              <View style={styles.userInfoHeader}>
+                <View style={styles.userTextContainer}>
+                  <Text style={styles.userName}>{user.name}</Text>
+                  <Text style={styles.userRole}>{user.role} at {user.company}</Text>
                 </View>
-              ) : user.avatar ? (
-                <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                  {user.name.split(' ').map((n: string) => n[0]).join('')}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.editAvatarButton} 
-              onPress={showAvatarOptions}
-              disabled={avatarLoading}
-            >
-              <Ionicons name="camera" size={20} color={Colors.white} />
-            </TouchableOpacity>
-          </View>
-          
-          <Text style={styles.userName}>{user.name}</Text>
-          <Text style={styles.userRole}>{user.role} at {user.company}</Text>
-          
-          <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
-            <Ionicons name={tierInfo.icon as any} size={16} color={tierInfo.color} />
-            <Text style={[styles.tierText, { color: tierInfo.color }]}>
-              {tierInfo.name} Member
-            </Text>
+                <TouchableOpacity style={styles.editIconButton} onPress={handleEditProfile}>
+                  <Ionicons name="create-outline" size={22} color="rgba(27, 62, 111, 0.8)" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={[styles.tierBadge, { backgroundColor: tierInfo.color + '30' }]}>
+                <Ionicons name={tierInfo.icon as any} size={14} color={tierInfo.color} />
+                <Text style={[styles.tierText, { color: tierInfo.color }]}>
+                  {tierInfo.name} Member
+                </Text>
+              </View>
+            </View>
           </View>
 
+          {/* Stats Row */}
           <View style={styles.profileStats}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.saved}</Text>
+              <Text style={[styles.statNumber, stats.saved === '∞' && styles.infinitySymbol]}>{stats.saved}</Text>
               <Text style={styles.statLabel}>Saved</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.searches}</Text>
+              <Text style={[styles.statNumber, stats.searches === '∞' && styles.infinitySymbol]}>{stats.searches}</Text>
               <Text style={styles.statLabel}>Searches</Text>
             </View>
             <View style={styles.statDivider} />
@@ -624,9 +678,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.editProfileButton} onPress={handleEditProfile}>
-            <Text style={styles.editProfileText}>Edit Profile</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Subscription Management Card */}
@@ -646,8 +697,15 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* Separator Line */}
+        <View style={styles.sectionSeparator} />
+
         {/* Account Settings */}
-        <ProfileSection title="Account">
+        <ProfileSection 
+          title="Account"
+          isCollapsed={collapsedSections.account}
+          onToggle={() => toggleSection('account')}
+        >
           <SettingItem
             icon="mail-outline"
             title="Email"
@@ -669,7 +727,7 @@ export default function ProfileScreen() {
             icon="ribbon-outline"
             title="Subscription"
             value={
-              <View style={[styles.upgradeBadge, { backgroundColor: tierInfo.color }]}>
+              <View style={[styles.upgradeBadge, { backgroundColor: '#1B3E6F' }]}>
                 <Text style={styles.upgradeText}>{tierInfo.name}</Text>
               </View>
             }
@@ -677,8 +735,15 @@ export default function ProfileScreen() {
           />
         </ProfileSection>
 
+        {/* Section Separator */}
+        <View style={styles.sectionDivider} />
+
         {/* Preferences - Now using context */}
-        <ProfileSection title="Preferences">
+        <ProfileSection 
+          title="Preferences"
+          isCollapsed={collapsedSections.preferences}
+          onToggle={() => toggleSection('preferences')}
+        >
           <SettingItem
             icon="notifications-outline"
             title="Push Notifications"
@@ -713,12 +778,19 @@ export default function ProfileScreen() {
           />
         </ProfileSection>
 
+        {/* Section Separator */}
+        <View style={styles.sectionDivider} />
+
         {/* Data & Privacy */}
-        <ProfileSection title="Data & Privacy">
+        <ProfileSection 
+          title="Data & Privacy"
+          isCollapsed={collapsedSections.dataPrivacy}
+          onToggle={() => toggleSection('dataPrivacy')}
+        >
           <SettingItem
             icon="download-outline"
             title="Export My Data"
-            value={`${stats.exports} left`}
+            value={stats.exports === '∞' ? 'Unlimited' : `${stats.exports} left`}
             onPress={handleExportData}
           />
           <SettingItem
@@ -739,8 +811,15 @@ export default function ProfileScreen() {
           />
         </ProfileSection>
 
+        {/* Section Separator */}
+        <View style={styles.sectionDivider} />
+
         {/* Support */}
-        <ProfileSection title="Support">
+        <ProfileSection 
+          title="Support"
+          isCollapsed={collapsedSections.support}
+          onToggle={() => toggleSection('support')}
+        >
           <SettingItem
             icon="help-circle-outline"
             title="Help Center"
@@ -763,8 +842,15 @@ export default function ProfileScreen() {
           />
         </ProfileSection>
 
+        {/* Section Separator */}
+        <View style={styles.sectionDivider} />
+
         {/* About */}
-        <ProfileSection title="About">
+        <ProfileSection 
+          title="About"
+          isCollapsed={collapsedSections.about}
+          onToggle={() => toggleSection('about')}
+        >
           <SettingItem
             icon="information-circle-outline"
             title="App Version"
@@ -795,12 +881,13 @@ export default function ProfileScreen() {
           <Text style={styles.footerText}>ICN Navigator v1.0.0</Text>
           <Text style={styles.footerSubText}>© 2025 ICN Victoria</Text>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
 
       {/* Loading Overlay */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color="#1B3E6F" />
           <Text style={styles.loadingText}>Processing...</Text>
         </View>
       )}
@@ -809,9 +896,22 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF', // White background
+  },
+  backgroundLogo: {
+    position: 'absolute',
+    top: 100,
+    left: -80,
+    width: 400,
+    height: 400,
+    opacity: 0.05, // Even more subtle background logo
+    zIndex: 0,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'transparent', // Transparent to show background logo
   },
   scrollContent: {
     paddingBottom: 100,
@@ -838,7 +938,7 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Updated button color
     borderRadius: 8,
   },
   retryButtonText: {
@@ -847,27 +947,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   profileCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Slightly more opaque for even color
     marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 12,
+    borderRadius: 12, // Match SubscriptionCard radius
     padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#000', // Match SubscriptionCard shadow
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  userInfo: {
+    flex: 1,
+    marginLeft: 16,
+    justifyContent: 'flex-start',
+  },
+  userInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  userTextContainer: {
+    flex: 1,
+    alignItems: 'flex-end', // Right align text content
+  },
+  editIconButton: {
+    padding: 2,
+    marginLeft: 4,
+    marginRight: -4, // Move closer to the edge
+  },
   avatarContainer: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: 0, // Remove bottom margin for horizontal layout
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Updated button color
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -888,7 +1013,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.orange[200],
+    backgroundColor: '#1B3E6F', // Updated button color
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -896,23 +1021,30 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 4,
+    fontWeight: '700', // Heavier font weight
+    color: 'rgba(27, 62, 111, 0.95)',
+    marginBottom: 6,
+    textAlign: 'right', // Right align text
+    letterSpacing: 0.5, // Add letter spacing for elegance
+    textShadowColor: 'rgba(27, 62, 111, 0.1)', // Subtle text shadow
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   userRole: {
-    fontSize: 14,
-    color: Colors.black50,
-    marginBottom: 12,
+    fontSize: 13, // Slightly smaller as requested
+    color: 'rgba(27, 62, 111, 0.7)',
+    marginBottom: 8,
+    textAlign: 'right', // Right align text
   },
   tierBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 0,
     gap: 4,
+    alignSelf: 'flex-end', // Align to right to match text alignment
   },
   tierText: {
     fontSize: 12,
@@ -930,7 +1062,12 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.primary,
+    color: 'rgba(27, 62, 111, 0.9)', // Added 10% transparency
+  },
+  infinitySymbol: {
+    fontSize: 28, // Larger size for infinity symbol
+    fontWeight: '300', // Lighter weight for better appearance
+    letterSpacing: 1,
   },
   statLabel: {
     fontSize: 12,
@@ -942,48 +1079,58 @@ const styles = StyleSheet.create({
     height: 30,
     backgroundColor: Colors.black20,
   },
-  editProfileButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  editProfileText: {
-    color: Colors.white,
-    fontWeight: '600',
-    fontSize: 14,
-  },
   section: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'transparent', // Completely transparent
     marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
+    marginTop: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)', // Simple transparent border
+  },
+  sectionSeparator: {
+    height: 0, // Remove separator line
+  },
+  sectionDivider: {
+    height: 0.5,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)', // Thinner but slightly darker line
+    marginHorizontal: 32,
+    marginVertical: 8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'transparent', // Completely transparent
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.orange[400],
+    color: 'rgba(27, 62, 111, 0.95)', // Slightly deeper blue for section titles
+    letterSpacing: 0.3, // Subtle letter spacing for elegance
+    flex: 1,
   },
   sectionContent: {
+    backgroundColor: 'transparent', // Transparent content background
     paddingVertical: 8,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.black20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: 'transparent', // Completely transparent
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)', // Simple transparent separator
+    marginHorizontal: 0,
   },
   settingItemDisabled: {
     opacity: 0.6,
@@ -997,14 +1144,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(27, 62, 111, 0.1)', // Subtle blue background
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   settingTitle: {
     fontSize: 15,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Slightly deeper blue-gray color
+    fontWeight: '500', // Slightly bolder than normal but not too heavy
     flex: 1,
   },
   settingRight: {
@@ -1014,7 +1162,8 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.7)', // Slightly deeper blue-gray for values
+    fontWeight: '400', // Normal weight for secondary text
     marginRight: 4,
   },
   upgradeBadge: {
@@ -1031,7 +1180,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)', // Semi-transparent white
     marginHorizontal: 16,
     marginTop: 20,
     paddingVertical: 14,

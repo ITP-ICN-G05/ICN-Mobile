@@ -248,9 +248,16 @@ export default function EditProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Background Logo */}
+      <Image 
+        source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+        style={styles.backgroundLogo}
+        resizeMode="cover"
+      />
+      
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+        style={styles.keyboardContainer}
       >
         <ScrollView 
           showsVerticalScrollIndicator={false}
@@ -385,13 +392,26 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF', // White background like ProfileScreen
+  },
+  backgroundLogo: {
+    position: 'absolute',
+    top: 100,
+    left: -80,
+    width: 400,
+    height: 400,
+    opacity: 0.05, // Same subtle opacity as ProfileScreen
+    zIndex: 0,
+  },
+  keyboardContainer: {
+    flex: 1,
+    backgroundColor: 'transparent', // Transparent to show background logo
   },
   scrollContent: {
     paddingBottom: 40,
   },
   saveButton: {
-    color: Colors.primary,
+    color: '#1B3E6F', // Match ProfileScreen button color
     fontSize: 16,
     fontWeight: '600',
     marginRight: 16,
@@ -399,8 +419,16 @@ const styles = StyleSheet.create({
   avatarSection: {
     alignItems: 'center',
     paddingVertical: 24,
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
+    marginHorizontal: 16,
+    marginTop: 16,
     marginBottom: 16,
+    borderRadius: 12, // Match SubscriptionCard radius
+    shadowColor: '#000', // Match ProfileScreen shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   avatarContainer: {
     width: 120,
@@ -419,7 +447,7 @@ const styles = StyleSheet.create({
   avatarPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen avatar color
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -432,7 +460,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     right: 8,
-    backgroundColor: Colors.orange[200],
+    backgroundColor: '#1B3E6F', // Match ProfileScreen edit button color
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -443,20 +471,26 @@ const styles = StyleSheet.create({
   },
   avatarHint: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.7)', // Match ProfileScreen text color
   },
   section: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginBottom: 16,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 12, // Match SubscriptionCard radius
+    padding: 20, // Match ProfileScreen padding
+    shadowColor: '#000', // Match ProfileScreen shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)', // Match ProfileScreen title color
     marginBottom: 16,
+    letterSpacing: 0.3, // Match ProfileScreen letter spacing
   },
   row: {
     flexDirection: 'row',
@@ -467,18 +501,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen setting title color
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: Colors.black20,
+    borderColor: 'rgba(27, 62, 111, 0.2)', // Subtle blue border
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: Colors.text,
-    backgroundColor: Colors.white,
+    color: 'rgba(27, 62, 111, 0.9)', // Match ProfileScreen text color
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent input background
   },
   inputError: {
     borderColor: Colors.error,
@@ -495,7 +529,7 @@ const styles = StyleSheet.create({
   },
   charCount: {
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.6)', // Match ProfileScreen secondary text color
     textAlign: 'right',
     marginTop: -12,
   },
