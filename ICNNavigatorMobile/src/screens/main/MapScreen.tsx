@@ -266,6 +266,37 @@ export default function MapScreen() {
     }
   };
 
+  // --- Shared close helper so search <-> card can stay in sync ---
+  const closeCompanyCard = (opts?: { clearSearch?: boolean; animate?: boolean }) => {
+    if (!selectedCompany) return; // only when card is displayed
+    const { clearSearch = false, animate = true } = opts || {};
+
+    const doClearSearch = () => {
+      // only clear if the search text matches this company (prevents wiping arbitrary queries)
+      if (clearSearch && selectedCompany && searchText.trim().toLowerCase() === selectedCompany.name.trim().toLowerCase()) {
+        setSearchText('');
+      }
+    };
+
+    const finish = () => {
+      setSelectedCompany(null);
+      cameraBusyRef.current = false;
+      selectionLockUntil.current = 0;
+      // after closing, allow auto-fit again (e.g., show all results)
+      scheduleZoom(250);
+    };
+
+    if (animate) {
+      Animated.timing(slideAnimation, { toValue: 300, duration: 250, useNativeDriver: true }).start(() => {
+        doClearSearch();
+        finish();
+      });
+    } else {
+      doClearSearch();
+      finish();
+    }
+  };
+
   const animateToCompany = (company: Company) => {
     startSelectionLock(1200);
     setSelectedCompany(company);
@@ -309,8 +340,16 @@ export default function MapScreen() {
   };
 
   const handleSearchChange = (text: string) => {
+    const wasCardOpen = !!selectedCompany;
     setSearchText(text);
     setIsFromDropdownSelection(false);
+
+    // When the search bar is cleared by tapping the "X" AND the card is open, close the card too.
+    if (text === '' && wasCardOpen) {
+      closeCompanyCard({ clearSearch: false, animate: true });
+      return; // let the close handler trigger auto-zoom
+    }
+
     if (text === '' || text.length > 2) scheduleZoom(250);
   };
 
@@ -458,9 +497,7 @@ export default function MapScreen() {
           {/* Close button: true 44x44 dp, centered icon, generous hitSlop */}
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={() => {
-              Animated.timing(slideAnimation, { toValue: 300, duration: 250, useNativeDriver: true }).start(() => setSelectedCompany(null));
-            }}
+            onPress={() => closeCompanyCard({ clearSearch: true, animate: true })}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
             accessibilityLabel="Close company card"
