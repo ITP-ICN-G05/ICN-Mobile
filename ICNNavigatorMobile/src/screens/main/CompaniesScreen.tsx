@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
   },
   // ... (rest of the styles remain exactly the same)
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: 100,
   },
   emptyListContent: {
     flexGrow: 1,
