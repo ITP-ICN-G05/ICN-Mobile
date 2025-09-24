@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,17 @@ export default function FilterDropdown({
   
   // Handle both string and array types
   const [tempSelected, setTempSelected] = useState<string | string[]>(selected);
+
+  // CRITICAL FIX: Sync tempSelected with parent's selected prop when it changes
+  useEffect(() => {
+    setTempSelected(selected);
+  }, [selected]);
+
+  // Reset expansion state when selected changes (cleaner UX)
+  useEffect(() => {
+    setIsExpanded(false);
+    setShowMore(false);
+  }, [selected]);
 
   // Filter out "All" from options if it exists, as we'll add it separately
   const filteredOptions = options.filter(opt => opt !== 'All');
@@ -90,13 +101,25 @@ export default function FilterDropdown({
     }
   };
 
+  // Reset tempSelected when dropdown is collapsed without applying
+  const handleDropdownToggle = () => {
+    if (isExpanded) {
+      // If closing without applying, reset tempSelected to match selected
+      setTempSelected(selected);
+      setIsExpanded(false);
+      setShowMore(false);
+    } else {
+      setIsExpanded(true);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
       
       <TouchableOpacity
         style={[styles.dropdown, isExpanded && styles.dropdownExpanded]}
-        onPress={() => setIsExpanded(!isExpanded)}
+        onPress={handleDropdownToggle}
       >
         <Text style={styles.dropdownText}>{getDisplayText()}</Text>
         <Ionicons 

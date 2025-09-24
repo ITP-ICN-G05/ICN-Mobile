@@ -128,23 +128,37 @@ export default function CompaniesScreen() {
     // Apply company type filter (ICN capability types)
     if (filters.companyTypes && filters.companyTypes.length > 0) {
       filtered = filtered.filter(company => {
-        const types = new Set<string>();
+        const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
         
-        // Map ICN capability types to company types
-        company.icnCapabilities?.forEach(cap => {
-          if (cap.capabilityType === 'Manufacturer') {
-            types.add('manufacturer');
-          } else if (cap.capabilityType === 'Supplier') {
-            types.add('supplier');
+        for (const filterType of filters.companyTypes!) {
+          // Handle special "Both" case
+          if (filterType === 'Both') {
+            const hasSupplier = capabilityTypes.some(t => 
+              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
+            );
+            const hasManufacturer = capabilityTypes.some(t => 
+              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
+            );
+            if (hasSupplier && hasManufacturer) return true;
           }
-        });
-        
-        // Also check the companyType field
-        if (company.companyType) {
-          types.add(company.companyType);
+          // Direct capability type match
+          else if (capabilityTypes.includes(filterType as any)) {
+            return true;
+          }
+          // Check for supplier group
+          else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
+            if (capabilityTypes.some(t => 
+              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
+            )) return true;
+          }
+          // Check for manufacturer group
+          else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
+            if (capabilityTypes.some(t => 
+              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
+            )) return true;
+          }
         }
-        
-        return filters.companyTypes!.some(type => types.has(type));
+        return false;
       });
     }
 
@@ -390,15 +404,8 @@ export default function CompaniesScreen() {
     setFilters(newFilters);
     setFilterModalVisible(false);
     
-    // Apply to ICN data
-    applyICNFilters({
-      searchText,
-      sectors: newFilters.sectors,
-      state: newFilters.state,
-      // Cast the companyTypes to the expected type
-      companyTypes: newFilters.companyTypes as ('supplier' | 'manufacturer' | 'service' | 'consultant')[] | undefined,
-      verificationStatus: 'all',
-    });
+    // Don't apply to ICN data here as filtering is done in the useMemo
+    // Remove or comment out the applyICNFilters call
   };
 
   // Clear filters
