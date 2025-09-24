@@ -14,8 +14,11 @@ interface UserData {
 
 interface UserContextType {
   user: UserData | null;
+  isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   updateUser: (updates: Partial<UserData>) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearUser: () => void;
@@ -32,7 +35,7 @@ const MOCK_USER_DATA: UserData = {
   avatar: null,
 };
 
-const USE_BACKEND = false;
+const USE_BACKEND = false; // Set to true when backend is ready
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
@@ -40,6 +43,9 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Derived authentication state
+  const isAuthenticated = !!user;
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 5000) => {
     const controller = new AbortController();
@@ -58,60 +64,137 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const fetchUserData = async () => {
+  const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
+      // Check for existing auth token
+      const token = await AsyncStorage.getItem('@auth_token');
       const cachedUser = await AsyncStorage.getItem('@user_data');
-      if (cachedUser) {
+      
+      if (token && cachedUser) {
         setUser(JSON.parse(cachedUser));
-        setIsLoading(false);
         
+        // Optionally validate token with backend
         if (USE_BACKEND) {
-          fetchFromBackend();
+          await validateToken(token);
         }
-        return;
-      }
-
-      if (USE_BACKEND) {
-        await fetchFromBackend();
-      } else {
-        console.log('Using mock user data (backend not connected)');
-        setUser(MOCK_USER_DATA);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(MOCK_USER_DATA));
       }
     } catch (err) {
-      console.error('Error loading user data:', err);
-      setUser(MOCK_USER_DATA);
-      setError('Using offline data');
+      console.error('Error checking auth status:', err);
+      // Clear invalid session
+      await logout();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fetchFromBackend = async () => {
+  const validateToken = async (token: string) => {
     try {
-      const token = await AsyncStorage.getItem('@auth_token');
-      if (!token && USE_BACKEND) {
-        throw new Error('No auth token');
-      }
-
-      const response = await fetchWithTimeout('https://api.icnvictoria.com/user/profile', {
+      const response = await fetchWithTimeout('https://api.icnvictoria.com/auth/validate', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
-      }, 5000);
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch user data');
+        throw new Error('Token invalid');
       }
 
       const userData = await response.json();
       setUser(userData);
       await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
     } catch (err) {
-      console.warn('Backend fetch failed, using cached/mock data:', err);
+      console.warn('Token validation failed:', err);
+      await logout();
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (USE_BACKEND) {
+        // Backend authentication
+        const response = await fetchWithTimeout('https://api.icnvictoria.com/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Login failed');
+        }
+
+        const { token, refreshToken, user: userData } = await response.json();
+        
+        // Store tokens
+        await AsyncStorage.setItem('@auth_token', token);
+        if (refreshToken) {
+          await AsyncStorage.setItem('@refresh_token', refreshToken);
+        }
+        
+        // Store and set user data
+        setUser(userData);
+        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+      } else {
+        // Mock authentication for development
+        if (email && password) {
+          const mockUser = { ...MOCK_USER_DATA, email };
+          setUser(mockUser);
+          await AsyncStorage.setItem('@auth_token', 'mock_token_123');
+          await AsyncStorage.setItem('@user_data', JSON.stringify(mockUser));
+        } else {
+          throw new Error('Invalid credentials');
+        }
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Clear all stored data
+      await AsyncStorage.multiRemove([
+        '@auth_token',
+        '@refresh_token',
+        '@user_data',
+        '@user_settings',
+        'userProfile',
+      ]);
+      
+      // Clear state
+      setUser(null);
+      setError(null);
+      
+      // Optionally call backend logout endpoint
+      if (USE_BACKEND) {
+        const token = await AsyncStorage.getItem('@auth_token');
+        if (token) {
+          try {
+            await fetchWithTimeout('https://api.icnvictoria.com/auth/logout', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
+          } catch (err) {
+            console.warn('Backend logout failed:', err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
     }
   };
 
@@ -125,6 +208,8 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
       if (USE_BACKEND) {
         const token = await AsyncStorage.getItem('@auth_token');
+        if (!token) throw new Error('No auth token');
+
         try {
           await fetchWithTimeout('https://api.icnvictoria.com/user/profile', {
             method: 'PUT',
@@ -133,7 +218,7 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(updates),
-          }, 5000);
+          });
         } catch (backendError) {
           console.warn('Failed to sync with backend, changes saved locally');
         }
@@ -145,7 +230,32 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const refreshUser = async () => {
-    await fetchUserData();
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      
+      if (USE_BACKEND) {
+        const token = await AsyncStorage.getItem('@auth_token');
+        if (!token) throw new Error('No auth token');
+
+        const response = await fetchWithTimeout('https://api.icnvictoria.com/user/profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch user data');
+
+        const userData = await response.json();
+        setUser(userData);
+        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh user');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const clearUser = () => {
@@ -154,14 +264,17 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useEffect(() => {
-    fetchUserData();
+    checkAuthStatus();
   }, []);
 
   return (
     <UserContext.Provider value={{ 
       user, 
+      isAuthenticated,
       isLoading, 
-      error, 
+      error,
+      login,
+      logout,
       updateUser, 
       refreshUser,
       clearUser 
@@ -179,5 +292,4 @@ const useUser = () => {
   return context;
 };
 
-// IMPORTANT: Export both named exports
 export { UserProvider, useUser };

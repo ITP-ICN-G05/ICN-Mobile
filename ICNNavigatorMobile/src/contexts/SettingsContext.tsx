@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Location from 'expo-location';
+import { useUser } from './UserContext';
 
 interface Settings {
   notifications: boolean;
@@ -27,6 +28,7 @@ const defaultSettings: Settings = {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isAuthenticated } = useUser();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
   // Load settings from storage
@@ -51,8 +53,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       // Persist to AsyncStorage
       await AsyncStorage.setItem('@user_settings', JSON.stringify(newSettings));
 
-      // Sync with backend
-      await syncSettingsToBackend(newSettings);
+      // Sync with backend if authenticated
+      if (isAuthenticated) {
+        await syncSettingsToBackend(newSettings);
+      }
 
       // Apply system-level changes
       await applySystemSettings(key, value);
@@ -88,23 +92,15 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
             throw new Error('Location permission denied');
           }
         }
-        // Note: Can't programmatically disable location, user must do it in settings
         break;
 
       case 'darkMode':
-        // This would typically trigger a theme change in your app
-        // You might want to emit an event or update a theme context
+        // Emit event or update theme context
+        // This would trigger app-wide theme change
         break;
 
       case 'autoSync':
         // Schedule or cancel background sync tasks
-        if (value) {
-          // Schedule background sync
-          // BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK);
-        } else {
-          // Cancel background sync
-          // BackgroundFetch.unregisterTaskAsync(BACKGROUND_SYNC_TASK);
-        }
         break;
     }
   };
@@ -156,14 +152,19 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const resetSettings = async () => {
     setSettings(defaultSettings);
     await AsyncStorage.setItem('@user_settings', JSON.stringify(defaultSettings));
-    await syncSettingsToBackend(defaultSettings);
+    
+    if (isAuthenticated) {
+      await syncSettingsToBackend(defaultSettings);
+    }
   };
 
   // Load settings on mount
   useEffect(() => {
     loadSettings();
-    syncSettings();
-  }, []);
+    if (isAuthenticated) {
+      syncSettings();
+    }
+  }, [isAuthenticated]);
 
   return (
     <SettingsContext.Provider value={{
