@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   TextInput,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -292,14 +293,21 @@ export default function PaymentScreen() {
   if (subscriptionLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={{ marginTop: 16, color: Colors.black50 }}>Loading subscription...</Text>
+        <ActivityIndicator size="large" color="#1B3E6F" />
+        <Text style={{ marginTop: 16, color: 'rgba(27, 62, 111, 0.6)' }}>Loading subscription...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Background Logo */}
+      <Image 
+        source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')} 
+        style={styles.backgroundLogo}
+        resizeMode="cover"
+      />
+      
       {/* Safe area for top (Dynamic Island) */}
       <ScrollView 
         showsVerticalScrollIndicator={false}
@@ -311,6 +319,8 @@ export default function PaymentScreen() {
           <TouchableOpacity
             style={[styles.billingOption, billingCycle === 'monthly' && styles.billingOptionActive]}
             onPress={() => setBillingCycle('monthly')}
+            disabled={billingCycle === 'monthly'} // Disable if already selected
+            activeOpacity={1} // Remove touch transparency effect
           >
             <Text style={[styles.billingText, billingCycle === 'monthly' && styles.billingTextActive]}>
               Monthly
@@ -319,6 +329,8 @@ export default function PaymentScreen() {
           <TouchableOpacity
             style={[styles.billingOption, billingCycle === 'yearly' && styles.billingOptionActive]}
             onPress={() => setBillingCycle('yearly')}
+            disabled={billingCycle === 'yearly'} // Disable if already selected
+            activeOpacity={1} // Remove touch transparency effect
           >
             <Text style={[styles.billingText, billingCycle === 'yearly' && styles.billingTextActive]}>
               Yearly
@@ -342,7 +354,8 @@ export default function PaymentScreen() {
               currentTier === plan.id && styles.planCardCurrent,
             ]}
             onPress={() => handleSelectPlan(plan.id)}
-            disabled={false}
+            disabled={selectedPlan === plan.id} // Disable if already selected
+            activeOpacity={1} // Remove touch transparency effect
           >
             {plan.recommended && (
               <View style={styles.recommendedBadge}>
@@ -385,7 +398,7 @@ export default function PaymentScreen() {
                   <Ionicons
                     name={feature.included ? 'checkmark-circle' : 'close-circle'}
                     size={18}
-                    color={feature.included ? Colors.success : Colors.black50}
+                    color={feature.included ? '#B6D289' : 'rgba(27, 62, 111, 0.4)'}
                   />
                   <Text style={[
                     styles.featureText,
@@ -402,8 +415,7 @@ export default function PaymentScreen() {
         {/* Mock Payment Methods Section */}
         {selectedPlan !== 'free' && (
           <View style={styles.paymentSection}>
-            <Text style={styles.sectionTitle}>Payment Method (Mock)</Text>
-            <Text style={styles.mockNote}>This is a demo - no real payment will be processed</Text>
+            <Text style={styles.sectionTitle}>Payment Method</Text>
             
             <View style={styles.paymentMethods}>
               {(['apple', 'google', 'paypal'] as PaymentMethod[]).map((method) => (
@@ -414,11 +426,13 @@ export default function PaymentScreen() {
                     selectedPaymentMethod === method && styles.paymentMethodSelected,
                   ]}
                   onPress={() => setSelectedPaymentMethod(method)}
+                  disabled={selectedPaymentMethod === method} // Disable if already selected
+                  activeOpacity={1} // Remove touch transparency effect
                 >
                   <Ionicons
                     name={getPaymentMethodIcon(method) as any}
                     size={24}
-                    color={selectedPaymentMethod === method ? Colors.primary : Colors.black50}
+                    color={selectedPaymentMethod === method ? '#1B3E6F' : 'rgba(27, 62, 111, 0.6)'}
                   />
                 </TouchableOpacity>
               ))}
@@ -434,7 +448,7 @@ export default function PaymentScreen() {
               <TextInput
                 style={styles.promoInput}
                 placeholder="Enter promo code"
-                placeholderTextColor={Colors.black50}
+                placeholderTextColor="rgba(27, 62, 111, 0.5)"
                 value={promoCode}
                 onChangeText={setPromoCode}
                 autoCapitalize="characters"
@@ -448,6 +462,7 @@ export default function PaymentScreen() {
                     setPromoApplied(false);
                     setPromoDiscount(0);
                   }}
+                  activeOpacity={0.7} // Subtle effect for remove button
                 >
                   <Ionicons name="close-circle" size={20} color={Colors.error} />
                   <Text style={styles.promoRemoveText}>Remove</Text>
@@ -457,6 +472,7 @@ export default function PaymentScreen() {
                   style={[styles.promoApplyButton, !promoCode && styles.promoApplyButtonDisabled]}
                   onPress={handleApplyPromoCode}
                   disabled={!promoCode}
+                  activeOpacity={!promoCode ? 1 : 0.8} // Only show effect when enabled
                 >
                   <Text style={styles.promoApplyText}>Apply</Text>
                 </TouchableOpacity>
@@ -464,7 +480,7 @@ export default function PaymentScreen() {
             </View>
             {promoApplied && (
               <View style={styles.promoSuccessBadge}>
-                <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                <Ionicons name="checkmark-circle" size={16} color="#B6D289" />
                 <Text style={styles.promoSuccessText}>
                   {promoDiscount}% discount applied!
                 </Text>
@@ -499,7 +515,7 @@ export default function PaymentScreen() {
             )}
             
             <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Total (Mock)</Text>
+              <Text style={styles.totalLabel}>Total</Text>
               <View>
                 {promoApplied && basePrice > 0 && (
                   <Text style={styles.originalPrice}>${basePrice.toFixed(2)}</Text>
@@ -512,13 +528,6 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        {/* Demo Notice */}
-        <View style={styles.demoNotice}>
-          <Ionicons name="information-circle" size={20} color={Colors.warning} />
-          <Text style={styles.demoNoticeText}>
-            This is a demo environment. No actual charges will be made.
-          </Text>
-        </View>
       </ScrollView>
 
       {/* Bottom Action Button - Safe area for bottom */}
@@ -531,6 +540,7 @@ export default function PaymentScreen() {
             ]}
             onPress={handleUpgrade}
             disabled={isProcessing || (selectedPlan === currentTier && selectedPlan !== 'free')}
+            activeOpacity={(isProcessing || (selectedPlan === currentTier && selectedPlan !== 'free')) ? 1 : 0.8} // Only show effect when enabled
           >
             {isProcessing ? (
               <ActivityIndicator color={Colors.white} />
@@ -541,7 +551,7 @@ export default function PaymentScreen() {
                 </Text>
                 {totalPrice > 0 && (
                   <Text style={styles.upgradeButtonPrice}>
-                    ${totalPrice.toFixed(2)}{getBillingPeriodText()} (Mock)
+                    ${totalPrice.toFixed(2)}{getBillingPeriodText()}
                   </Text>
                 )}
               </>
@@ -556,7 +566,16 @@ export default function PaymentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF', // White background like ProfileScreen
+  },
+  backgroundLogo: {
+    position: 'absolute',
+    top: 100,
+    left: -80,
+    width: 400,
+    height: 400,
+    opacity: 0.05, // Same subtle opacity as ProfileScreen
+    zIndex: 0,
   },
   safeTop: {
     backgroundColor: Colors.white,
@@ -591,7 +610,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   trialBanner: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen blue theme
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 12,
@@ -618,7 +637,7 @@ const styles = StyleSheet.create({
   },
   billingCycleContainer: {
     flexDirection: 'row',
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 12,
@@ -635,14 +654,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: 'transparent', // Invisible border by default
   },
   billingOptionActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen blue theme
+    borderColor: '#1B3E6F', // Add border for consistency
   },
   billingText: {
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
   },
   billingTextActive: {
     color: Colors.white,
@@ -651,7 +673,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: 12,
-    backgroundColor: Colors.success,
+    backgroundColor: '#B6D289', // Match verified badge color
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
@@ -662,13 +684,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   planCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 12,
     borderRadius: 12,
     padding: 16,
-    borderWidth: 2,
-    borderColor: Colors.black20,
+    borderWidth: 1,
+    borderColor: 'rgba(27, 62, 111, 0.15)', // Very subtle border
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -676,20 +698,21 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   planCardSelected: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
+    borderColor: '#1B3E6F', // Only change border color for selection
+    borderWidth: 2, // Slightly thicker border for selection
   },
   planCardRecommended: {
-    borderColor: Colors.warning,
+    // No special styling, just the badge will indicate recommendation
   },
   planCardCurrent: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(240, 240, 240, 0.95)', // Slightly grayed out for current plan
+    borderColor: 'rgba(27, 62, 111, 0.4)', // Muted border for current plan
   },
   recommendedBadge: {
     position: 'absolute',
     top: -10,
     left: 16,
-    backgroundColor: Colors.warning,
+    backgroundColor: '#1B3E6F', // Match blue theme for most popular
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -697,13 +720,13 @@ const styles = StyleSheet.create({
   recommendedText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: '#FFFFFF', // White text on blue background
   },
   currentBadge: {
     position: 'absolute',
     top: -10,
     left: 16,
-    backgroundColor: Colors.success,
+    backgroundColor: '#B6D289', // Match verified badge color
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -722,7 +745,7 @@ const styles = StyleSheet.create({
   planName: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)', // Match ProfileScreen title color
     marginBottom: 4,
   },
   priceRow: {
@@ -732,16 +755,16 @@ const styles = StyleSheet.create({
   planPrice: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.primary,
+    color: '#1B3E6F', // Match ProfileScreen blue theme
   },
   planPeriod: {
     fontSize: 16,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.6)', // Match ProfileScreen secondary text color
     marginLeft: 4,
   },
   planDiscount: {
     fontSize: 12,
-    color: Colors.success,
+    color: '#B6D289', // Match verified badge color
     marginTop: 4,
   },
   radioButton: {
@@ -749,18 +772,18 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: Colors.black50,
+    borderColor: 'rgba(27, 62, 111, 0.4)', // Match ProfileScreen secondary color
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioButtonSelected: {
-    borderColor: Colors.primary,
+    borderColor: '#1B3E6F', // Match ProfileScreen blue theme
   },
   radioButtonInner: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen blue theme
   },
   featuresContainer: {
     marginTop: 4,
@@ -772,16 +795,16 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 14,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
     marginLeft: 8,
     flex: 1,
   },
   featureTextDisabled: {
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.4)', // Lighter blue for disabled text
     textDecorationLine: 'line-through',
   },
   paymentSection: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 20,
     borderRadius: 12,
@@ -792,16 +815,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  mockNote: {
-    fontSize: 12,
-    color: Colors.warning,
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)', // Match ProfileScreen title color
     marginBottom: 16,
   },
   paymentMethods: {
@@ -812,19 +829,20 @@ const styles = StyleSheet.create({
   paymentMethod: {
     flex: 1,
     aspectRatio: 1.5,
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent like other inputs
     borderRadius: 8,
-    borderWidth: 2,
-    borderColor: Colors.black20,
+    borderWidth: 1,
+    borderColor: 'rgba(27, 62, 111, 0.2)', // Subtle blue border
     justifyContent: 'center',
     alignItems: 'center',
   },
   paymentMethodSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.orange[400],
+    borderColor: '#1B3E6F', // Only change border color for selection
+    borderWidth: 2, // Slightly thicker border for selection
+    backgroundColor: 'rgba(27, 62, 111, 0.05)', // Very subtle blue background
   },
   orderSummary: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 20,
     borderRadius: 12,
@@ -842,11 +860,11 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.6)', // Match ProfileScreen secondary text color
   },
   summaryValue: {
     fontSize: 14,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
   },
   totalRow: {
     borderTopWidth: 1,
@@ -857,15 +875,15 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.95)', // Match ProfileScreen title color
   },
   totalValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primary,
+    color: '#1B3E6F', // Match ProfileScreen blue theme
   },
   promoSection: {
-    backgroundColor: Colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', // Semi-transparent like ProfileScreen
     marginHorizontal: 16,
     marginTop: 20,
     borderRadius: 12,
@@ -882,23 +900,23 @@ const styles = StyleSheet.create({
   },
   promoInput: {
     flex: 1,
-    backgroundColor: Colors.orange[400],
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent input background
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 14,
-    color: Colors.text,
+    color: 'rgba(27, 62, 111, 0.9)', // Match ProfileScreen text color
     borderWidth: 1,
-    borderColor: Colors.black20,
+    borderColor: 'rgba(27, 62, 111, 0.2)', // Subtle blue border
   },
   promoApplyButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen blue theme
     paddingHorizontal: 24,
     justifyContent: 'center',
     borderRadius: 8,
   },
   promoApplyButtonDisabled: {
-    backgroundColor: Colors.black50,
+    backgroundColor: 'rgba(27, 62, 111, 0.3)', // Disabled blue theme
   },
   promoApplyText: {
     color: Colors.white,
@@ -922,34 +940,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   promoSuccessText: {
-    color: Colors.success,
+    color: '#B6D289', // Match verified badge color
     fontSize: 13,
   },
   discountValue: {
     fontSize: 14,
-    color: Colors.success,
+    color: '#B6D289', // Match verified badge color
     fontWeight: '600',
   },
   originalPrice: {
     fontSize: 12,
-    color: Colors.black50,
+    color: 'rgba(27, 62, 111, 0.5)', // Match ProfileScreen secondary text color
     textDecorationLine: 'line-through',
     marginBottom: 2,
-  },
-  demoNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.warning + '20',
-    marginHorizontal: 16,
-    marginTop: 20,
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
-  },
-  demoNoticeText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.text,
   },
   bottomSafeArea: {
     backgroundColor: Colors.white,
@@ -962,13 +965,13 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.black20,
   },
   upgradeButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#1B3E6F', // Match ProfileScreen blue theme
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
   upgradeButtonDisabled: {
-    backgroundColor: Colors.black50,
+    backgroundColor: 'rgba(27, 62, 111, 0.3)', // Disabled blue theme
   },
   upgradeButtonText: {
     fontSize: 18,

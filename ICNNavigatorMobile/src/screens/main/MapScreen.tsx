@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors, Spacing } from '../../constants/colors';
@@ -25,6 +26,9 @@ export default function MapScreen() {
   
   // Safe area insets for different devices
   const insets = useSafeAreaInsets();
+  
+  // Get actual bottom tab bar height
+  const tabBarHeight = useBottomTabBarHeight();
   
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
@@ -443,8 +447,9 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Logo watermark in bottom left corner of visible map area */}
-      <View style={[styles.logoWatermark, { bottom: insets.bottom + 100 }]}>
+      {/* Logo watermark positioned above bottom navigation bar */}
+      {/* Position: safe area + actual tab bar height + margin */}
+      <View style={[styles.logoWatermark, { bottom: tabBarHeight + 8 }]}>
         <Image 
           source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')} 
           style={styles.watermarkLogo}
