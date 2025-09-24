@@ -372,16 +372,11 @@ export default function MapScreen() {
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
     setFilters(newFilters);
     setFilterModalVisible(false);
-    setTimeout(zoomToFilteredResults, 300);
   };
 
   const handleSearchChange = (text: string) => {
     setSearchText(text);
     setIsFromDropdownSelection(false);
-
-    if (text === '' || text.length > 2) {
-      setTimeout(zoomToFilteredResults, 500);
-    }
   };
 
   const getMarkerColor = (company: Company) => {
