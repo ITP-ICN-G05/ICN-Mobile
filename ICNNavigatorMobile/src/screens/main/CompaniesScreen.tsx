@@ -22,8 +22,8 @@ import CompanyCard from '../../components/common/CompanyCard';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
-import { mockCompanies, generateMockCompanies } from '../../data/mockCompanies';
 import { useUserTier } from '../../contexts/UserTierContext';
+import { useICNData } from '../../hooks/useICNData';
 
 // Extended local colors (adding to the imported Colors)
 const LocalColors = {
@@ -44,18 +44,27 @@ export default function CompaniesScreen() {
   const navigation = useNavigation<any>();
   const { currentTier, features } = useUserTier();
   
+  // Use ICN Data Hook
+  const {
+    companies: allCompanies,
+    searchResults: icnSearchResults,
+    loading: icnLoading,
+    error: icnError,
+    statistics,
+    filterOptions: icnFilterOptions,
+    search: searchICN,
+    applyFilters: applyICNFilters,
+    refresh: refreshICN
+  } = useICNData(true);
+  
   // State management
   const [searchText, setSearchText] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<'name' | 'verified' | 'recent'>('name');
   const [showSortOptions, setShowSortOptions] = useState(false);
-  
-  // Get extended mock data
-  const [allCompanies] = useState(() => generateMockCompanies(20));
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -68,28 +77,31 @@ export default function CompaniesScreen() {
     distance: 'All',
   });
 
-  // Filter and sort companies with enhanced filters
-  const filteredAndSortedCompanies = useMemo(() => {
-    let filtered = [...allCompanies];
-
-    // Apply search filter
+  // Use ICN search when text changes
+  useEffect(() => {
     if (searchText) {
-      filtered = filtered.filter(company =>
-        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        company.address.toLowerCase().includes(searchText.toLowerCase()) ||
-        company.keySectors.some(sector => 
-          sector.toLowerCase().includes(searchText.toLowerCase())
-        )
-      );
+      searchICN(searchText);
+    } else {
+      // Reset to all companies when search is cleared
+      applyICNFilters({});
     }
+  }, [searchText]);
 
-    // Apply capability filter (multi-select)
+  // Filter and sort companies
+  const filteredAndSortedCompanies = useMemo(() => {
+    // Start with search results or all companies
+    let filtered = searchText ? icnSearchResults : allCompanies;
+
+    // Apply capability filter (using ICN capabilities)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
         filters.capabilities.some(capability =>
-          company.keySectors.includes(capability) ||
-          company.keySectors.some(sector =>
-            sector.toLowerCase().includes(capability.toLowerCase())
+          company.capabilities?.some(cap => 
+            cap.toLowerCase().includes(capability.toLowerCase())
+          ) ||
+          company.icnCapabilities?.some(cap =>
+            cap.itemName.toLowerCase().includes(capability.toLowerCase()) ||
+            cap.detailedItemName.toLowerCase().includes(capability.toLowerCase())
           )
         )
       );
@@ -104,6 +116,36 @@ export default function CompaniesScreen() {
           )
         )
       );
+    }
+
+    // Apply state filter (ICN specific)
+    if (filters.state && filters.state !== 'All') {
+      filtered = filtered.filter(company =>
+        company.billingAddress?.state === filters.state
+      );
+    }
+
+    // Apply company type filter (ICN capability types)
+    if (filters.companyTypes && filters.companyTypes.length > 0) {
+      filtered = filtered.filter(company => {
+        const types = new Set<string>();
+        
+        // Map ICN capability types to company types
+        company.icnCapabilities?.forEach(cap => {
+          if (cap.capabilityType === 'Manufacturer') {
+            types.add('manufacturer');
+          } else if (cap.capabilityType === 'Supplier') {
+            types.add('supplier');
+          }
+        });
+        
+        // Also check the companyType field
+        if (company.companyType) {
+          types.add(company.companyType);
+        }
+        
+        return filters.companyTypes!.some(type => types.has(type));
+      });
     }
 
     // Apply distance filter (would need actual location logic)
@@ -158,7 +200,7 @@ export default function CompaniesScreen() {
       filtered = filtered.filter(company => company.australianDisabilityEnterprise === true);
     }
 
-    // Apply revenue filter (Premium tier only) - NEW
+    // Apply revenue filter (Premium tier only)
     if (filters.revenue && features.canFilterByRevenue) {
       const { min = 0, max = 10000000 } = filters.revenue;
       filtered = filtered.filter(company =>
@@ -168,7 +210,7 @@ export default function CompaniesScreen() {
       );
     }
 
-    // Apply employee count filter (Premium tier only) - NEW
+    // Apply employee count filter (Premium tier only)
     if (filters.employeeCount && features.canFilterByRevenue) {
       const { min = 0, max = 1000 } = filters.employeeCount;
       filtered = filtered.filter(company =>
@@ -178,7 +220,7 @@ export default function CompaniesScreen() {
       );
     }
 
-    // Apply local content percentage filter (Premium tier only) - NEW
+    // Apply local content percentage filter (Premium tier only)
     if (filters.localContentPercentage && filters.localContentPercentage > 0 && features.canFilterByRevenue) {
       const minLocalContent = filters.localContentPercentage;
       filtered = filtered.filter(company =>
@@ -190,7 +232,12 @@ export default function CompaniesScreen() {
     // Apply sorting
     switch (sortBy) {
       case 'name':
-        filtered.sort((a, b) => a.name.localeCompare(b.name));
+        filtered.sort((a, b) => {
+          // Handle placeholder names
+          const nameA = a.name === 'Organisation Name' ? `Company ${a.id.slice(-4)}` : a.name;
+          const nameB = b.name === 'Organisation Name' ? `Company ${b.id.slice(-4)}` : b.name;
+          return nameA.localeCompare(nameB);
+        });
         break;
       case 'verified':
         filtered.sort((a, b) => {
@@ -200,13 +247,18 @@ export default function CompaniesScreen() {
         });
         break;
       case 'recent':
-        // Sort by ID (simulating recent activity)
-        filtered.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+        // Sort by last updated or ID
+        filtered.sort((a, b) => {
+          if (a.lastUpdated && b.lastUpdated) {
+            return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+          }
+          return b.id.localeCompare(a.id);
+        });
         break;
     }
 
     return filtered;
-  }, [searchText, filters, sortBy, allCompanies, features]);
+  }, [searchText, filters, sortBy, allCompanies, icnSearchResults, features]);
 
   // Bookmarked companies section
   const bookmarkedCompanies = useMemo(() => {
@@ -217,6 +269,8 @@ export default function CompaniesScreen() {
   const hasActiveFilters = () => {
     return filters.capabilities.length > 0 || 
            (filters.sectors && filters.sectors.length > 0) ||
+           (filters.state && filters.state !== 'All') ||
+           (filters.companyTypes && filters.companyTypes.length > 0) ||
            filters.distance !== 'All' ||
            (filters.companySize && filters.companySize !== 'All') ||
            (filters.certifications && filters.certifications.length > 0) ||
@@ -233,6 +287,8 @@ export default function CompaniesScreen() {
     let count = 0;
     if (filters.capabilities.length > 0) count++;
     if (filters.sectors && filters.sectors.length > 0) count++;
+    if (filters.state && filters.state !== 'All') count++;
+    if (filters.companyTypes && filters.companyTypes.length > 0) count++;
     if (filters.distance !== 'All') count++;
     if (filters.companySize && filters.companySize !== 'All') count++;
     if (filters.certifications && filters.certifications.length > 0) count++;
@@ -254,6 +310,12 @@ export default function CompaniesScreen() {
     }
     if (filters.sectors && filters.sectors.length > 0) {
       badges.push(`${filters.sectors.length} sectors`);
+    }
+    if (filters.state && filters.state !== 'All') {
+      badges.push(filters.state);
+    }
+    if (filters.companyTypes && filters.companyTypes.length > 0) {
+      badges.push(`${filters.companyTypes.length} types`);
     }
     if (filters.companySize && filters.companySize !== 'All') {
       badges.push(filters.companySize);
@@ -310,23 +372,33 @@ export default function CompaniesScreen() {
 
   // Handle company press
   const handleCompanyPress = (company: Company) => {
-    // Navigate to company detail screen
     navigation.navigate('CompanyDetail', { company });
   };
 
   // Handle refresh
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await refreshICN();
+    } finally {
       setRefreshing(false);
-    }, 1500);
-  }, []);
+    }
+  }, [refreshICN]);
 
   // Apply filters
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
     setFilters(newFilters);
     setFilterModalVisible(false);
+    
+    // Apply to ICN data
+    applyICNFilters({
+      searchText,
+      sectors: newFilters.sectors,
+      state: newFilters.state,
+      // Cast the companyTypes to the expected type
+      companyTypes: newFilters.companyTypes as ('supplier' | 'manufacturer' | 'service' | 'consultant')[] | undefined,
+      verificationStatus: 'all',
+    });
   };
 
   // Clear filters
@@ -336,6 +408,7 @@ export default function CompaniesScreen() {
       sectors: [],
       distance: 'All',
     });
+    applyICNFilters({});
   };
 
   // Toggle sort options
@@ -383,27 +456,27 @@ export default function CompaniesScreen() {
         )}
       </View>
 
-      {/* Stats Bar */}
-      <View style={styles.statsBar}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{filteredAndSortedCompanies.length}</Text>
-          <Text style={styles.statLabel}>Companies</Text>
+      {/* Stats Bar with ICN Statistics */}
+      {statistics && (
+        <View style={styles.statsBar}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{statistics.totalCompanies}</Text>
+            <Text style={styles.statLabel}>Companies</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{statistics.verified}</Text>
+            <Text style={styles.statLabel}>Verified</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{bookmarkedIds.length}</Text>
+            <Text style={styles.statLabel}>
+              Saved {currentTier === 'free' && '(10 max)'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {filteredAndSortedCompanies.filter(c => c.verificationStatus === 'verified').length}
-          </Text>
-          <Text style={styles.statLabel}>Verified</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{bookmarkedIds.length}</Text>
-          <Text style={styles.statLabel}>
-            Saved {currentTier === 'free' && '(10 max)'}
-          </Text>
-        </View>
-      </View>
+      )}
 
       {/* Sort and View Options */}
       <View style={styles.controlsBar}>
@@ -413,7 +486,6 @@ export default function CompaniesScreen() {
             Sort: {sortBy === 'name' ? 'Name' : sortBy === 'verified' ? 'Verified' : 'Recent'}
           </Text>
         </TouchableOpacity>
-
 
         <TouchableOpacity 
           style={styles.viewToggle} 
@@ -425,7 +497,6 @@ export default function CompaniesScreen() {
             color={Colors.black50} 
           />
         </TouchableOpacity>
-
       </View>
 
       {/* Sort Options Dropdown */}
@@ -503,11 +574,11 @@ export default function CompaniesScreen() {
               >
                 <View style={styles.bookmarkedAvatar}>
                   <Text style={styles.bookmarkedAvatarText}>
-                    {item.name.charAt(0).toUpperCase()}
+                    {(item.name === 'Organisation Name' ? `C${item.id.slice(-2)}` : item.name.charAt(0)).toUpperCase()}
                   </Text>
                 </View>
                 <Text style={styles.bookmarkedName} numberOfLines={1}>
-                  {item.name}
+                  {item.name === 'Organisation Name' ? `Company ${item.id.slice(-4)}` : item.name}
                 </Text>
                 {item.verificationStatus === 'verified' && (
                   <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
@@ -558,38 +629,68 @@ export default function CompaniesScreen() {
   );
 
   // Render grid item (alternative view)
-  const renderGridItem = ({ item }: { item: Company }) => (
-    <TouchableOpacity 
-      style={styles.gridCard}
-      onPress={() => handleCompanyPress(item)}
-      activeOpacity={0.9}
-    >
-      <View style={styles.gridAvatar}>
-        <Text style={styles.gridAvatarText}>
-          {item.name.charAt(0).toUpperCase()}
-        </Text>
-      </View>
-      <Text style={styles.gridName} numberOfLines={2}>{item.name}</Text>
-      <Text style={styles.gridAddress} numberOfLines={1}>{item.address}</Text>
+  const renderGridItem = ({ item }: { item: Company }) => {
+    const displayName = item.name === 'Organisation Name' ? `Company ${item.id.slice(-4)}` : item.name;
+    
+    return (
       <TouchableOpacity 
-        style={styles.gridBookmark}
-        onPress={() => toggleBookmark(item.id)}
+        style={styles.gridCard}
+        onPress={() => handleCompanyPress(item)}
+        activeOpacity={0.9}
       >
-        <Ionicons 
-          name={bookmarkedIds.includes(item.id) ? 'bookmark' : 'bookmark-outline'} 
-          size={16} 
-          color={Colors.black50}
-        />
+        <View style={styles.gridAvatar}>
+          <Text style={styles.gridAvatarText}>
+            {displayName.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <Text style={styles.gridName} numberOfLines={2}>{displayName}</Text>
+        <Text style={styles.gridAddress} numberOfLines={1}>
+          {item.billingAddress ? `${item.billingAddress.city}, ${item.billingAddress.state}` : item.address}
+        </Text>
+        <TouchableOpacity 
+          style={styles.gridBookmark}
+          onPress={() => toggleBookmark(item.id)}
+        >
+          <Ionicons 
+            name={bookmarkedIds.includes(item.id) ? 'bookmark' : 'bookmark-outline'} 
+            size={16} 
+            color={Colors.black50}
+          />
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
-  );
+    );
+  };
+
+  // Render loading state
+  if (icnLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading ICN Navigator data...</Text>
+      </View>
+    );
+  }
+
+  // Render error state
+  if (icnError) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Ionicons name="alert-circle-outline" size={64} color={Colors.error} />
+        <Text style={styles.errorTitle}>Error Loading Data</Text>
+        <Text style={styles.errorText}>{icnError}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refreshICN()}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <SearchBar
         value={searchText}
         onChangeText={setSearchText}
-        placeholder="Search companies..."
+        placeholder="Search companies, capabilities, locations..."
         onFilter={() => setFilterModalVisible(true)}
       />
       
@@ -632,16 +733,53 @@ export default function CompaniesScreen() {
         onApply={handleApplyFilters}
         currentFilters={filters}
         onNavigateToPayment={handleNavigateToPayment}
+        filterOptions={icnFilterOptions || undefined} // Pass ICN filter options
       />
     </View>
   );
 }
 
+// Keep all existing styles exactly as they are
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.black50,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: Colors.black50,
+    textAlign: 'center',
+    marginHorizontal: 40,
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: Colors.white,
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  // ... (rest of the styles remain exactly the same)
   listContent: {
     paddingBottom: 20,
   },

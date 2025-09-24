@@ -1,5 +1,5 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated, Image } from 'react-native';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Animated, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,8 @@ import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
-import { mockCompanies } from '../../data/mockCompanies';
 import { useUserTier } from '../../contexts/UserTierContext';
+import icnDataService from '../../services/icnDataService';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -29,10 +29,20 @@ export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const slideAnimation = useRef(new Animated.Value(300)).current; // Animation value for slide-in effect
+  const slideAnimation = useRef(new Animated.Value(300)).current;
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
+  
+  // ICN Data state
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterOptions, setFilterOptions] = useState<{
+    sectors: string[];
+    states: string[];
+    cities: string[];
+    capabilities: string[];
+  }>({ sectors: [], states: [], cities: [], capabilities: [] });
   
   // Update filter state to use EnhancedFilterOptions
   const [filters, setFilters] = useState<EnhancedFilterOptions>({
@@ -41,28 +51,72 @@ export default function MapScreen() {
     distance: 'All',
   });
 
+  // Load ICN data on mount
+  useEffect(() => {
+    loadICNData();
+  }, []);
+
+  const loadICNData = async () => {
+    try {
+      setIsLoading(true);
+      await icnDataService.loadData();
+      const loadedCompanies = icnDataService.getCompanies();
+      const options = icnDataService.getFilterOptions();
+      
+      setCompanies(loadedCompanies);
+      setFilterOptions(options);
+      
+      console.log(`Loaded ${loadedCompanies.length} companies from ICN`);
+      
+      // Zoom to show all companies initially
+      if (loadedCompanies.length > 0) {
+        setTimeout(() => {
+          zoomToAllCompanies(loadedCompanies);
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error loading ICN data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const zoomToAllCompanies = (companiesArray: Company[]) => {
+    if (companiesArray.length === 0) return;
+
+    const lats = companiesArray.map(c => c.latitude);
+    const lons = companiesArray.map(c => c.longitude);
+    
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    
+    mapRef.current?.animateToRegion({
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLon + maxLon) / 2,
+      latitudeDelta: (maxLat - minLat) * 1.5,
+      longitudeDelta: (maxLon - minLon) * 1.5,
+    }, 500);
+  };
+
   // Filter companies based on search text and filters
   const filteredCompanies = useMemo(() => {
-    let filtered = [...mockCompanies];
+    let filtered = [...companies];
 
     // Apply search text filter
     if (searchText) {
-      filtered = filtered.filter(company =>
-        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        company.address.toLowerCase().includes(searchText.toLowerCase()) ||
-        company.keySectors.some(sector => 
-          sector.toLowerCase().includes(searchText.toLowerCase())
-        )
-      );
+      filtered = icnDataService.searchCompanies(searchText);
     }
 
     // Apply capability filter (multi-select)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
         filters.capabilities.some(capability => 
-          company.keySectors.includes(capability) ||
-          company.keySectors.some(sector => 
-            sector.toLowerCase().includes(capability.toLowerCase())
+          company.capabilities?.includes(capability) ||
+          company.icnCapabilities?.some(cap => 
+            cap.itemName.toLowerCase().includes(capability.toLowerCase()) ||
+            cap.detailedItemName.toLowerCase().includes(capability.toLowerCase())
           )
         )
       );
@@ -77,6 +131,28 @@ export default function MapScreen() {
           )
         )
       );
+    }
+
+    // Apply state filter
+    if (filters.state && filters.state !== 'All') {
+      filtered = filtered.filter(company =>
+        company.billingAddress?.state === filters.state
+      );
+    }
+
+    // Apply company type filter
+    if (filters.companyTypes && filters.companyTypes.length > 0) {
+      filtered = filtered.filter(company => {
+        const hasSupplier = company.icnCapabilities?.some(cap => cap.capabilityType === 'Supplier');
+        const hasManufacturer = company.icnCapabilities?.some(cap => cap.capabilityType === 'Manufacturer');
+        
+        return filters.companyTypes?.some(type => {
+          if (type === 'Supplier' && hasSupplier) return true;
+          if (type === 'Manufacturer' && hasManufacturer) return true;
+          if (type === 'Both' && hasSupplier && hasManufacturer) return true;
+          return false;
+        });
+      });
     }
 
     // Apply distance filter (single-select)
@@ -146,7 +222,7 @@ export default function MapScreen() {
       filtered = filtered.filter(company => company.australianDisabilityEnterprise === true);
     }
 
-    // Apply revenue filter (Premium tier only) - NEW
+    // Apply revenue filter (Premium tier only)
     if (filters.revenue && features.canFilterByRevenue) {
       const { min = 0, max = 10000000 } = filters.revenue;
       filtered = filtered.filter(company =>
@@ -156,7 +232,7 @@ export default function MapScreen() {
       );
     }
 
-    // Apply employee count filter (Premium tier only) - NEW
+    // Apply employee count filter (Premium tier only)
     if (filters.employeeCount && features.canFilterByRevenue) {
       const { min = 0, max = 1000 } = filters.employeeCount;
       filtered = filtered.filter(company =>
@@ -166,22 +242,23 @@ export default function MapScreen() {
       );
     }
 
-    // Apply local content percentage filter (Premium tier only) - NEW
+    // Apply local content percentage filter (Premium tier only)
     if (filters.localContentPercentage && filters.localContentPercentage > 0 && features.canFilterByRevenue) {
-      const minLocalContent = filters.localContentPercentage;
       filtered = filtered.filter(company =>
         company.localContentPercentage !== undefined && 
-        company.localContentPercentage >= minLocalContent
+        company.localContentPercentage >= filters.localContentPercentage!
       );
     }
 
     return filtered;
-  }, [searchText, filters, region, features]);
+  }, [searchText, filters, region, features, companies]);
 
   const hasActiveFilters = () => {
     return filters.capabilities.length > 0 || 
            (filters.sectors && filters.sectors.length > 0) ||
            filters.distance !== 'All' ||
+           (filters.state && filters.state !== 'All') ||
+           (filters.companyTypes && filters.companyTypes.length > 0) ||
            (filters.companySize && filters.companySize !== 'All') ||
            (filters.certifications && filters.certifications.length > 0) ||
            (filters.ownershipType && filters.ownershipType.length > 0) ||
@@ -197,6 +274,8 @@ export default function MapScreen() {
     if (filters.capabilities.length > 0) count++;
     if (filters.sectors && filters.sectors.length > 0) count++;
     if (filters.distance !== 'All') count++;
+    if (filters.state && filters.state !== 'All') count++;
+    if (filters.companyTypes && filters.companyTypes.length > 0) count++;
     if (filters.companySize && filters.companySize !== 'All') count++;
     if (filters.certifications && filters.certifications.length > 0) count++;
     if (filters.ownershipType && filters.ownershipType.length > 0) count++;
@@ -257,22 +336,20 @@ export default function MapScreen() {
 
   // Navigate to company detail
   const navigateToDetail = (company: Company) => {
-    console.log('Navigating to detail for:', company.name); // Debug log
+    console.log('Navigating to detail for:', company.name);
     navigation.navigate('CompanyDetail', { company });
   };
 
-  // Handle callout press (alternative approach)
+  // Handle callout press
   const handleCalloutPress = (company: Company) => {
-    console.log('Callout pressed for:', company.name); // Debug log
+    console.log('Callout pressed for:', company.name);
     navigateToDetail(company);
   };
 
   // Handler for company selection from dropdown
   const handleCompanySelection = (company: Company) => {
-    // Set flag to hide filter bar
     setIsFromDropdownSelection(true);
     
-    // Zoom to selected company with closer view
     mapRef.current?.animateToRegion({
       latitude: company.latitude,
       longitude: company.longitude,
@@ -280,10 +357,8 @@ export default function MapScreen() {
       longitudeDelta: 0.005,
     }, 500);
     
-    // Show company details
     setSelectedCompany(company);
     
-    // Clear search text after short delay
     setTimeout(() => {
       setSearchText('');
       setIsFromDropdownSelection(false);
@@ -333,9 +408,18 @@ export default function MapScreen() {
   // Determine if filter bar should be shown
   const shouldShowFilterBar = hasActiveFilters() && !isFromDropdownSelection;
 
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading ICN Companies...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Map as background layer, fills entire screen */}
+      {/* Map as background layer */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -354,11 +438,11 @@ export default function MapScreen() {
               longitude: company.longitude,
             }}
             onPress={() => {
-              console.log('Marker pressed:', company.name); // Debug log
+              console.log('Marker pressed:', company.name);
               handleMarkerPress(company);
             }}
             onCalloutPress={() => {
-              console.log('Callout pressed:', company.name); // Debug log
+              console.log('Callout pressed:', company.name);
               handleCalloutPress(company);
             }}
             pinColor={getMarkerColor(company)}
@@ -367,16 +451,20 @@ export default function MapScreen() {
             <Callout 
               style={styles.callout}
               onPress={() => {
-                console.log('Callout onPress:', company.name); // Alternative method
+                console.log('Callout onPress:', company.name);
                 navigateToDetail(company);
               }}
               tooltip={false}
             >
               <View style={styles.calloutContent}>
-                <Text style={styles.calloutTitle}>{company.name}</Text>
-                <Text style={styles.calloutAddress}>{company.address}</Text>
+                <Text style={styles.calloutTitle} numberOfLines={1}>
+                  {company.name}
+                </Text>
+                <Text style={styles.calloutAddress} numberOfLines={2}>
+                  {company.address}
+                </Text>
                 <View style={styles.calloutSectors}>
-                  {company.keySectors.map((sector, index) => (
+                  {company.keySectors.slice(0, 3).map((sector, index) => (
                     <Text key={index} style={styles.calloutSector}>{sector}</Text>
                   ))}
                 </View>
@@ -398,24 +486,24 @@ export default function MapScreen() {
         ))}
       </MapView>
 
-      {/* Search bar - floating overlay above map */}
+      {/* Search bar overlay */}
       <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>
         <SearchBarWithDropdown
           value={searchText}
           onChangeText={handleSearchChange}
           onSelectCompany={handleCompanySelection}
-          onFilter={undefined} // Remove filter function, handled separately
-          companies={mockCompanies}
+          onFilter={undefined}
+          companies={companies}
           placeholder="Search companies, locations..."
         />
       </View>
       
-      {/* Filter indicator bar - positioned lower and hidden during dropdown selection */}
+      {/* Filter indicator bar */}
       {shouldShowFilterBar && (
         <View style={[styles.filterBar, { top: insets.top + 80 }]}>
           <View style={styles.filterInfo}>
             <Text style={styles.filterText}>
-              {filteredCompanies.length} companies
+              {filteredCompanies.length} of {companies.length} companies
             </Text>
             {getActiveFilterCount() > 0 && (
               <View style={styles.filterBadge}>
@@ -432,7 +520,7 @@ export default function MapScreen() {
       )}
 
       {/* No results overlay */}
-      {filteredCompanies.length === 0 && (
+      {filteredCompanies.length === 0 && !isLoading && (
         <View style={styles.noResultsOverlay}>
           <Ionicons name="search" size={48} color={Colors.black50} />
           <Text style={styles.noResultsText}>No companies found</Text>
@@ -443,7 +531,7 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* Logo watermark in bottom left corner of visible map area */}
+      {/* Logo watermark */}
       <View style={[styles.logoWatermark, { bottom: insets.bottom + 100 }]}>
         <Image 
           source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')} 
@@ -452,11 +540,10 @@ export default function MapScreen() {
         />
       </View>
 
-
-      {/* Right side button container - includes filter and location buttons */}
+      {/* Right side buttons */}
       <View style={[
         styles.rightButtonsContainer,
-        selectedCompany && styles.rightButtonsWithCompanyDetail // Move container up when company detail is shown
+        selectedCompany && styles.rightButtonsWithCompanyDetail
       ]}>
         {/* Filter button */}
         <TouchableOpacity
@@ -482,19 +569,19 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Company detail panel */}
       {selectedCompany && (
         <Animated.View 
           style={[
             styles.companyDetail,
             {
-              transform: [{ translateY: slideAnimation }] // Apply slide animation transform
+              transform: [{ translateY: slideAnimation }]
             }
           ]}
         >
           <TouchableOpacity
             style={styles.closeButton}
             onPress={() => {
-              // Start slide-out animation when closing
               Animated.timing(slideAnimation, {
                 toValue: 300,
                 duration: 250,
@@ -509,7 +596,7 @@ export default function MapScreen() {
           <Text style={styles.detailName}>{selectedCompany.name}</Text>
           <Text style={styles.detailAddress}>{selectedCompany.address}</Text>
           <View style={styles.sectorContainer}>
-            {selectedCompany.keySectors.map((sector, index) => (
+            {selectedCompany.keySectors.slice(0, 4).map((sector, index) => (
               <View key={index} style={styles.sectorChip}>
                 <Text style={styles.sectorText}>{sector}</Text>
               </View>
@@ -537,6 +624,7 @@ export default function MapScreen() {
         onApply={handleApplyFilters}
         currentFilters={filters}
         onNavigateToPayment={handleNavigateToPayment}
+        filterOptions={filterOptions}
       />
     </View>
   );
@@ -546,19 +634,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: Colors.text,
+  },
   map: {
-    ...StyleSheet.absoluteFillObject, // Map fills entire screen as background layer
+    ...StyleSheet.absoluteFillObject,
   },
   searchOverlay: {
-    position: 'absolute', // Search bar as absolute positioned overlay
-    // top is now set dynamically using safe area insets
+    position: 'absolute',
     left: 0,
     right: 0,
-    zIndex: 1000, // Ensure above map layer
+    zIndex: 1000,
   },
   filterBar: {
     position: 'absolute',
-    // top is now set dynamically using safe area insets
     left: 16,
     right: 16,
     backgroundColor: Colors.white,
@@ -693,13 +790,13 @@ const styles = StyleSheet.create({
   rightButtonsContainer: {
     position: 'absolute',
     right: 16,
-    bottom: 120, // Base position of container
-    flexDirection: 'column', // Vertical layout
-    gap: 16, // Spacing between buttons
-    zIndex: 1001, // Ensure container is on top layer
+    bottom: 120,
+    flexDirection: 'column',
+    gap: 16,
+    zIndex: 1001,
   },
   rightButtonsWithCompanyDetail: {
-    bottom: 330, // Move entire container up when company detail is active
+    bottom: 330,
   },
   filterFloatingButton: {
     width: 48,
@@ -714,26 +811,21 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  filterButtonText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   filterBadgeFloat: {
-    position: 'absolute', // Absolute position at button top-right corner
+    position: 'absolute',
     top: -6,
     right: -6,
-    backgroundColor: '#EF8059', // Orange background
+    backgroundColor: '#EF8059',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2, // White border
+    borderWidth: 2,
     borderColor: Colors.white,
   },
   filterBadgeFloatText: {
-    color: Colors.white, // White text color
+    color: Colors.white,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -752,18 +844,18 @@ const styles = StyleSheet.create({
   },
   companyDetail: {
     position: 'absolute',
-    bottom: 65, // Adjust this value to control upward movement distance
-    left: 0, // Align to screen left edge
-    right: 0, // Align to screen right edge
+    bottom: 65,
+    left: 0,
+    right: 0,
     backgroundColor: Colors.white,
     padding: 20,
-    borderTopLeftRadius: 20, // Top corners only
-    borderTopRightRadius: 20, // Top corners only
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.15, // Enhanced shadow intensity
-    shadowRadius: 8, // Enhanced shadow range
-    elevation: 8, // Enhanced Android shadow
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   closeButton: {
     position: 'absolute',
@@ -808,30 +900,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5DAB2', // Light orange background
-    borderWidth: 1.5, // Thin border width
-    borderColor: Colors.primary, // Orange border color
-    paddingVertical: 14, // Increased vertical padding
-    paddingHorizontal: 24, // Increased horizontal padding
-    borderRadius: 12, // Rounded corners
-    gap: 10, // Spacing between icon and text
-    marginTop: 16, // Top margin
-    shadowColor: '#EF8059', // Orange shadow color
-    shadowOffset: { width: 0, height: 3 }, // Shadow offset
-    shadowOpacity: 0.2, // Shadow opacity
-    shadowRadius: 6, // Shadow blur radius
-    elevation: 4, // Android shadow elevation
+    backgroundColor: '#F5DAB2',
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 10,
+    marginTop: 16,
+    shadowColor: '#EF8059',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   viewDetailsButtonText: {
-    fontSize: 17, // Slightly larger font size
-    fontWeight: '700', // Bold font weight
-    color: '#D67635', // Darker orange color for better contrast
-    letterSpacing: 0.5, // Letter spacing for better readability
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#D67635',
+    letterSpacing: 0.5,
   },
   logoWatermark: {
     position: 'absolute',
     left: 16,
-    // bottom is set dynamically using safe area insets
     zIndex: 100,
     opacity: 0.8,
   },

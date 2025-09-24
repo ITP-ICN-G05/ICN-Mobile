@@ -1,22 +1,84 @@
 // ==========================================
-// Company Interface
+// ICN Navigator Data Structure Types
+// ==========================================
+// Raw ICN data structure from JSON file
+export interface ICNCompanyData {
+  "Organisation Capability": string;  // Unique capability ID for this company-item relationship
+  "Organisation: Organisation Name": string;  // Company name
+  "Organisation: Organisation ID": string;  // Company unique ID
+  "Capability Type": "Supplier" | "Manufacturer";  // Company's role for this item
+  "Validation Date": string;  // When company was verified (d/MM/yyyy format)
+  "Organisation: Billing Street": string;  // Company street address
+  "Organisation: Billing City": string;  // Company city
+  "Organisation: Billing State/Province": string;  // Company state (VIC, NSW, etc.)
+  "Organisation: Billing Zip/Postal Code": string;  // Company postcode
+}
+
+export interface ICNItem {
+  "_id": {
+    "$oid": string;  // MongoDB ObjectID
+  };
+  "Detailed Item ID": string;  // Unique detailed item identifier
+  "Item Name": string;  // Short item/capability name
+  "Item ID": string;  // Unique item identifier
+  "Detailed Item Name": string;  // Full descriptive item/capability name
+  "Sector Mapping ID": string;  // Sector mapping identifier
+  "Sector Name": string;  // Industry sector (e.g., "Critical Minerals")
+  "Subtotal": number;  // Number of companies offering this item
+  "Organizations": ICNCompanyData[];  // Companies that provide this item/capability
+}
+
+// ==========================================
+// Unified Company Interface
 // ==========================================
 export interface Company {
-  id: string;
-  name: string;
-  address: string;
-  verificationStatus: 'verified' | 'unverified';
-  verificationDate?: string;
-  keySectors: string[];
-  latitude: number;
-  longitude: number;
-  capabilities?: string[];
-  companyType?: 'supplier' | 'manufacturer' | 'service' | 'consultant';
+  // Core identification
+  id: string;  // Maps to ICN "Organisation: Organisation ID" when from ICN
+  name: string;  // Maps to ICN "Organisation: Organisation Name" when from ICN
+  
+  // Location information
+  address: string;  // Full address string (concatenated from ICN billing fields)
+  billingAddress?: {  // Structured address (populated from ICN data)
+    street: string;
+    city: string;
+    state: string;
+    postcode: string;
+  };
+  latitude: number;  // Needs geocoding from address
+  longitude: number;  // Needs geocoding from address
+  
+  // Verification
+  verificationStatus: 'verified' | 'unverified';  // Based on ICN "Validation Date"
+  verificationDate?: string;  // ISO format, converted from ICN d/MM/yyyy
+  
+  // Capabilities and sectors
+  keySectors: string[];  // Aggregated ICN "Sector Name" from all items
+  capabilities?: string[];  // Aggregated ICN "Detailed Item Name" from all items
+  companyType?: 'supplier' | 'manufacturer' | 'service' | 'consultant';  // Maps from ICN "Capability Type"
+  
+  // ICN-specific capability details (when data is from ICN)
+  icnCapabilities?: Array<{
+    capabilityId: string;  // "Organisation Capability"
+    itemId: string;  // "Item ID"
+    itemName: string;  // "Item Name"
+    detailedItemName: string;  // "Detailed Item Name"
+    capabilityType: "Supplier" | "Manufacturer";  // "Capability Type"
+    sectorName: string;  // "Sector Name"
+    sectorMappingId: string;  // "Sector Mapping ID"
+  }>;
+  
+  // Contact information (not in ICN data - needs enrichment)
   phoneNumber?: string;
   email?: string;
   website?: string;
+  contactPerson?: {
+    name: string;
+    role: string;
+    email?: string;
+    phone?: string;
+  };
   
-  // Tier-based filtering fields
+  // Tier-based filtering fields (not in ICN data - needs enrichment)
   companySize?: 'SME' | 'Medium' | 'Large' | 'Enterprise';
   certifications?: string[];
   ownershipType?: ('Female-owned' | 'First Nations-owned' | 'Veteran-owned' | 'Minority-owned')[];
@@ -27,7 +89,7 @@ export interface Company {
   localContentPercentage?: number;
   abn?: string;
   
-  // Additional fields
+  // Additional fields (not in ICN data - needs enrichment)
   description?: string;
   logo?: string;
   yearEstablished?: number;
@@ -39,13 +101,24 @@ export interface Company {
     twitter?: string;
     facebook?: string;
   };
-  lastUpdated?: string;
-  contactPerson?: {
+
+  // Past Projects - Premium feature
+  pastProjects?: Array<{
+    id?: string;
     name: string;
-    role: string;
-    email?: string;
-    phone?: string;
-  };
+    date: string;
+    description?: string;
+    value?: number;
+    client?: string;
+    location?: string;
+    category?: string;
+    outcome?: string;
+  }>;
+  
+  // Metadata
+  dataSource?: 'ICN' | 'manual' | 'import';  // Identifies data origin
+  lastUpdated?: string;
+  icnValidationDate?: string;  // Original ICN date format if needed
 }
 
 // ==========================================
