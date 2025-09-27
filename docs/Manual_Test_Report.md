@@ -184,36 +184,18 @@ Verify React Native mobile app functionality against user story acceptance crite
 
 ## 4.1 Results by User Story
 
-### Epic 1: Core Database & Search Foundation (Mobile Implementation)
-
-| User Story | Acceptance Criteria | Implementation Status | Features Touched | Result | Notes |
-|------------|-------------------|---------------------|------------------|---------|-------|
-| US1.2: Advanced Multi-Criteria Search System | AC01: Multi-criteria search implementation; AC02: Real-time search results (<3s); AC03: Filter combinations work seamlessly | **Partially Implemented** | CompaniesScreen, SearchBar, FilterModal, mock data filtering | Pass/Fail/Blocked | [Test search across names/addresses/sectors, filter combinations, response times] |
-| US1.3: Interactive Map Visualization Platform | AC01: Google Maps integration with markers; AC02: Real-time pan/zoom updates; AC03: Distance-based search; AC04: Toggle map/table views | **Implemented** | MapScreen, react-native-maps, Google Maps API, marker clustering | Pass/Fail/Blocked | [Test map rendering, marker interactions, search area functionality, view switching] |
-| US1.4: Data Export & Visualisation | AC01: Company detail display; AC02: Relationship visualization; AC03: No ratings/trending displays | **Not Implemented** | CompanyDetailScreen (placeholder only) | Blocked | [Company detail screen needs full implementation] |
-
-### Epic 2: Interactive User Experience (Mobile Implementation)
-
-| User Story | Acceptance Criteria | Implementation Status | Features Touched | Result | Notes |
-|------------|-------------------|---------------------|------------------|---------|-------|
-| US2.1: Cross-Platform Responsive Interface | AC01: React Native mobile apps; AC02: Responsive design; AC03: Consistent UX across devices; AC04: Performance optimization | **Implemented** | React Native app, cross-platform components, responsive design | Pass/Fail/Blocked | [Test iOS/Android consistency, performance, responsive layouts] |
-| US2.2: User Account Management | AC01: Authentication system; AC02: Account creation; AC03: Multi-factor authentication | **Not Implemented** | Auth screens (placeholder), no OAuth integration yet | Blocked | [Authentication flows not implemented in current version] |
-| US2.4: Bookmarking & Saved Companies | AC01: Bookmark companies; AC02: Bookmark persistence; AC03: Bookmark management interface | **Implemented** | CompaniesScreen bookmarking system, saved companies section | Pass/Fail/Blocked | [Test bookmark toggle, saved section display, persistence across sessions] |
-
-### Epic 3: Business Model & Access Control (Mobile Implementation)
-
-| User Story | Acceptance Criteria | Implementation Status | Features Touched | Result | Notes |
-|------------|-------------------|---------------------|------------------|---------|-------|
-| US3.1: Three-Tier Subscription Model | AC01: Tier-based feature restrictions; AC02: Clear feature comparison; AC03: Basic/Free tier functionality | **Not Implemented** | No subscription tiers implemented | Blocked | [Subscription model not implemented in mobile app] |
-| US3.4: Communication Tools | AC01: Secure messaging with ICN Victoria; AC02: Customer Services integration | **Not Implemented** | No communication features implemented | Blocked | [Communication tools not implemented in current version] |
-
-### Mobile-Specific Implementation Stories
-
-| User Story | Acceptance Criteria | Implementation Status | Features Touched | Result | Notes |
-|------------|-------------------|---------------------|------------------|---------|-------|
-| US-Mobile-01: Welcome & Onboarding | AC01: ICN branding display; AC02: Page transition animations; AC03: First-time user experience | **Implemented** | WelcomeScreen, pageTransitions.ts, ICN logo assets | Pass/Fail/Blocked | [Test welcome screen display, branding, transitions] |
-| US-Mobile-02: List/Grid View Modes | AC01: Switch between list/grid views; AC02: Smooth animations; AC03: Consistent data display | **Implemented** | CompaniesScreen view mode switching, layout animations | Pass/Fail/Blocked | [Test view mode switching, animation smoothness, data consistency] |
-| US-Mobile-03: Docker Development Environment | AC01: Containerized development; AC02: Make command workflow; AC03: Hot reload functionality | **Implemented** | Dockerfile, docker-compose.yml, Makefile, development setup | Pass/Fail/Blocked | [Test development environment setup, make commands, hot reload] |
+| User Story | Acceptance Criteria | Features Touched | Result | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| US1.1: Company Capability Database (Mock) | AC01: Company data structure with capabilities; AC02: Mock data generation (~20 companies); AC03: Single primary address per company | mockCompanies.ts, Company types, data structure | Partially-Pass | [Limited mock implementation - full database pending] |
+| US1.2: Advanced Multi-Criteria Search | AC01: Multiple filter criteria (capabilities, sectors, verification); AC02: Real-time search across names/addresses; AC03: Filter combinations work together | CompaniesScreen search, FilterModal, multi-select filters | Partially-Pass | [Core search implemented, tier-based restrictions pending] |
+| US1.3: Interactive Map Visualization | AC01: Google Maps with company markers; AC02: Real-time pan/zoom updates; AC03: Distance-based search; AC04: Map/table view toggle | MapScreen, react-native-maps, marker clustering, search area | Partially-Pass | [Core map features implemented, advanced clustering pending] |
+| US1.4: Data Export (Basic) | AC01: Basic company information display; AC02: Shareable company details | Company detail views, mock data presentation | Not-yet-implemented | [Basic display only, export functionality not implemented] |
+| US2.1: Cross-Platform Interface | AC01: React Native mobile app; AC02: Responsive design; AC03: Consistent UX across devices | App.tsx, cross-platform components, responsive layouts | Pass | [Mobile app implemented] |
+| US2.2: User Account Management | AC01: User interface preparation; AC02: Tier-based access structure | Basic app structure, placeholder screens | Not-yet-implemented | [Authentication not implemented - placeholder only] |
+| US2.4: Bookmarking System | AC01: Bookmark/unbookmark companies; AC02: Saved companies section; AC03: Bookmark persistence | CompaniesScreen bookmark functionality, saved section | Partially-Pass | [Basic bookmarking implemented, folders/tiers pending] |
+| Welcome Screen Implementation | AC01: ICN branding display; AC02: Page transition animations; AC03: First-time user onboarding | WelcomeScreen, pageTransitions.ts, ICN assets | Pass | [Additional feature - onboarding implemented] |
+| Navigation System | AC01: Bottom tab navigation; AC02: Screen persistence; AC03: Navigation consistency | Bottom Tab Navigator, screen components | Pass | [Core navigation implemented] |
+| Docker Development Environment | AC01: Containerized development; AC02: Make command workflow; AC03: Hot reload functionality | Dockerfile, docker-compose.yml, Makefile | Pass | [Development environment fully implemented] |
 
 ## 5) Test Evidence
 
