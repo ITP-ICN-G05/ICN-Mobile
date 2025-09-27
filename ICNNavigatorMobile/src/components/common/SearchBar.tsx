@@ -1,7 +1,17 @@
 import React from 'react';
 import { View, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/colors';
+
+// Local color definitions
+const Colors = {
+  white: '#FFFFFF',
+  text: '#111111',
+  black50: '#808080',
+  black20: '#E0E0E0', // Border color
+  primary: '#F99F1C',
+  searchBg: '#FFFFFF', // Search bar background color changed to white
+  orange200: '#FAB249',
+};
 
 interface SearchBarProps {
   value: string;
@@ -29,17 +39,12 @@ export default function SearchBar({
           testID="search-input"
           accessibilityLabel="Search input"
         />
+        {onFilter && (
+          <TouchableOpacity style={styles.filterButton} onPress={onFilter}>
+            <Ionicons name="filter" size={20} color={Colors.black50} />
+          </TouchableOpacity>
+        )}
       </View>
-      {onFilter && (
-        <TouchableOpacity 
-          style={styles.filterButton} 
-          onPress={onFilter}
-          testID="filter-button"
-          accessibilityLabel="Filter companies"
-        >
-          <Ionicons name="filter" size={24} color={Colors.white} />
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -49,7 +54,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.searchBg,
     gap: 12,
   },
   searchContainer: {
@@ -58,6 +63,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.white,
     borderRadius: 25,
+    borderWidth: 1,
+    borderColor: Colors.black20,
     paddingHorizontal: 16,
     height: 44,
     gap: 8,
@@ -68,10 +75,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.orange[200],
+    padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },

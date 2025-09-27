@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,17 @@ export default function FilterDropdown({
   
   // Handle both string and array types
   const [tempSelected, setTempSelected] = useState<string | string[]>(selected);
+
+  // CRITICAL FIX: Sync tempSelected with parent's selected prop when it changes
+  useEffect(() => {
+    setTempSelected(selected);
+  }, [selected]);
+
+  // Reset expansion state when selected changes (cleaner UX)
+  useEffect(() => {
+    setIsExpanded(false);
+    setShowMore(false);
+  }, [selected]);
 
   // Filter out "All" from options if it exists, as we'll add it separately
   const filteredOptions = options.filter(opt => opt !== 'All');
@@ -90,13 +101,25 @@ export default function FilterDropdown({
     }
   };
 
+  // Reset tempSelected when dropdown is collapsed without applying
+  const handleDropdownToggle = () => {
+    if (isExpanded) {
+      // If closing without applying, reset tempSelected to match selected
+      setTempSelected(selected);
+      setIsExpanded(false);
+      setShowMore(false);
+    } else {
+      setIsExpanded(true);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
       
       <TouchableOpacity
         style={[styles.dropdown, isExpanded && styles.dropdownExpanded]}
-        onPress={() => setIsExpanded(!isExpanded)}
+        onPress={handleDropdownToggle}
       >
         <Text style={styles.dropdownText}>{getDisplayText()}</Text>
         <Ionicons 
@@ -184,13 +207,15 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   dropdown: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: '#FAE4C5',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   dropdownExpanded: {
     borderBottomLeftRadius: 0,
@@ -226,8 +251,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: '#F7B85C',
+    borderColor: '#F7B85C',
   },
   radio: {
     width: 20,
@@ -240,13 +265,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioSelected: {
-    borderColor: Colors.primary,
+    borderColor: '#F7B85C',
   },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#F7B85C',
   },
   optionText: {
     fontSize: 15,
@@ -261,7 +286,7 @@ const styles = StyleSheet.create({
     color: Colors.black50,
   },
   applyButton: {
-    backgroundColor: Colors.orange[400],
+    backgroundColor: '#F7B85CE6', // Added transparency (90% opacity)
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -270,6 +295,6 @@ const styles = StyleSheet.create({
   applyText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: '#FFFFFF', // Changed to white
   },
 });

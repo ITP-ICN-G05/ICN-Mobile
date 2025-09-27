@@ -3,7 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MapScreen from '../screens/main/MapScreen';
 import CompanyDetailScreen from '../screens/main/CompanyDetailScreen';
 
-const Stack = createNativeStackNavigator();
+export type MapStackParamList = {
+  MapView: undefined;
+  CompanyDetail: { companyId: string; companyName?: string };
+};
+
+const Stack = createNativeStackNavigator<MapStackParamList>();
 
 export default function MapStack() {
   return (

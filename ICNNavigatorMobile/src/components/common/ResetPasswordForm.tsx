@@ -15,7 +15,7 @@ export default function ResetPasswordForm() {
   const [countdown, setCountdown] = useState(0);
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
-  const countdownTimer = useRef(null);
+  const countdownTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Countdown effect
   useEffect(() => {
