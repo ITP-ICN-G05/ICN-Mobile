@@ -35,6 +35,15 @@ export default function ManageSubscriptionScreen() {
     loadData();
   }, []);
 
+  // Refresh data when screen focuses (fix for change plan not refreshing)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshSubscription();
+      loadData();
+    });
+    return unsubscribe;
+  }, [navigation, refreshSubscription]);
+
   const loadData = async () => {
     setLoadingBilling(true);
     try {
