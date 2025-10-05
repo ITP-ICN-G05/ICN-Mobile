@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors } from '../../constants/colors';
@@ -27,6 +28,7 @@ export default function MapScreen() {
   const navigation = useNavigation<any>();
   const { features } = useUserTier();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight(); // NEW: use tab bar height for watermark spacing
 
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
@@ -40,6 +42,13 @@ export default function MapScreen() {
   const zoomTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionLockUntil = useRef<number>(0);
   const cameraBusyRef = useRef<boolean>(false); // true while we are animating the camera to a selection
+
+  // NEW: Manual interaction lock — block auto-fit for a short period after user pinch/drag or recenter action
+  const manualZoomLockUntil = useRef<number>(0);
+  const bumpManualLock = (ms = 4000) => {
+    manualZoomLockUntil.current = Date.now() + ms;
+    cancelZoomTimeout();
+  };
 
   const cancelZoomTimeout = () => {
     if (zoomTimeout.current) {
@@ -61,12 +70,13 @@ export default function MapScreen() {
     }, ms);
   };
 
-  const scheduleZoom = (delay = 250) => {
-    // Respect selection/camera lock
-    if (Date.now() < selectionLockUntil.current || cameraBusyRef.current) return;
+  // scheduleZoom now supports a `force` flag to bypass the manual-zoom lock when the user intentionally changes filters/search
+  const scheduleZoom = (delay = 250, force = false) => {
+    // Respect selection/camera lock & manual interaction lock
+    if (!force && (Date.now() < selectionLockUntil.current || cameraBusyRef.current || Date.now() < manualZoomLockUntil.current)) return;
     cancelZoomTimeout();
     zoomTimeout.current = setTimeout(() => {
-      if (Date.now() < selectionLockUntil.current || cameraBusyRef.current) return; // double-check before firing
+      if (!force && (Date.now() < selectionLockUntil.current || cameraBusyRef.current || Date.now() < manualZoomLockUntil.current)) return; // double-check before firing
       zoomToFilteredResults();
     }, delay);
   };
@@ -74,6 +84,15 @@ export default function MapScreen() {
   useEffect(() => () => cancelZoomTimeout(), []);
 
   // Load ICN data
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterOptions, setFilterOptions] = useState<{
+    sectors: string[];
+    states: string[];
+    cities: string[];
+    capabilities: string[];
+  }>({ sectors: [], states: [], cities: [], capabilities: [] });
+
   useEffect(() => {
     (async () => {
       try {
@@ -106,16 +125,6 @@ export default function MapScreen() {
       animated: true,
     });
   };
-
-  // ICN Data state (placed after hooks for clarity)
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filterOptions, setFilterOptions] = useState<{
-    sectors: string[];
-    states: string[];
-    cities: string[];
-    capabilities: string[];
-  }>({ sectors: [], states: [], cities: [], capabilities: [] });
 
   // Filters
   const [filters, setFilters] = useState<EnhancedFilterOptions>({
@@ -249,7 +258,7 @@ export default function MapScreen() {
     if (isLoading) return;
     if (selectedCompany) return; // keep focused on the selected company
     if (cameraBusyRef.current) return; // don't fight the camera while it's animating
-    if (!isFromDropdownSelection) scheduleZoom(250);
+    if (!isFromDropdownSelection) scheduleZoom(250); // will be skipped if user recently pinched/dragged
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredCompanies, isLoading, selectedCompany]);
 
@@ -282,7 +291,7 @@ export default function MapScreen() {
       setSelectedCompany(null);
       cameraBusyRef.current = false;
       selectionLockUntil.current = 0;
-      // after closing, allow auto-fit again (e.g., show all results)
+      // after closing, allow auto-fit again (e.g., show all results) — still respects manual lock
       scheduleZoom(250);
     };
 
@@ -329,14 +338,16 @@ export default function MapScreen() {
     setTimeout(() => setIsFromDropdownSelection(false), 900);
   };
 
-  const handleRegionChangeComplete = (newRegion: Region) => {
+  // NOTE: details?.isGesture is supported in recent react-native-maps. We also hook onPanDrag as a fallback.
+  const handleRegionChangeComplete = (newRegion: Region, details?: { isGesture?: boolean }) => {
     setRegion(newRegion);
+    if (details?.isGesture) bumpManualLock(4000); // user pinched or dragged — keep their zoom for a bit
   };
 
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
     setFilters(newFilters);
     setFilterModalVisible(false);
-    scheduleZoom(250);
+    scheduleZoom(250, true); // force auto-fit on explicit filter changes
   };
 
   const handleSearchChange = (text: string) => {
@@ -347,10 +358,10 @@ export default function MapScreen() {
     // When the search bar is cleared by tapping the "X" AND the card is open, close the card too.
     if (text === '' && wasCardOpen) {
       closeCompanyCard({ clearSearch: false, animate: true });
-      return; // let the close handler trigger auto-zoom
+      return; // let the close handler trigger auto-zoom (still respects manual lock)
     }
 
-    if (text === '' || text.length > 2) scheduleZoom(250);
+    if (text === '' || text.length > 2) scheduleZoom(250, true); // search is an explicit intent — bypass manual lock
   };
 
   const getMarkerColor = (company: Company) => (searchText && company.name.toLowerCase().includes(searchText.toLowerCase()) ? Colors.warning : (company.verificationStatus === 'verified' ? Colors.success : Colors.primary));
@@ -359,6 +370,8 @@ export default function MapScreen() {
     setIsFromDropdownSelection(false);
     setSelectedCompany(null);
     setFilters({ capabilities: [], sectors: [], distance: 'All' });
+    // Move to default city view; also respect user's next gesture by adding a brief manual lock
+    bumpManualLock(1500);
     mapRef.current?.animateCamera({ center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 11 }, { duration: 400 });
   };
 
@@ -388,8 +401,11 @@ export default function MapScreen() {
     );
   }
 
-  // Always render the watermark. When a card is open, lift it above the card area; when idle (nothing clicked), keep it near safe-area bottom.
-  const watermarkBottom = selectedCompany ? CARD_RAISE + 16 : (insets?.bottom ?? 0) + 24;
+  // Always render the watermark. When a card is open, lift it above the card area.
+  // When idle (no card), place it ABOVE the bottom tab bar by a small margin.
+  const watermarkBottom = selectedCompany
+    ? CARD_RAISE + 16
+    : Math.max(tabBarHeight + 12, (insets?.bottom ?? 0) + 24);
 
   return (
     <View style={styles.container}>
@@ -398,7 +414,8 @@ export default function MapScreen() {
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={MELBOURNE_REGION}
-        onRegionChangeComplete={handleRegionChangeComplete}
+        onRegionChangeComplete={(r, details) => handleRegionChangeComplete(r, details as any)}
+        onPanDrag={() => bumpManualLock(4000)} // fallback for older Android where details?.isGesture is unreliable
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
@@ -487,7 +504,17 @@ export default function MapScreen() {
         <TouchableOpacity style={styles.filterFloatingButton} onPress={() => setFilterModalVisible(true)}>
           <Ionicons name="filter" size={24} color={Colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.myLocationButton} onPress={() => mapRef.current?.animateCamera({ center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 11 }, { duration: 400 })}>
+        <TouchableOpacity
+          style={styles.myLocationButton}
+          onPress={() => {
+            // Recenter to default city view (or swap with user GPS center if you wire it)
+            bumpManualLock(2500); // prevent immediate auto-fit after recenter
+            mapRef.current?.animateCamera(
+              { center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 15 },
+              { duration: 400 }
+            );
+          }}
+        >
           <Ionicons name="locate" size={24} color={Colors.primary} />
         </TouchableOpacity>
       </View>
