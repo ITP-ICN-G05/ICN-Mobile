@@ -22,6 +22,7 @@ interface TestResult {
 const ApiIntegrationTest: React.FC = () => {
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isApiTestMode, setIsApiTestMode] = useState(true);
 
   const addTestResult = (result: TestResult) => {
     setTestResults(prev => [...prev, result]);
@@ -111,21 +112,109 @@ const ApiIntegrationTest: React.FC = () => {
     return response;
   };
 
+  // Real App Functionality Tests
+  const testRealAppSearch = async () => {
+    // Test real organisation search with actual data
+    const response = await organisationApiService.searchOrganisationsWithErrorHandling(
+      0, 0, 100, 100, // Default search area
+      {}, // No filters
+      '', // No search text
+      { skip: 0, limit: 10 } // Get 10 results
+    );
+    
+    if (response && response.length > 0) {
+      return {
+        result: `Found ${response.length} organisations`,
+        sampleOrganisation: response[0],
+        status: 'Real data available'
+      };
+    }
+    
+    return {
+      result: 'No organisations found',
+      status: 'No data'
+    };
+  };
+
+  const testRealAppGeocoding = async () => {
+    // Test if organisations have coordinates
+    const response = await organisationApiService.searchOrganisationsWithErrorHandling(
+      0, 0, 100, 100,
+      {},
+      '',
+      { skip: 0, limit: 5 }
+    );
+    
+    if (response && response.length > 0) {
+      const withCoords = response.filter(org => org.coordinates);
+      return {
+        result: `${withCoords.length}/${response.length} organisations have coordinates`,
+        geocodingStatus: withCoords.length > 0 ? 'Working' : 'No coordinates',
+        status: withCoords.length > 0 ? 'Geocoding active' : 'Geocoding needed'
+      };
+    }
+    
+    return {
+      result: 'No data to check geocoding',
+      status: 'No data'
+    };
+  };
+
+  const testRealAppFilters = async () => {
+    // Test different filter combinations
+    const tests = [
+      { name: 'Sector Filter', filters: { sector: 'Critical Minerals' } },
+      { name: 'Company Type Filter', filters: { companyType: 'Manufacturer' } },
+      { name: 'Location Filter', filters: { location: 'NSW' } }
+    ];
+    
+    const results = [];
+    for (const test of tests) {
+      try {
+        const response = await organisationApiService.searchOrganisationsWithErrorHandling(
+          0, 0, 100, 100,
+          test.filters,
+          '',
+          { skip: 0, limit: 5 }
+        );
+        results.push({
+          filter: test.name,
+          count: response ? response.length : 0,
+          status: 'Working'
+        });
+      } catch (error) {
+        results.push({
+          filter: test.name,
+          count: 0,
+          status: 'Error',
+          error: error.message
+        });
+      }
+    }
+    
+    return {
+      result: 'Filter tests completed',
+      filterResults: results,
+      status: 'Filters tested'
+    };
+  };
+
   const runAllTests = async () => {
     setIsRunning(true);
     setTestResults([]);
 
-    // Test 1: Basic connection
-    await runTest('Basic Connection Test', testBasicConnection);
-
-    // Test 2: Send validation code
-    await runTest('Send Validation Code', testSendValidationCode);
-
-    // Test 3: Search organisations
-    await runTest('Search Organisations', testSearchOrganisations);
-
-    // Test 4: Get organisation details
-    await runTest('Get Organisation Details', testGetOrganisationDetails);
+    if (isApiTestMode) {
+      // API Test Mode - Test basic connectivity and endpoints
+      await runTest('Basic Connection Test', testBasicConnection);
+      await runTest('Send Validation Code', testSendValidationCode);
+      await runTest('Search Organisations', testSearchOrganisations);
+      await runTest('Get Organisation Details', testGetOrganisationDetails);
+    } else {
+      // Real App Mode - Test actual app functionality
+      await runTest('Real App Search', testRealAppSearch);
+      await runTest('Real App Geocoding', testRealAppGeocoding);
+      await runTest('Real App Filters', testRealAppFilters);
+    }
 
     setIsRunning(false);
   };
@@ -160,6 +249,43 @@ const ApiIntegrationTest: React.FC = () => {
         <Text style={styles.configTitle}>Current Configuration:</Text>
         <Text style={styles.configText}>API Base URL: {API_BASE_URL}</Text>
         <Text style={styles.configText}>Environment: {__DEV__ ? 'Development' : 'Production'}</Text>
+        <Text style={styles.configText}>Test Mode: {isApiTestMode ? 'API Test Mode' : 'Real App Mode'}</Text>
+      </View>
+
+      <View style={styles.modeToggleContainer}>
+        <Text style={styles.modeToggleTitle}>Test Mode:</Text>
+        <View style={styles.modeToggleButtons}>
+          <TouchableOpacity
+            style={[
+              styles.modeToggleButton,
+              isApiTestMode ? styles.modeToggleButtonActive : styles.modeToggleButtonInactive
+            ]}
+            onPress={() => setIsApiTestMode(true)}
+            disabled={isRunning}
+          >
+            <Text style={[
+              styles.modeToggleButtonText,
+              isApiTestMode ? styles.modeToggleButtonTextActive : styles.modeToggleButtonTextInactive
+            ]}>
+              API Test Mode
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modeToggleButton,
+              !isApiTestMode ? styles.modeToggleButtonActive : styles.modeToggleButtonInactive
+            ]}
+            onPress={() => setIsApiTestMode(false)}
+            disabled={isRunning}
+          >
+            <Text style={[
+              styles.modeToggleButtonText,
+              !isApiTestMode ? styles.modeToggleButtonTextActive : styles.modeToggleButtonTextInactive
+            ]}>
+              Real App Mode
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.buttonContainer}>
@@ -171,7 +297,9 @@ const ApiIntegrationTest: React.FC = () => {
           {isRunning ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Run All Tests</Text>
+            <Text style={styles.buttonText}>
+              {isApiTestMode ? 'Run API Tests' : 'Test Real App'}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -222,30 +350,61 @@ const ApiIntegrationTest: React.FC = () => {
           2. Ensure MongoDB container is running
         </Text>
         <Text style={styles.instructionsText}>
-          3. Click "Run All Tests" to start testing
+          3. Choose test mode:
+        </Text>
+        <Text style={styles.instructionsSubText}>
+          • API Test Mode: Tests basic connectivity and endpoints
+        </Text>
+        <Text style={styles.instructionsSubText}>
+          • Real App Mode: Tests actual app functionality with real data
         </Text>
         <Text style={styles.instructionsText}>
-          4. View test results and response times
+          4. Click the test button to start testing
+        </Text>
+        <Text style={styles.instructionsText}>
+          5. View test results and response times
         </Text>
       </View>
 
       <View style={styles.troubleshootingContainer}>
         <Text style={styles.troubleshootingTitle}>Test Results Explanation:</Text>
-        <Text style={styles.troubleshootingText}>
-          ✅ Organisation Search: Working perfectly - API is functional
-        </Text>
-        <Text style={styles.troubleshootingText}>
-          ❌ User Validation Code: Expected failure - needs GOOGLE_MAPS_API_KEY
-        </Text>
-        <Text style={styles.troubleshootingText}>
-          ❌ Organisation Details: Expected failure - test IDs don't exist in database
-        </Text>
-        <Text style={styles.troubleshootingText}>
-          • These failures are normal for a fresh setup
-        </Text>
-        <Text style={styles.troubleshootingText}>
-          • The core API functionality is working correctly
-        </Text>
+        {isApiTestMode ? (
+          <>
+            <Text style={styles.troubleshootingText}>
+              ✅ Organisation Search: Working perfectly - API is functional
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              ❌ User Validation Code: Expected failure - needs GOOGLE_MAPS_API_KEY
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              ❌ Organisation Details: Expected failure - test IDs don't exist in database
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              • These failures are normal for a fresh setup
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              • The core API functionality is working correctly
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.troubleshootingText}>
+              ✅ Real App Search: Tests actual data retrieval
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              ✅ Real App Geocoding: Checks if coordinates are available
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              ✅ Real App Filters: Tests different filter combinations
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              • This mode tests the actual app functionality
+            </Text>
+            <Text style={styles.troubleshootingText}>
+              • Use this to verify your app works with real data
+            </Text>
+          </>
+        )}
       </View>
 
       <View style={styles.troubleshootingContainer}>
@@ -298,6 +457,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
+  },
+  modeToggleContainer: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#9C27B0',
+  },
+  modeToggleTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#333',
+  },
+  modeToggleButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modeToggleButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 4,
+    borderWidth: 2,
+  },
+  modeToggleButtonActive: {
+    backgroundColor: '#9C27B0',
+    borderColor: '#9C27B0',
+  },
+  modeToggleButtonInactive: {
+    backgroundColor: '#fff',
+    borderColor: '#9C27B0',
+  },
+  modeToggleButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modeToggleButtonTextActive: {
+    color: '#fff',
+  },
+  modeToggleButtonTextInactive: {
+    color: '#9C27B0',
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -388,6 +591,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
+  },
+  instructionsSubText: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 2,
+    marginLeft: 16,
   },
   troubleshootingContainer: {
     backgroundColor: '#fff',
