@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -17,6 +17,11 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // References for input field navigation
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
 
   const handleSignUp = async () => {
     if (submitting) return;
@@ -56,6 +61,9 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           value={userName}
           onChangeText={setUserName}
           autoCapitalize="none"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => emailRef.current?.focus()}
         />
       </View>
 
@@ -66,6 +74,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           <Text style={styles.label}>Email</Text>
         </View>
         <TextInput
+          ref={emailRef}
           style={styles.input}
           placeholder="Enter your email"
           placeholderTextColor="#999"
@@ -73,6 +82,9 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
       </View>
 
@@ -84,12 +96,16 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         </View>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={passwordRef}
             style={styles.passwordInput}
             placeholder="Enter your password"
             placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => confirmPasswordRef.current?.focus()}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}
@@ -112,12 +128,15 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         </View>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={confirmPasswordRef}
             style={styles.passwordInput}
-            placeholder="Enter your password"
+            placeholder="Confirm your password"
             placeholderTextColor="#999"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!showConfirmPassword}
+            returnKeyType="done"
+            onSubmitEditing={handleSignUp}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}
@@ -152,9 +171,10 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     paddingHorizontal: 20,
+    paddingBottom: 20, // extra bottom padding to accommodate the keyboard
   },
   inputContainer: {
-    marginBottom: 15,
+    marginBottom: 18, // increased spacing between input fields
   },
   labelContainer: {
     flexDirection: 'row',
@@ -202,8 +222,8 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: 25, // increased top spacing for the button
+    marginBottom: 25, // increased bottom spacing for the button
   },
   signUpButtonText: {
     color: '#FFFFFF',

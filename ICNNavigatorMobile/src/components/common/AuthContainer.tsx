@@ -105,9 +105,10 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingVertical: 30,
+    paddingVertical: 25, // slightly reduce vertical padding
     paddingHorizontal: 10,
     marginHorizontal: 20,
+    marginBottom: 20, // add bottom margin to leave space for the keyboard
     shadowColor: '#000',
     shadowOffset: { 
       width: 0, 
@@ -156,6 +157,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     minHeight: 300,
+    paddingBottom: 10, // 为表单底部添加额外间距
   },
   backToSignInContainer: {
     alignItems: 'center',
