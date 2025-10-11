@@ -1,24 +1,24 @@
-// services/hybridDataService.ts - 混合数据服务（本地+API）
+// services/hybridDataService.ts - Hybrid Data Service (Local + API)
 import { Company, ICNItem, ICNCompanyData } from '../types';
 import { organisationApiService, OrganisationCard } from './organisationApiService';
-// import { icnDataService } from './icnDataService'; // 保留原有的本地数据服务
+// import { icnDataService } from './icnDataService'; // Keep existing local data service
 
 /**
- * 混合数据服务
- * 结合本地JSON数据和后端API数据
+ * Hybrid data service
+ * Combines local JSON data and backend API data
  */
 export class HybridDataService {
-  private useApi: boolean = true; // 可以通过配置控制是否使用API
+  private useApi: boolean = true; // Can be configured to control whether to use API
 
   /**
-   * 设置是否使用API
+   * Set whether to use API
    */
   setApiEnabled(enabled: boolean) {
     this.useApi = enabled;
   }
 
   /**
-   * 搜索公司 - 优先使用API，失败时降级到本地数据
+   * Search companies - Prioritize API, fallback to local data on failure
    */
   async searchCompanies(
     searchText: string = '',
@@ -28,22 +28,22 @@ export class HybridDataService {
   ): Promise<Company[]> {
     if (this.useApi) {
       try {
-        // 尝试使用API搜索
+        // Try to use API search
         const apiResults = await this.searchFromApi(searchText, location, filters, limit);
         if (apiResults.length > 0) {
           return this.convertApiResultsToCompanies(apiResults);
         }
       } catch (error) {
-        console.warn('API搜索失败，降级到本地数据:', error);
+        console.warn('API search failed, falling back to local data:', error);
       }
     }
 
-    // 降级到本地数据搜索
+    // Fallback to local data search
     return this.searchFromLocal(searchText, location, filters, limit);
   }
 
   /**
-   * 从API搜索
+   * Search from API
    */
   private async searchFromApi(
     searchText: string,
@@ -52,7 +52,7 @@ export class HybridDataService {
     limit: number
   ): Promise<OrganisationCard[]> {
     return await organisationApiService.searchOrganisationsWithErrorHandling(
-      location || 'VIC', // 默认维多利亚州
+      0, 0, 100, 100, // Default coordinates and search range
       filters,
       searchText,
       { skip: 0, limit }
@@ -60,7 +60,7 @@ export class HybridDataService {
   }
 
   /**
-   * 从本地数据搜索
+   * Search from local data
    */
   private async searchFromLocal(
     searchText: string,
@@ -68,13 +68,45 @@ export class HybridDataService {
     filters: Record<string, any>,
     limit: number
   ): Promise<Company[]> {
-    // TODO: 集成现有的icnDataService
-    console.log('本地搜索暂未实现，返回空结果');
-    return [];
+    try {
+      // Integrate existing icnDataService
+      const icnService = await import('./icnDataService');
+      await icnService.default.loadData();
+      
+      let companies = icnService.default.getCompanies();
+      
+      // Apply search filters
+      if (searchText) {
+        companies = icnService.default.searchCompanies(searchText);
+      }
+      
+      // Apply location filters
+      if (location) {
+        companies = companies.filter(c => 
+          c.billingAddress?.state === location
+        );
+      }
+      
+      // Apply other filter conditions
+      if (filters.sector) {
+        companies = companies.filter(c => 
+          c.keySectors.includes(filters.sector)
+        );
+      }
+      
+      if (filters.companyType) {
+        companies = icnService.default.filterByCompanyType(filters.companyType);
+      }
+      
+      return companies.slice(0, limit);
+    } catch (error) {
+      console.error('Local data search failed:', error);
+      return [];
+    }
   }
 
   /**
-   * 将API结果转换为Company格式
+   * Convert API results to Company format
    */
   private convertApiResultsToCompanies(apiResults: OrganisationCard[]): Company[] {
     return apiResults.map(org => ({
@@ -92,7 +124,7 @@ export class HybridDataService {
   }
 
   /**
-   * 获取公司详情 - 优先使用API
+   * Get company details - Prioritize API
    */
   async getCompanyDetails(companyId: string, userId?: string): Promise<Company | null> {
     if (this.useApi && userId) {
@@ -106,17 +138,23 @@ export class HybridDataService {
           return this.convertApiDetailToCompany(apiDetails);
         }
       } catch (error) {
-        console.warn('API获取详情失败，降级到本地数据:', error);
+        console.warn('API get details failed, falling back to local data:', error);
       }
     }
 
-    // TODO: 降级到本地数据
-    console.log('本地数据查询暂未实现');
-    return null;
+    // Fallback to local data
+    try {
+      const icnService = await import('./icnDataService');
+      await icnService.default.loadData();
+      return icnService.default.getCompanyById(companyId) || null;
+    } catch (error) {
+      console.error('Local data query failed:', error);
+      return null;
+    }
   }
 
   /**
-   * 将API详情转换为Company格式
+   * Convert API details to Company format
    */
   private convertApiDetailToCompany(org: any): Company {
     return {
@@ -135,7 +173,7 @@ export class HybridDataService {
   }
 
   /**
-   * 批量获取公司信息
+   * Batch get company information
    */
   async getBatchCompanies(companyIds: string[]): Promise<Company[]> {
     if (this.useApi) {
@@ -145,43 +183,49 @@ export class HybridDataService {
           return this.convertApiResultsToCompanies(apiResults);
         }
       } catch (error) {
-        console.warn('API批量获取失败，降级到本地数据:', error);
+        console.warn('API batch get failed, falling back to local data:', error);
       }
     }
 
-    // TODO: 降级到本地数据
-    console.log('本地批量查询暂未实现');
-    return [];
+    // Fallback to local data
+    try {
+      const icnService = await import('./icnDataService');
+      await icnService.default.loadData();
+      return icnService.default.getCompaniesByIds(companyIds);
+    } catch (error) {
+      console.error('Local batch query failed:', error);
+      return [];
+    }
   }
 
   /**
-   * 获取数据源信息
+   * Get data source information
    */
   getDataSource(): 'api' | 'local' | 'hybrid' {
     return this.useApi ? 'hybrid' : 'local';
   }
 
   /**
-   * 同步本地数据与API数据（可选功能）
+   * Sync local data with API data (optional feature)
    */
   async syncLocalDataWithApi(): Promise<void> {
     if (!this.useApi) return;
 
     try {
-      // 可以实现定期同步逻辑
-      console.log('同步本地数据与API数据...');
+      // Can implement periodic sync logic
+      console.log('Syncing local data with API data...');
       
-      // 例如：获取最新的公司列表并更新本地缓存
+      // For example: get latest company list and update local cache
       const latestCompanies = await this.searchFromApi('', 'VIC', {}, 100);
       
-      // 这里可以实现缓存更新逻辑
-      console.log(`同步了 ${latestCompanies.length} 条记录`);
+      // Can implement cache update logic here
+      console.log(`Synced ${latestCompanies.length} records`);
     } catch (error) {
-      console.error('数据同步失败:', error);
+      console.error('Data sync failed:', error);
     }
   }
 }
 
-// 导出单例实例
+// Export singleton instance
 export const hybridDataService = new HybridDataService();
 export default hybridDataService;

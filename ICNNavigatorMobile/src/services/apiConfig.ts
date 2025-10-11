@@ -1,28 +1,29 @@
-// services/apiConfig.ts - API配置和基础服务
+// services/apiConfig.ts - API Configuration and Base Service
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// API配置
+// API Configuration
 export const API_CONFIG = {
-  // 开发环境 - 根据您的后端API指南设置
+  // Development Environment - Based on Backend API Guide
   DEV: {
-    // 对于Android模拟器，使用 10.0.2.2 来访问您电脑的localhost
-    // 如果您使用物理设备，请替换为您的电脑IP地址 (例如 'http://192.168.1.100:8082/api')
+    // For Android emulator, use 10.0.2.2 to access your computer's localhost
+    // For iOS simulator, use localhost
+    // If using physical device, replace with your computer's IP address (e.g., 'http://192.168.1.100:8082/api')
     BASE_URL: 'http://10.0.2.2:8082/api',
     TIMEOUT: 10000,
   },
-  // 生产环境
+  // Production Environment
   PROD: {
     BASE_URL: 'https://api.icnvictoria.com/api',
     TIMEOUT: 15000,
   }
 };
 
-// 获取当前环境配置
+// Get current environment configuration
 const getCurrentConfig = () => {
   return __DEV__ ? API_CONFIG.DEV : API_CONFIG.PROD;
 };
 
-// HTTP请求方法枚举
+// HTTP request method enumeration
 export enum HttpMethod {
   GET = 'GET',
   POST = 'POST',
@@ -30,7 +31,7 @@ export enum HttpMethod {
   DELETE = 'DELETE'
 }
 
-// API响应接口
+// API response interface
 export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
@@ -38,12 +39,12 @@ export interface ApiResponse<T = any> {
   success: boolean;
 }
 
-// 基础API服务类
+// Base API service class
 export class BaseApiService {
   private config = getCurrentConfig();
 
   /**
-   * 获取认证令牌
+   * Get authentication token
    */
   private async getAuthToken(): Promise<string | null> {
     try {
@@ -55,7 +56,7 @@ export class BaseApiService {
   }
 
   /**
-   * 构建请求头
+   * Build request headers
    */
   private async buildHeaders(contentType: string = 'application/json'): Promise<HeadersInit> {
     const headers: HeadersInit = {
@@ -72,7 +73,7 @@ export class BaseApiService {
   }
 
   /**
-   * 处理API响应
+   * Handle API response
    */
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     const isJson = response.headers.get('content-type')?.includes('application/json');
@@ -98,7 +99,7 @@ export class BaseApiService {
   }
 
   /**
-   * 执行HTTP请求
+   * Execute HTTP request
    */
   protected async request<T = any>(
     endpoint: string,
@@ -115,10 +116,10 @@ export class BaseApiService {
         headers,
       };
 
-      // 添加请求体（如果不是GET请求）
+      // Add request body (if not GET request)
       if (method !== HttpMethod.GET && body) {
         if (body instanceof FormData) {
-          // FormData情况下，让浏览器自动设置Content-Type
+          // For FormData, let browser automatically set Content-Type
           delete (headers as any)['Content-Type'];
           requestOptions.body = body;
         } else {
@@ -149,7 +150,7 @@ export class BaseApiService {
   }
 
   /**
-   * GET请求
+   * GET request
    */
   protected get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     let url = endpoint;
@@ -170,21 +171,21 @@ export class BaseApiService {
   }
 
   /**
-   * POST请求
+   * POST request
    */
   protected post<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, HttpMethod.POST, body);
   }
 
   /**
-   * PUT请求
+   * PUT request
    */
   protected put<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, HttpMethod.PUT, body);
   }
 
   /**
-   * DELETE请求
+   * DELETE request
    */
   protected delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, HttpMethod.DELETE);

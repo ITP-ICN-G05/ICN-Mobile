@@ -1,7 +1,7 @@
-// services/organisationApiService.ts - 基于后端API指南的组织服务
+// services/organisationApiService.ts - Organisation Service Based on Backend API Guide
 import BaseApiService, { ApiResponse } from './apiConfig';
 
-// 组织相关接口定义 - 基于后端API指南
+// Organisation related interface definitions - Based on Backend API Guide
 export interface Organisation {
   _id: string;
   detailedItemID: string;
@@ -14,15 +14,18 @@ export interface Organisation {
 }
 
 export interface OrganisationCard {
-  // 组织卡片数据结构（简化版本）
+  // Organisation card data structure (simplified version)
   _id: string;
   itemName: string;
   sectorName: string;
-  // 根据实际后端返回的数据结构调整
+  // Adjust based on actual backend response data structure
 }
 
 export interface OrganisationSearchParams {
-  location: string;
+  locationX?: number;
+  locationY?: number;
+  lenX?: number;
+  lenY?: number;
   filterParameters: Record<string, any>;
   searchString?: string;
   skip?: number;
@@ -30,22 +33,25 @@ export interface OrganisationSearchParams {
 }
 
 /**
- * 组织API服务类
- * 基于后端API指南 (http://localhost:8082/api) 实现
+ * Organisation API service class
+ * Based on backend API guide (http://localhost:8082/api)
  */
 export class OrganisationApiService extends BaseApiService {
 
   /**
-   * 搜索组织
+   * Search organisations
    * GET /api/organisation/general
    * 
-   * @param params 搜索参数
+   * @param params Search parameters
    * @returns Promise<ApiResponse<OrganisationCard[]>>
    */
   async searchOrganisations(params: OrganisationSearchParams): Promise<ApiResponse<OrganisationCard[]>> {
-    // 构建查询参数
+    // Build query parameters - Adjusted according to backend API guide
     const queryParams: Record<string, any> = {
-      location: params.location,
+      locationX: 0, // Default value, actual coordinates need to be passed when used
+      locationY: 0, // Default value, actual coordinates need to be passed when used
+      lenX: 100,    // Search range X length
+      lenY: 100,    // Search range Y length
       filterParameters: JSON.stringify(params.filterParameters),
     };
 
@@ -63,16 +69,16 @@ export class OrganisationApiService extends BaseApiService {
   }
 
   /**
-   * 根据ID获取组织列表
+   * Get organisation list by IDs
    * GET /api/organisation/generalByIds?ids={id1}&ids={id2}...
    * 
-   * @param ids 组织ID数组
+   * @param ids Organisation ID array
    * @returns Promise<ApiResponse<OrganisationCard[]>>
    */
   async getOrganisationsByIds(ids: string[]): Promise<ApiResponse<OrganisationCard[]>> {
     const queryParams: Record<string, any> = {};
     
-    // 为每个ID添加参数
+    // Add parameters for each ID
     ids.forEach(id => {
       if (!queryParams.ids) {
         queryParams.ids = [];
@@ -84,11 +90,11 @@ export class OrganisationApiService extends BaseApiService {
   }
 
   /**
-   * 获取组织详细信息
+   * Get organisation details
    * GET /api/organisation/specific?organisationId={id}&user={userId}
    * 
-   * @param organisationId 组织ID
-   * @param userId 用户ID
+   * @param organisationId Organisation ID
+   * @param userId User ID
    * @returns Promise<ApiResponse<Organisation>>
    */
   async getOrganisationDetails(organisationId: string, userId: string): Promise<ApiResponse<Organisation>> {
@@ -99,23 +105,32 @@ export class OrganisationApiService extends BaseApiService {
   }
 
   /**
-   * 带有错误处理的搜索组织方法
+   * Search organisations with error handling
    * 
-   * @param location 位置
-   * @param filters 过滤条件
-   * @param searchText 搜索文本
-   * @param pagination 分页参数
+   * @param locationX Location X coordinate
+   * @param locationY Location Y coordinate
+   * @param lenX Search range X length
+   * @param lenY Search range Y length
+   * @param filters Filter conditions
+   * @param searchText Search text
+   * @param pagination Pagination parameters
    * @returns Promise<OrganisationCard[]>
    */
   async searchOrganisationsWithErrorHandling(
-    location: string,
+    locationX: number = 0,
+    locationY: number = 0,
+    lenX: number = 100,
+    lenY: number = 100,
     filters: Record<string, any> = {},
     searchText: string = '',
     pagination: { skip?: number; limit?: number } = {}
   ): Promise<OrganisationCard[]> {
     try {
       const response = await this.searchOrganisations({
-        location,
+        locationX,
+        locationY,
+        lenX,
+        lenY,
         filterParameters: filters,
         searchString: searchText,
         ...pagination
@@ -124,20 +139,20 @@ export class OrganisationApiService extends BaseApiService {
       if (response.success && response.data) {
         return response.data;
       } else {
-        console.warn('搜索组织失败:', response.error);
+        console.warn('Failed to search organisations:', response.error);
         return [];
       }
     } catch (error) {
-      console.error('搜索组织时发生错误:', error);
+      console.error('Error occurred while searching organisations:', error);
       return [];
     }
   }
 
   /**
-   * 获取组织详情（带错误处理）
+   * Get organisation details with error handling
    * 
-   * @param organisationId 组织ID
-   * @param userId 用户ID
+   * @param organisationId Organisation ID
+   * @param userId User ID
    * @returns Promise<Organisation | null>
    */
   async getOrganisationDetailsWithErrorHandling(
@@ -150,19 +165,19 @@ export class OrganisationApiService extends BaseApiService {
       if (response.success && response.data) {
         return response.data;
       } else {
-        console.warn('获取组织详情失败:', response.error);
+        console.warn('Failed to get organisation details:', response.error);
         return null;
       }
     } catch (error) {
-      console.error('获取组织详情时发生错误:', error);
+      console.error('Error occurred while getting organisation details:', error);
       return null;
     }
   }
 
   /**
-   * 批量获取组织信息（带错误处理）
+   * Batch get organisation information with error handling
    * 
-   * @param ids 组织ID数组
+   * @param ids Organisation ID array
    * @returns Promise<OrganisationCard[]>
    */
   async getBatchOrganisationsWithErrorHandling(ids: string[]): Promise<OrganisationCard[]> {
@@ -176,16 +191,16 @@ export class OrganisationApiService extends BaseApiService {
       if (response.success && response.data) {
         return response.data;
       } else {
-        console.warn('批量获取组织失败:', response.error);
+        console.warn('Failed to batch get organisations:', response.error);
         return [];
       }
     } catch (error) {
-      console.error('批量获取组织时发生错误:', error);
+      console.error('Error occurred while batch getting organisations:', error);
       return [];
     }
   }
 }
 
-// 导出单例实例
+// Export singleton instance
 export const organisationApiService = new OrganisationApiService();
 export default organisationApiService;

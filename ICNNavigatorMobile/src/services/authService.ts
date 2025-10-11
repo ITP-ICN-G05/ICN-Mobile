@@ -97,7 +97,9 @@ class AuthService {
     try {
       const token = await AsyncStorage.getItem(this.TOKEN_KEY);
       if (token) {
-        await fetch('https://api.icnvictoria.com/auth/logout', {
+        // Use unified API configuration
+        const { API_BASE_URL } = await import('../constants');
+        await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -113,7 +115,9 @@ class AuthService {
   static async deleteAccount(password: string): Promise<void> {
     const token = await AsyncStorage.getItem(this.TOKEN_KEY);
     
-    const response = await fetch('https://api.icnvictoria.com/account/delete', {
+    // Use unified API configuration
+    const { API_BASE_URL } = await import('../constants');
+    const response = await fetch(`${API_BASE_URL}/account/delete`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
