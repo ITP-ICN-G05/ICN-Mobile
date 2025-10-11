@@ -1,3 +1,7 @@
+// API Integration Test Component - DISABLED FOR REAL APP TESTING
+// Uncomment this section when you want to re-enable API testing
+
+/*
 import React, { useState } from 'react';
 import {
   View,
@@ -619,3 +623,52 @@ const styles = StyleSheet.create({
 });
 
 export default ApiIntegrationTest;
+*/
+
+// Placeholder component for when API test is disabled
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+
+const ApiIntegrationTestDisabled: React.FC = () => {
+  return (
+    <View style={styles.disabledContainer}>
+      <Text style={styles.disabledTitle}>API Integration Test</Text>
+      <Text style={styles.disabledText}>
+        API Integration Test is currently disabled for real app testing.
+      </Text>
+      <Text style={styles.disabledSubText}>
+        To re-enable: Uncomment the code in ApiIntegrationTest.tsx
+      </Text>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  disabledContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  disabledTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#333',
+  },
+  disabledText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#666',
+  },
+  disabledSubText: {
+    fontSize: 14,
+    textAlign: 'center',
+    color: '#888',
+    fontStyle: 'italic',
+  },
+});
+
+export default ApiIntegrationTestDisabled;

@@ -11,14 +11,32 @@ export interface Organisation {
   sectorMappingID: string;
   sectorName: string;
   Subtotal: number;
+  // Additional fields from backend response
+  name?: string;
+  items?: any[];
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  coord?: {
+    type: string;
+    coordinates: [number, number]; // [longitude, latitude]
+  };
+  [key: string]: any;
 }
 
 export interface OrganisationCard {
-  // Organisation card data structure (simplified version)
-  _id: string;
-  itemName: string;
-  sectorName: string;
-  // Adjust based on actual backend response data structure
+  // Organisation card data structure based on backend API
+  _id?: string;
+  name: string;
+  items?: any[];
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  sectorName?: string;
+  // Additional fields from backend response
+  [key: string]: any;
 }
 
 export interface OrganisationSearchParams {

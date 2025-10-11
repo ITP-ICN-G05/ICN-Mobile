@@ -10,7 +10,7 @@ import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/com
 import { Colors } from '../../constants/colors';
 import { Company } from '../../types';
 import { useUserTier } from '../../contexts/UserTierContext';
-import icnDataService from '../../services/icnDataService';
+import { useICNData } from '../../hooks/useICNData';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -83,33 +83,32 @@ export default function MapScreen() {
 
   useEffect(() => () => cancelZoomTimeout(), []);
 
-  // Load ICN data
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filterOptions, setFilterOptions] = useState<{
-    sectors: string[];
-    states: string[];
-    cities: string[];
-    capabilities: string[];
-  }>({ sectors: [], states: [], cities: [], capabilities: [] });
+  // Use backend ICN data hook
+  const { 
+    companies, 
+    loading: isLoading, 
+    error: dataError,
+    statistics,
+    filterOptions: backendFilterOptions,
+    search: searchCompanies,
+    applyFilters: applyCompanyFilters,
+    refresh: refreshData
+  } = useICNData(true);
 
+  // Convert backend filter options to map format
+  const filterOptions = {
+    sectors: backendFilterOptions?.sectors || [],
+    states: backendFilterOptions?.states || [],
+    cities: backendFilterOptions?.cities || [],
+    capabilities: backendFilterOptions?.capabilityTypes || []
+  };
+
+  // Auto-zoom to companies when data loads
   useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        await icnDataService.loadData();
-        const loadedCompanies = icnDataService.getCompanies();
-        const options = icnDataService.getFilterOptions();
-        setCompanies(loadedCompanies);
-        setFilterOptions(options);
-        if (loadedCompanies.length > 0) setTimeout(() => zoomToAllCompanies(loadedCompanies), 400);
-      } catch (e) {
-        console.error('Error loading ICN data:', e);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+    if (companies.length > 0 && !isLoading) {
+      setTimeout(() => zoomToAllCompanies(companies), 400);
+    }
+  }, [companies, isLoading]);
 
   const zoomToAllCompanies = (list: Company[]) => {
     const coords = list
@@ -133,12 +132,26 @@ export default function MapScreen() {
     distance: 'All',
   });
 
-  // Derived list
+  // Derived list - use backend search results
+  const [searchResults, setSearchResults] = useState<Company[]>([]);
+  
+  // Handle search with backend
+  useEffect(() => {
+    const performSearch = async () => {
+      if (searchText) {
+        await searchCompanies(searchText);
+        // The search results will be available in the companies array from useICNData
+      } else {
+        // Reset to all companies when search is cleared
+        await applyCompanyFilters({});
+      }
+    };
+    
+    performSearch();
+  }, [searchText, searchCompanies, applyCompanyFilters]);
+
   const filteredCompanies = useMemo(() => {
     let filtered = [...companies];
-
-    // Search
-    if (searchText) filtered = icnDataService.searchCompanies(searchText);
 
     // Capabilities
     if (filters.capabilities.length > 0) {

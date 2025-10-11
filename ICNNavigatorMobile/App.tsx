@@ -1,14 +1,14 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AppNavigator from './src/navigation/AppNavigator';
 import { UserProvider } from './src/contexts/UserContext';
 import { UserTierProvider } from './src/contexts/UserTierContext';
 import { SettingsProvider } from './src/contexts/SettingsContext';
 import { ProfileProvider } from './src/contexts/ProfileContext';
-import ApiIntegrationTest from './src/components/ApiIntegrationTest'; // 导入测试组件
+// import ApiIntegrationTest from './src/components/ApiIntegrationTest'; // API Test component - DISABLED
 
 export default function App() {
-  // 临时渲染测试组件
   return (
     <SafeAreaProvider>
       <UserProvider>
@@ -16,7 +16,8 @@ export default function App() {
           <SettingsProvider>
             <UserTierProvider>
               <StatusBar style="auto" />
-              <ApiIntegrationTest />
+              <AppNavigator />
+              {/* <ApiIntegrationTest /> */} {/* API Test component - DISABLED for real app testing */}
             </UserTierProvider>
           </SettingsProvider>
         </ProfileProvider>
