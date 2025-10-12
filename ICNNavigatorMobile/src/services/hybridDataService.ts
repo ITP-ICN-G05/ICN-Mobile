@@ -301,9 +301,17 @@ export class HybridDataService {
       let longitude = 0;
       
       if (org.coord && org.coord.coordinates && org.coord.coordinates.length === 2) {
-        // Backend stores as [longitude, latitude] in GeoJSON format
-        longitude = org.coord.coordinates[0];
-        latitude = org.coord.coordinates[1];
+        // Backend stores as [latitude, longitude] (NON-STANDARD order)
+        // Extract them in the correct order for this backend
+        latitude = org.coord.coordinates[0];  // First element is latitude
+        longitude = org.coord.coordinates[1]; // Second element is longitude
+        
+        // Validate coordinate ranges
+        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+          console.warn(`Invalid coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
+          latitude = 0;
+          longitude = 0;
+        }
       }
       
       // Create unique ID based on organization ID, address, and index to prevent duplicates
