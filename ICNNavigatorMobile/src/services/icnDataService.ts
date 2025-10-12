@@ -294,6 +294,20 @@ function convertICNDateToISO(icnDate: string): string | undefined {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Simple hash function for address strings
+ */
+function hashString(str: string): string {
+  let hash = 0;
+  if (str.length === 0) return hash.toString();
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
+}
+
 function stratifiedSampleCompanies(companies: Company[], targetSize: number = 300): Company[] {
   console.log(`Starting stratified sampling from ${companies.length} companies to ${targetSize}`);
   
@@ -383,13 +397,20 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
         return;
       }
       
-      if (!companyMap.has(orgId)) {
-        const normalizedState = normalizeStateTerritory(org["Organisation: Billing State/Province"]);
-        const street = cleanCompanyData(org["Organisation: Billing Street"], 'Address Not Available');
-        let city = cleanCompanyData(org["Organisation: Billing City"], 'City Not Available');
-        city = autoCorrectData(city, 'city');
-        const postcode = cleanCompanyData(org["Organisation: Billing Zip/Postal Code"], '');
-        
+      // Create unique key based on organization ID and address
+      const normalizedState = normalizeStateTerritory(org["Organisation: Billing State/Province"]);
+      const street = cleanCompanyData(org["Organisation: Billing Street"], 'Address Not Available');
+      let city = cleanCompanyData(org["Organisation: Billing City"], 'City Not Available');
+      city = autoCorrectData(city, 'city');
+      const postcode = cleanCompanyData(org["Organisation: Billing Zip/Postal Code"], '');
+      
+      // Create composite key for unique address using capability ID to prevent duplicates
+      const addressKey = `${street}_${city}_${normalizedState}`.toLowerCase().replace(/\s+/g, '_');
+      const addressHash = hashString(addressKey);
+      const capabilityId = org["Organisation Capability"] || `cap_${Date.now()}_${Math.random()}`;
+      const uniqueKey = `${orgId}_${addressHash}_${capabilityId}`;
+      
+      if (!companyMap.has(uniqueKey)) {
         const companyName = cleanCompanyData(org["Organisation: Organisation Name"], `Company ${orgId.slice(-4)}`);
         const fullAddress = [street, city, normalizedState, postcode]
           .filter(v => v && v !== '')
@@ -407,8 +428,8 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
         const itemName = cleanCompanyData(item["Item Name"], 'Service');
         const detailedItemName = cleanCompanyData(item["Detailed Item Name"], itemName);
         
-        companyMap.set(orgId, {
-          id: orgId,
+        companyMap.set(uniqueKey, {
+          id: uniqueKey,
           name: companyName,
           address: fullAddress || 'Address Not Available',
           billingAddress: {
@@ -439,9 +460,11 @@ async function convertICNDataToCompanies(icnItems: ICNItem[], useSampling: boole
           phoneNumber: undefined,
           email: undefined,
           website: undefined,
+          // Store original organization ID for potential grouping in detail screens
+          organizationId: orgId
         } as Company);
       } else {
-        const existingCompany = companyMap.get(orgId)!;
+        const existingCompany = companyMap.get(uniqueKey)!;
         const sectorName = cleanCompanyData(item["Sector Name"], 'General');
         const detailedItemName = cleanCompanyData(item["Detailed Item Name"], 'Service');
         const capabilityType = normalizeCapabilityType(org["Capability Type"]);
@@ -514,7 +537,7 @@ class ICNDataService {
   private isLoading = false;
   private isLoaded = false;
   private lastLoadTime: Date | null = null;
-  private useSampling: boolean = true;
+  private useSampling: boolean = false;
   
   private constructor() {}
   

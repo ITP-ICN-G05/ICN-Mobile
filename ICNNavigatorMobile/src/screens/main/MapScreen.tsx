@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+﻿import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
@@ -10,7 +10,7 @@ import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/com
 import { Colors } from '../../constants/colors';
 import { Company } from '../../types';
 import { useUserTier } from '../../contexts/UserTierContext';
-import { useICNData } from '../../hooks/useICNData';
+import hybridDataService from '../../services/hybridDataService';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -83,32 +83,33 @@ export default function MapScreen() {
 
   useEffect(() => () => cancelZoomTimeout(), []);
 
-  // Use backend ICN data hook
-  const { 
-    companies, 
-    loading: isLoading, 
-    error: dataError,
-    statistics,
-    filterOptions: backendFilterOptions,
-    search: searchCompanies,
-    applyFilters: applyCompanyFilters,
-    refresh: refreshData
-  } = useICNData(true);
+  // Load ICN data
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterOptions, setFilterOptions] = useState<{
+    sectors: string[];
+    states: string[];
+    cities: string[];
+    capabilities: string[];
+  }>({ sectors: [], states: [], cities: [], capabilities: [] });
 
-  // Convert backend filter options to map format
-  const filterOptions = {
-    sectors: backendFilterOptions?.sectors || [],
-    states: backendFilterOptions?.states || [],
-    cities: backendFilterOptions?.cities || [],
-    capabilities: backendFilterOptions?.capabilityTypes || []
-  };
-
-  // Auto-zoom to companies when data loads
   useEffect(() => {
-    if (companies.length > 0 && !isLoading) {
-      setTimeout(() => zoomToAllCompanies(companies), 400);
-    }
-  }, [companies, isLoading]);
+    (async () => {
+      try {
+        setIsLoading(true);
+        await hybridDataService.loadData();
+        const loadedCompanies = hybridDataService.getCompanies();
+        const options = hybridDataService.getFilterOptions();
+        setCompanies(loadedCompanies);
+        setFilterOptions(options);
+        if (loadedCompanies.length > 0) setTimeout(() => zoomToAllCompanies(loadedCompanies), 400);
+      } catch (e) {
+        console.error('Error loading ICN data:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
 
   const zoomToAllCompanies = (list: Company[]) => {
     const coords = list
@@ -132,26 +133,12 @@ export default function MapScreen() {
     distance: 'All',
   });
 
-  // Derived list - use backend search results
-  const [searchResults, setSearchResults] = useState<Company[]>([]);
-  
-  // Handle search with backend
-  useEffect(() => {
-    const performSearch = async () => {
-      if (searchText) {
-        await searchCompanies(searchText);
-        // The search results will be available in the companies array from useICNData
-      } else {
-        // Reset to all companies when search is cleared
-        await applyCompanyFilters({});
-      }
-    };
-    
-    performSearch();
-  }, [searchText, searchCompanies, applyCompanyFilters]);
-
+  // Derived list
   const filteredCompanies = useMemo(() => {
     let filtered = [...companies];
+
+    // Search
+    if (searchText) filtered = hybridDataService.searchCompaniesSync(searchText);
 
     // Capabilities
     if (filters.capabilities.length > 0) {

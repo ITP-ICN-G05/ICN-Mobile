@@ -79,31 +79,18 @@ export default function CompaniesScreen() {
 
   // Use ICN search when text changes
   useEffect(() => {
-    const performSearch = async () => {
-      if (searchText) {
-        await searchICN(searchText);
-      } else {
-        // Reset to all companies when search is cleared
-        await applyICNFilters({});
-      }
-    };
-    
-    performSearch();
-  }, [searchText, searchICN, applyICNFilters]);
+    if (searchText) {
+      searchICN(searchText);
+    } else {
+      // Reset to all companies when search is cleared
+      applyICNFilters({});
+    }
+  }, [searchText]);
 
   // Filter and sort companies
   const filteredAndSortedCompanies = useMemo(() => {
-    console.log('🔍 CompaniesScreen - Filtering companies:');
-    console.log('📊 allCompanies:', allCompanies.length);
-    console.log('🔍 icnSearchResults:', icnSearchResults.length);
-    console.log('📝 searchText:', searchText);
-    console.log('⏳ icnLoading:', icnLoading);
-    console.log('❌ icnError:', icnError);
-    
     // Start with search results or all companies
     let filtered = searchText ? icnSearchResults : allCompanies;
-    
-    console.log('📋 Initial filtered count:', filtered.length);
 
     // Apply capability filter (using ICN capabilities)
     if (filters.capabilities.length > 0) {
@@ -284,9 +271,6 @@ export default function CompaniesScreen() {
         break;
     }
 
-    console.log('✅ Final filtered count:', filtered.length);
-    console.log('📋 Sample filtered company:', filtered[0]);
-    
     return filtered;
   }, [searchText, filters, sortBy, allCompanies, icnSearchResults, features]);
 

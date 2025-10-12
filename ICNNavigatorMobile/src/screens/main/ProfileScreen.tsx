@@ -26,6 +26,7 @@ import SubscriptionCard from '../../components/common/SubscriptionCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../../services/authService';
 import DataExportService from '../../services/dataExportService';
+import hybridDataService from '../../services/hybridDataService';
 
 interface ProfileSectionProps {
   title: string;
@@ -405,6 +406,31 @@ export default function ProfileScreen() {
     } catch (error) {
       console.error('Error sharing:', error);
     }
+  };
+
+  const handleClearGeocodeCache = async () => {
+    Alert.alert(
+      'Clear Geocode Cache',
+      'This will clear all cached geocoding data (2,022+ entries) and force fresh API calls. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Cache',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              await hybridDataService.clearGeocodeCache();
+              Alert.alert('Success', 'Geocode cache cleared. Restart the app to reload with fresh API calls.');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear geocode cache');
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Sign Out Handler
@@ -791,6 +817,12 @@ export default function ProfileScreen() {
             title="Export My Data"
             value={stats.exports === '∞' ? 'Unlimited' : `${stats.exports} left`}
             onPress={handleExportData}
+          />
+          <SettingItem
+            icon="trash-bin-outline"
+            title="Clear Geocode Cache"
+            value="2,022 entries"
+            onPress={handleClearGeocodeCache}
           />
           <SettingItem
             icon="shield-checkmark-outline"

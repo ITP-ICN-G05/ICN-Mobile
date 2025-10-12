@@ -35,6 +35,10 @@ export interface OrganisationCard {
   state?: string;
   zip?: string;
   sectorName?: string;
+  coord?: {
+    type: string;
+    coordinates: [number, number]; // [longitude, latitude] from backend
+  };
   // Additional fields from backend response
   [key: string]: any;
 }
@@ -216,6 +220,20 @@ export class OrganisationApiService extends BaseApiService {
       console.error('Error occurred while batch getting organisations:', error);
       return [];
     }
+  }
+
+  /**
+   * Get all organisations (for initial data load)
+   * Uses a large search area to get all companies
+   */
+  async getAllOrganisations(limit: number = 5000): Promise<OrganisationCard[]> {
+    return await this.searchOrganisationsWithErrorHandling(
+      -200, -200, // Starting coordinates
+      400, 400,   // Large search area covering Australia/NZ
+      {},         // No filters
+      '',         // No search text
+      { skip: 0, limit }
+    );
   }
 }
 

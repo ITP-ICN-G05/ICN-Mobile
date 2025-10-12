@@ -134,6 +134,7 @@ export interface Company {
   dataSource?: 'ICN' | 'manual' | 'import';  // Identifies data origin
   lastUpdated?: string;
   icnValidationDate?: string;  // Original ICN date format if needed
+  organizationId?: string;  // Original organization ID for grouping related locations
 }
 
 // ==========================================
