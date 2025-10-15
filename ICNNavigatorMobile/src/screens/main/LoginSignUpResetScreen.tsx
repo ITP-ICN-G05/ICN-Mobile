@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Image, ScrollView } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Image, ScrollView, KeyboardAvoidingView, Platform, Keyboard, Animated } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AuthContainer from '../../components/common/AuthContainer';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -17,9 +17,53 @@ const AuthContainerCompat = AuthContainer as React.ComponentType<{
 export default function LoginSignUpResetScreen() {
   const { params } = useRoute<ScreenRoute>();
   const mode: AuthMode = params?.mode ?? 'login';
+  
+  // Animated value for smooth form movement when keyboard appears/disappears
+  const formTranslateY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    // Keyboard event listeners for smooth form animation
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => {
+        // Move form up when keyboard appears to ensure all fields are visible
+        const keyboardHeight = event.endCoordinates.height;
+        const moveUpDistance = Platform.OS === 'ios' ? -keyboardHeight * 0.3 : -50;
+        
+        Animated.timing(formTranslateY, {
+          toValue: moveUpDistance,
+          duration: Platform.OS === 'ios' ? event.duration : 250,
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      (event) => {
+        // Return form to original position when keyboard disappears
+        Animated.timing(formTranslateY, {
+          toValue: 0,
+          duration: Platform.OS === 'ios' ? event.duration : 250,
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+
+    // Cleanup listeners on component unmount
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, [formTranslateY]);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
       <StatusBar style="light" />
 
       <Image
@@ -37,16 +81,26 @@ export default function LoginSignUpResetScreen() {
       />
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
       >
-        <View style={styles.authWrapper}>
+        <Animated.View 
+          style={[
+            styles.authWrapper,
+            {
+              transform: [{ translateY: formTranslateY }]
+            }
+          ]}
+        >
           {/* Force remount when mode changes and support either prop name */}
           <AuthContainerCompat key={mode} initialMode={mode} mode={mode} />
-        </View>
+        </Animated.View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -72,6 +126,16 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   scrollContainer: { flex: 1, marginTop: 120 },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 50 },
-  authWrapper: { flex: 1, justifyContent: 'center', minHeight: 500 },
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    paddingBottom: 50,
+    paddingTop: 20, // 增加顶部间距
+  },
+  authWrapper: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    minHeight: 500,
+    paddingHorizontal: 10, // 增加水平间距
+  },
 });
