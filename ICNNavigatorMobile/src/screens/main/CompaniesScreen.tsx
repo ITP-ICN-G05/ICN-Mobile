@@ -87,6 +87,20 @@ export default function CompaniesScreen() {
     }
   }, [searchText]);
 
+  // Debug logging to verify company type derivation (temporary)
+  useEffect(() => {
+    if (allCompanies.length > 0) {
+      console.log('=== Company Type Debug Info ===');
+      const sampleCompanies = allCompanies.slice(0, 3);
+      sampleCompanies.forEach((company, index) => {
+        console.log(`Company ${index + 1}: ${company.name}`);
+        console.log(`  - companyType: ${company.companyType || 'undefined'}`);
+        console.log(`  - icnCapabilities:`, company.icnCapabilities?.map(c => c.capabilityType) || 'none');
+        console.log('---');
+      });
+    }
+  }, [allCompanies]);
+
   // Filter and sort companies
   const filteredAndSortedCompanies = useMemo(() => {
     // Start with search results or all companies

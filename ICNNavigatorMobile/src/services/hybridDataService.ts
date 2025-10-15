@@ -351,6 +351,7 @@ export class HybridDataService {
         keySectors: keySectors.length > 0 ? keySectors : (org.sectorName ? [org.sectorName] : []),
         capabilities,  // ✅ Fixed: no longer empty array
         icnCapabilities,  // ✅ Fixed: contains full data
+        companyType: this.deriveCompanyType(icnCapabilities),  // ✅ Derive company type from capabilities
         
         // ✅ Add mock data for fields not in backend
         abn: mockData.abn,
@@ -430,6 +431,30 @@ export class HybridDataService {
     
     const normalized = type.toLowerCase().trim();
     return typeMap[normalized] || 'Service Provider';
+  }
+
+  /**
+   * Derive companyType from icnCapabilities array
+   */
+  private deriveCompanyType(capabilities: Company['icnCapabilities']): Company['companyType'] {
+    if (!capabilities || capabilities.length === 0) return undefined;
+    
+    const types = capabilities.map(c => c.capabilityType.toLowerCase());
+    const hasSupplier = types.some(t => 
+      t.includes('supplier') || t === 'item supplier' || t === 'parts supplier'
+    );
+    const hasManufacturer = types.some(t => 
+      t.includes('manufacturer') || t === 'assembler'
+    );
+    
+    if (hasSupplier && hasManufacturer) return 'both';
+    if (hasManufacturer) return 'manufacturer';
+    if (hasSupplier) return 'supplier';
+    if (types.some(t => t.includes('service'))) return 'service';
+    if (types.some(t => t.includes('retail'))) return 'retail';
+    if (types.some(t => t.includes('consultant'))) return 'consultant';
+    
+    return undefined;
   }
 
   /**
@@ -591,6 +616,7 @@ export class HybridDataService {
         keySectors,
         capabilities,
         icnCapabilities,
+        companyType: this.deriveCompanyType(icnCapabilities),  // ✅ Derive company type from capabilities
         
         // Add mock data
         abn: mockData.abn,
