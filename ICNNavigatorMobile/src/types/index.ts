@@ -80,6 +80,7 @@ export interface Company {
     capabilityType: CapabilityType;  // Now uses the full CapabilityType union
     sectorName: string;  // "Sector Name"
     sectorMappingId: string;  // "Sector Mapping ID"
+    localContentPercentage?: number;  // Mock data for local content percentage
   }>;
   
   // Contact information (not in ICN data - needs enrichment)
@@ -97,6 +98,7 @@ export interface Company {
   companySize?: 'SME' | 'Medium' | 'Large' | 'Enterprise';
   certifications?: string[];
   ownershipType?: ('Female-owned' | 'First Nations-owned' | 'Veteran-owned' | 'Minority-owned')[];
+  diversityMarkers?: string[];
   socialEnterprise?: boolean;
   australianDisabilityEnterprise?: boolean;
   revenue?: number;

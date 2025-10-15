@@ -1,6 +1,6 @@
 // services/hybridDataService.ts - Hybrid Data Service (Local + API)
-import { Company, ICNItem, ICNCompanyData } from '../types';
-import { organisationApiService, OrganisationCard } from './organisationApiService';
+import { Company, ICNItem, ICNCompanyData, CapabilityType } from '../types';
+import { organisationApiService, OrganisationCard, BackendItem } from './organisationApiService';
 import icnDataService from './icnDataService'; // Import for fallback methods
 
 /**
@@ -319,6 +319,22 @@ export class HybridDataService {
       const addressHash = this.hashString(addressKey);
       const uniqueId = `${org._id || 'unknown'}_${addressHash}_${index}`;
       
+      // ✅ Convert items to icnCapabilities
+      const icnCapabilities = this.convertBackendItemsToCapabilities(org.items);
+      
+      // ✅ Extract capabilities string array from icnCapabilities
+      const capabilities = icnCapabilities?.map(cap => cap.detailedItemName) || [];
+      
+      // ✅ Extract keySectors from icnCapabilities (deduplicated)
+      const keySectors = [...new Set(
+        (icnCapabilities || [])
+          .map(cap => cap.sectorName)
+          .filter(Boolean)
+      )];
+      
+      // ✅ Generate mock data for missing fields
+      const mockData = this.generateMockCompanyData(org._id || uniqueId);
+      
       return {
         id: uniqueId,
         name: org.name || org.itemName || 'Unknown Company',
@@ -332,8 +348,22 @@ export class HybridDataService {
         latitude,
         longitude,
         verificationStatus: 'verified' as const,
-        keySectors: org.sectorName ? [org.sectorName] : [],
-        capabilities: [],
+        keySectors: keySectors.length > 0 ? keySectors : (org.sectorName ? [org.sectorName] : []),
+        capabilities,  // ✅ Fixed: no longer empty array
+        icnCapabilities,  // ✅ Fixed: contains full data
+        
+        // ✅ Add mock data for fields not in backend
+        abn: mockData.abn,
+        employeeCount: mockData.employeeCount,
+        revenue: mockData.revenue,
+        diversityMarkers: mockData.diversityMarkers,
+        ownershipType: mockData.ownershipType,
+        socialEnterprise: mockData.socialEnterprise,
+        australianDisabilityEnterprise: mockData.australianDisabilityEnterprise,
+        certifications: mockData.certifications,
+        localContentPercentage: mockData.localContentPercentage,
+        description: mockData.description,
+        
         dataSource: 'ICN' as const,
         lastUpdated: new Date().toISOString(),
         // Store original organization ID for potential grouping in detail screens
@@ -354,6 +384,123 @@ export class HybridDataService {
       hash = hash & hash; // Convert to 32bit integer
     }
     return Math.abs(hash).toString(36);
+  }
+
+  /**
+   * Convert backend items[] to frontend icnCapabilities[]
+   */
+  private convertBackendItemsToCapabilities(
+    items: BackendItem[] | undefined
+  ): Company['icnCapabilities'] {
+    if (!items || items.length === 0) {
+      return [];
+    }
+
+    return items.map((item, index) => ({
+      capabilityId: item.organisationCapability || item.id || `cap_${index}`,
+      itemId: item.itemId || '',
+      itemName: item.itemName || 'Unknown Item',
+      detailedItemName: item.detailedItemName || item.itemName || '',
+      capabilityType: this.normalizeCapabilityType(item.capabilityType),
+      sectorName: item.sectorName || 'Unknown Sector',
+      sectorMappingId: item.sectorMappingId || '',
+      localContentPercentage: this.generateMockLocalContent()  // Mock data
+    }));
+  }
+
+  /**
+   * Normalize capability type
+   */
+  private normalizeCapabilityType(type: string | undefined): CapabilityType {
+    if (!type) return 'Service Provider';
+    
+    const typeMap: Record<string, CapabilityType> = {
+      'supplier': 'Supplier',
+      'item supplier': 'Item Supplier',
+      'parts supplier': 'Parts Supplier',
+      'manufacturer': 'Manufacturer',
+      'manufacturer (parts)': 'Manufacturer (Parts)',
+      'service provider': 'Service Provider',
+      'project management': 'Project Management',
+      'designer': 'Designer',
+      'assembler': 'Assembler',
+      'retailer': 'Retailer',
+      'wholesaler': 'Wholesaler'
+    };
+    
+    const normalized = type.toLowerCase().trim();
+    return typeMap[normalized] || 'Service Provider';
+  }
+
+  /**
+   * Generate mock data for fields not provided by backend
+   */
+  private generateMockCompanyData(orgId: string) {
+    // Use org ID as seed for consistent mock data
+    const seedStr = this.hashString(orgId);
+    const seed = parseInt(seedStr, 36) || 12345; // Convert to number, fallback to 12345
+    const random = (min: number, max: number) => {
+      const x = Math.sin(seed) * 10000;
+      return Math.floor((x - Math.floor(x)) * (max - min + 1)) + min;
+    };
+
+    return {
+      // ABN: Australian Business Number (11 digits)
+      abn: `${random(10, 99)}${random(100000000, 999999999)}`,
+      
+      // Employee count (tiered ranges)
+      employeeCount: [5, 12, 25, 50, 100, 250, 500, 1000][random(0, 7)],
+      
+      // Revenue (in AUD)
+      revenue: [500000, 1000000, 2500000, 5000000, 10000000, 25000000][random(0, 5)],
+      
+      // Diversity markers (30% chance for each)
+      diversityMarkers: random(1, 10) > 7 ? [
+        ['Female Owned Business', 'Social Enterprise', 'Australian Disability Enterprise'][random(0, 2)]
+      ] : undefined,
+      
+      // Ownership type (30% chance)
+      ownershipType: random(1, 10) > 7 ? [
+        ['Female-owned', 'Indigenous-owned', 'Minority-owned'][random(0, 2)]
+      ] : undefined,
+      
+      // Social enterprise (20% chance)
+      socialEnterprise: random(1, 10) > 8,
+      
+      // Australian Disability Enterprise (10% chance)
+      australianDisabilityEnterprise: random(1, 10) > 9,
+      
+      // Certifications (50% chance to have 1-3)
+      certifications: random(1, 10) > 5 ? 
+        ['ISO 9001', 'Australian-made Certification', 'Australian Standards']
+          .slice(0, random(1, 3)) 
+        : undefined,
+      
+      // Local content percentage (60-95%)
+      localContentPercentage: random(60, 95),
+      
+      // Company description
+      description: this.generateMockDescription(),
+    };
+  }
+
+  /**
+   * Generate mock local content percentage for capabilities (60-95%)
+   */
+  private generateMockLocalContent(): number {
+    return Math.floor(Math.random() * 36) + 60; // 60-95%
+  }
+
+  /**
+   * Generate mock company description
+   */
+  private generateMockDescription(): string {
+    const templates = [
+      'Leading Australian company specializing in innovative solutions and sustainable business practices. With over two decades of experience, we deliver exceptional value to our clients through cutting-edge technology and expert consultation services.',
+      'Established supplier and manufacturer providing high-quality products and services to industries across Australia. Our commitment to excellence and customer satisfaction has made us a trusted partner in the sector.',
+      'Australian-based enterprise with extensive experience in project delivery and service provision. We pride ourselves on our local content commitment and contribution to the Australian economy.',
+    ];
+    return templates[Math.floor(Math.random() * templates.length)];
   }
 
   /**
@@ -380,6 +527,89 @@ export class HybridDataService {
       return this.getCompanyById(companyId) || null;
     } catch (error) {
       console.error('Local data query failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch full company details by organizationId (for detail page)
+   */
+  async fetchCompanyDetailsById(
+    organizationId: string, 
+    userId: string = 'default_user'
+  ): Promise<Company | null> {
+    if (!this.useApi) {
+      return this.getCompanyById(organizationId) || null;
+    }
+
+    try {
+      const response = await organisationApiService.getOrganisationDetails(
+        organizationId,
+        userId
+      );
+
+      if (!response.success || !response.data) {
+        console.warn('Failed to fetch organisation details:', response.error);
+        return null;
+      }
+
+      const org = response.data;
+      
+      // Convert to Company format
+      const icnCapabilities = this.convertBackendItemsToCapabilities(org.items);
+      const capabilities = icnCapabilities?.map(cap => cap.detailedItemName) || [];
+      const keySectors = [...new Set(
+        (icnCapabilities || [])
+          .map(cap => cap.sectorName)
+          .filter(Boolean)
+      )];
+
+      // Extract coordinates
+      let latitude = 0;
+      let longitude = 0;
+      if (org.coord && org.coord.coordinates && org.coord.coordinates.length === 2) {
+        latitude = org.coord.coordinates[0];
+        longitude = org.coord.coordinates[1];
+      }
+
+      // Generate mock data
+      const mockData = this.generateMockCompanyData(org._id);
+
+      return {
+        id: org._id,
+        name: org.name || 'Unknown Company',
+        address: [org.street, org.city, org.state, org.zip].filter(Boolean).join(', ') || 'Address Not Available',
+        billingAddress: {
+          street: org.street || '',
+          city: org.city || '',
+          state: org.state || 'VIC',
+          postcode: org.zip || ''
+        },
+        latitude,
+        longitude,
+        verificationStatus: 'verified' as const,
+        keySectors,
+        capabilities,
+        icnCapabilities,
+        
+        // Add mock data
+        abn: mockData.abn,
+        employeeCount: mockData.employeeCount,
+        revenue: mockData.revenue,
+        diversityMarkers: mockData.diversityMarkers,
+        ownershipType: mockData.ownershipType,
+        socialEnterprise: mockData.socialEnterprise,
+        australianDisabilityEnterprise: mockData.australianDisabilityEnterprise,
+        certifications: mockData.certifications,
+        localContentPercentage: mockData.localContentPercentage,
+        description: mockData.description,
+        
+        dataSource: 'ICN' as const,
+        lastUpdated: new Date().toISOString(),
+        organizationId: org._id
+      } as Company;
+    } catch (error) {
+      console.error('Error fetching company details:', error);
       return null;
     }
   }

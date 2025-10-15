@@ -274,6 +274,15 @@ export default function CompaniesScreen() {
     return filtered;
   }, [searchText, filters, sortBy, allCompanies, icnSearchResults, features]);
 
+  // Compute UI statistics from displayed data
+  const uiStats = useMemo(() => ({
+    total: filteredAndSortedCompanies.length,
+    verified: filteredAndSortedCompanies.filter(
+      c => c.verificationStatus === 'verified'
+    ).length,
+    saved: bookmarkedIds.length,
+  }), [filteredAndSortedCompanies, bookmarkedIds]);
+
   // Bookmarked companies section
   const bookmarkedCompanies = useMemo(() => {
     return allCompanies.filter(company => bookmarkedIds.includes(company.id));
@@ -463,27 +472,25 @@ export default function CompaniesScreen() {
         )}
       </View>
 
-      {/* Stats Bar with ICN Statistics */}
-      {statistics && (
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{statistics.totalCompanies}</Text>
-            <Text style={styles.statLabel}>Companies</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{statistics.verified}</Text>
-            <Text style={styles.statLabel}>Verified</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{bookmarkedIds.length}</Text>
-            <Text style={styles.statLabel}>
-              Saved {currentTier === 'free' && '(10 max)'}
-            </Text>
-          </View>
+      {/* Stats Bar with UI Statistics */}
+      <View style={styles.statsBar}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{uiStats.total}</Text>
+          <Text style={styles.statLabel}>Companies</Text>
         </View>
-      )}
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{uiStats.verified}</Text>
+          <Text style={styles.statLabel}>Verified</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{uiStats.saved}</Text>
+          <Text style={styles.statLabel}>
+            Saved {currentTier === 'free' && '(10 max)'}
+          </Text>
+        </View>
+      </View>
 
       {/* Sort and View Options */}
       <View style={styles.controlsBar}>
@@ -617,6 +624,16 @@ export default function CompaniesScreen() {
     }
   };
 
+  // Format city and state, filtering out #N/A values
+  const formatCityState = (company: Company) => {
+    const city = company.billingAddress?.city;
+    const state = company.billingAddress?.state;
+    const cleanValue = (s?: string) => 
+      s && s !== '#N/A' && s.trim() !== '' ? s : null;
+    const parts = [cleanValue(city), cleanValue(state)].filter(Boolean);
+    return parts.length ? parts.join(', ') : 'Location unavailable';
+  };
+
   // Render empty state
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -652,7 +669,7 @@ export default function CompaniesScreen() {
         </View>
         <Text style={styles.gridName} numberOfLines={2}>{displayName}</Text>
         <Text style={styles.gridAddress} numberOfLines={1}>
-          {item.billingAddress ? `${item.billingAddress.city}, ${item.billingAddress.state}` : item.address}
+          {formatCityState(item)}
         </Text>
         <TouchableOpacity 
           style={styles.gridBookmark}

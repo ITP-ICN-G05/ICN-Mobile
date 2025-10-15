@@ -77,14 +77,19 @@ export default function CompanyCard({
   // Get location display (city and state from billing address if available)
   const getLocationDisplay = () => {
     if (company.billingAddress) {
-      return `${company.billingAddress.city}, ${company.billingAddress.state}`;
+      const city = company.billingAddress.city;
+      const state = company.billingAddress.state;
+      const cleanValue = (s?: string) => 
+        s && s !== '#N/A' && s.trim() !== '' ? s : null;
+      const parts = [cleanValue(city), cleanValue(state)].filter(Boolean);
+      if (parts.length) return parts.join(', ');
     }
     // Fallback to parsing address string
     const parts = company.address.split(',');
     if (parts.length >= 2) {
       return `${parts[parts.length - 2].trim()}, ${parts[parts.length - 1].trim().split(' ')[0]}`;
     }
-    return company.address;
+    return 'Location unavailable';
   };
 
   return (

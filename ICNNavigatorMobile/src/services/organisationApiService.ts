@@ -1,6 +1,21 @@
 // services/organisationApiService.ts - Organisation Service Based on Backend API Guide
 import BaseApiService, { ApiResponse } from './apiConfig';
 
+// Backend Item interface (matches backend Item.java)
+export interface BackendItem {
+  id?: string;
+  detailedItemId?: string;
+  itemName?: string;
+  itemId?: string;
+  detailedItemName?: string;
+  sectorMappingId?: string;
+  sectorName?: string;
+  subtotal?: number;
+  capabilityType?: string;
+  validationDate?: string;
+  organisationCapability?: string;
+}
+
 // Organisation related interface definitions - Based on Backend API Guide
 export interface Organisation {
   _id: string;
@@ -13,7 +28,7 @@ export interface Organisation {
   Subtotal: number;
   // Additional fields from backend response
   name?: string;
-  items?: any[];
+  items?: BackendItem[];  // ← Explicit type
   street?: string;
   city?: string;
   state?: string;
@@ -29,7 +44,7 @@ export interface OrganisationCard {
   // Organisation card data structure based on backend API
   _id?: string;
   name: string;
-  items?: any[];
+  items?: BackendItem[];  // ← Explicit type
   street?: string;
   city?: string;
   state?: string;

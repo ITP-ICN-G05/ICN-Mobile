@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -11,13 +11,15 @@ import {
   StatusBar,
   Alert,
   Image,
-  Dimensions
+  Dimensions,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Company } from '../../types';
 import { Colors, Spacing } from '../../constants/colors';
 import { useUserTier } from '../../contexts/UserTierContext';
+import { hybridDataService } from '../../services/hybridDataService';
 
 interface CompanyDetailScreenProps {
   route: any;
@@ -51,7 +53,13 @@ const getDisplayValue = (
 };
 
 export default function CompanyDetailScreen({ route, navigation }: CompanyDetailScreenProps) {
-  const { company } = route.params as { company: Company };
+  const { company: initialCompany } = route.params as { company: Company };
+  
+  // ✅ Use state to manage company data
+  const [company, setCompany] = useState<Company>(initialCompany);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isItemsExpanded, setIsItemsExpanded] = useState(false);
   const [isNewsExpanded, setIsNewsExpanded] = useState(false);
@@ -64,10 +72,117 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
   const { features, currentTier } = useUserTier();
   const insets = useSafeAreaInsets();
 
+  // ✅ Refetch full data on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchDetails = async () => {
+      // If already has capabilities, no need to refetch
+      if (initialCompany.icnCapabilities && initialCompany.icnCapabilities.length > 0) {
+        console.log('[CompanyDetailScreen] Using existing capabilities, skip fetch');
+        return;
+      }
+
+      // Must have organizationId to fetch details
+      if (!initialCompany.organizationId) {
+        console.warn('[CompanyDetailScreen] No organizationId, cannot fetch details');
+        return;
+      }
+
+      try {
+        setLoading(true);
+        console.log('[CompanyDetailScreen] Fetching details for:', initialCompany.organizationId);
+        
+        const detailedCompany = await hybridDataService.fetchCompanyDetailsById(
+          initialCompany.organizationId,
+          'default_user'  // TODO: Get real userId from UserContext
+        );
+
+        if (isMounted && detailedCompany) {
+          console.log('[CompanyDetailScreen] Fetched capabilities:', detailedCompany.icnCapabilities?.length);
+          
+          // Merge data: keep existing basic info, update capabilities
+          setCompany(prev => ({
+            ...prev,
+            ...detailedCompany,
+            icnCapabilities: detailedCompany.icnCapabilities,
+            capabilities: detailedCompany.capabilities,
+            keySectors: detailedCompany.keySectors,
+            // Include mock data
+            abn: detailedCompany.abn,
+            employeeCount: detailedCompany.employeeCount,
+            revenue: detailedCompany.revenue,
+            diversityMarkers: detailedCompany.diversityMarkers,
+            ownershipType: detailedCompany.ownershipType,
+            socialEnterprise: detailedCompany.socialEnterprise,
+            australianDisabilityEnterprise: detailedCompany.australianDisabilityEnterprise,
+            certifications: detailedCompany.certifications,
+            localContentPercentage: detailedCompany.localContentPercentage,
+            description: detailedCompany.description,
+          }));
+        }
+      } catch (error) {
+        console.error('[CompanyDetailScreen] Failed to fetch company details:', error);
+        if (isMounted) {
+          setLoadError('Failed to load company details');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialCompany.id, initialCompany.organizationId]);
+
   // Handle back navigation
   const handleBack = () => {
     navigation.goBack();
   };
+
+  // ✅ Add debug logging
+  useEffect(() => {
+    console.log('[CompanyDetailScreen] Company data:', {
+      id: company.id,
+      name: company.name,
+      organizationId: company.organizationId,
+      hasIcnCapabilities: !!company.icnCapabilities,
+      capabilitiesLength: company.icnCapabilities?.length || 0,
+      sampleCapability: company.icnCapabilities?.[0],
+      hasMockData: {
+        abn: !!company.abn,
+        employeeCount: !!company.employeeCount,
+        revenue: !!company.revenue,
+        certifications: !!company.certifications,
+        diversityMarkers: !!company.diversityMarkers
+      }
+    });
+  }, [company]);
+
+  // ✅ Show loading indicator
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={1}>
+              <Ionicons name="arrow-back" size={24} color={Colors.white} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Company Details</Text>
+          </View>
+        </View>
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={{ marginTop: 16, color: Colors.black50 }}>Loading details...</Text>
+        </View>
+      </View>
+    );
+  }
 
   // Handle bookmark toggle
   const handleBookmark = () => {
@@ -534,10 +649,10 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
                            )}
                            
                            {/* Local Content % - Premium only */}
-                           {currentTier === 'premium' && (cap.localContentPercentage || Math.floor(Math.random() * 40) + 60) && (
+                           {currentTier === 'premium' && cap.localContentPercentage && (
                              <View style={styles.localContentBadge}>
                                <Text style={styles.localContentBadgeText}>
-                                 {cap.localContentPercentage || Math.floor(Math.random() * 40) + 60}% Local
+                                 {cap.localContentPercentage}% Local
                                </Text>
                              </View>
                            )}
@@ -1105,7 +1220,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.08)', // Subtle border
-    backdropFilter: 'blur(10px)', // Blur effect (iOS support)
   },
   cardTitle: {
     fontSize: 18,
@@ -1493,7 +1607,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.08)', // Subtle border
-    backdropFilter: 'blur(10px)', // Blur effect (iOS support)
   },
   clickableCardContent: {
     flexDirection: 'row',
@@ -1526,39 +1639,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: 8,
-  },
-  collapsibleContent: {
-    marginTop: 8,
-  },
-  previewContainer: {
-    marginTop: 12,
-  },
-  previewTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  previewTag: {
-    backgroundColor: Colors.orange[400],
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  previewTagText: {
-    fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '500',
-  },
-  moreTag: {
-    backgroundColor: '#F0F0F0',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  moreTagText: {
-    fontSize: 12,
-    color: Colors.black50,
-    fontWeight: '500',
   },
   collapsibleContent: {
     marginTop: 8,
@@ -2017,23 +2097,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     lineHeight: 20,
   },
-  summaryContainer: {
-    backgroundColor: 'rgba(76, 175, 80, 0.08)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(76, 175, 80, 0.2)',
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.success,
-  },
-  summaryText: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: Colors.text,
-    lineHeight: 22,
-    textAlign: 'left',
-    letterSpacing: 0,
-  },
   summaryToggleButton: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -2062,12 +2125,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.success,
   },
-  certificationsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
   certificationChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2078,24 +2135,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(248, 182, 87, 0.3)',
     gap: 6,
-  },
-  certificationText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  localContentBadge: {
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(76, 175, 80, 0.3)',
-  },
-  localContentBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.success,
   },
   modernProjectItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
