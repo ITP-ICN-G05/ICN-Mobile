@@ -145,7 +145,79 @@ export class HybridDataService {
    * Get filter options
    */
   getFilterOptions() {
+    if (this.useApi && this.companies.length > 0) {
+      // Extract filter options from backend data
+      return this.extractFilterOptionsFromCompanies(this.companies);
+    }
     return icnDataService.getFilterOptions();
+  }
+
+  /**
+   * Extract filter options from companies data
+   */
+  private extractFilterOptionsFromCompanies(companies: Company[]) {
+    const sectors = new Set<string>();
+    const states = new Set<string>();
+    const cities = new Set<string>();
+    const capabilities = new Set<string>();
+    const capabilityTypes = new Set<string>();
+    
+    companies.forEach(company => {
+      // Extract sectors from both keySectors and icnCapabilities
+      company.keySectors?.forEach(sector => {
+        if (sector && sector !== 'General' && sector !== '#N/A') {
+          sectors.add(sector);
+        }
+      });
+      
+      // Also extract from icnCapabilities
+      company.icnCapabilities?.forEach(cap => {
+        if (cap.sectorName && cap.sectorName !== 'Unknown Sector') {
+          sectors.add(cap.sectorName);
+        }
+      });
+      
+      // Extract states
+      if (company.billingAddress?.state && 
+          company.billingAddress.state !== '#N/A' &&
+          company.billingAddress.state.trim() !== '') {
+        states.add(company.billingAddress.state);
+      }
+      
+      // Extract cities
+      if (company.billingAddress?.city && 
+          company.billingAddress.city !== 'City Not Available' &&
+          company.billingAddress.city !== '#N/A' &&
+          company.billingAddress.city.trim() !== '') {
+        cities.add(company.billingAddress.city);
+      }
+      
+      // Extract capabilities
+      company.capabilities?.forEach(cap => {
+        if (cap && cap !== 'Service' && cap !== '#N/A') {
+          capabilities.add(cap);
+        }
+      });
+      
+      // Extract capability types
+      company.icnCapabilities?.forEach(icnCap => {
+        if (icnCap.capabilityType) {
+          capabilityTypes.add(icnCap.capabilityType);
+        }
+      });
+    });
+    
+    // Standard state ordering
+    const STANDARD_STATES = ['VIC', 'NSW', 'QLD', 'SA', 'WA', 'NT', 'TAS', 'ACT', 'NI', 'SI'];
+    const orderedStates = STANDARD_STATES.filter(state => states.has(state));
+    
+    return {
+      sectors: Array.from(sectors).sort(),
+      states: orderedStates,
+      cities: Array.from(cities).sort(),
+      capabilities: Array.from(capabilities).sort().slice(0, 100),
+      capabilityTypes: Array.from(capabilityTypes).sort()
+    };
   }
 
   /**
