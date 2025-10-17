@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import AuthService from '../../services/authService';
 
 export default function ResetPasswordForm() {
   const [email, setEmail] = useState('');
@@ -44,30 +45,53 @@ export default function ResetPasswordForm() {
     };
   }, []);
 
-  const handleSendVerification = () => {
-    // Handle sending verification email logic
-    console.log('Send verification to:', email);
-    setVerificationSent(true);
-    
-    // Start 60-second countdown
-    setIsCountingDown(true);
-    setCountdown(60);
-  };
-
-  const handleConfirmReset = () => {
-    // Validate verification code
-    if (!verificationCode || verificationCode.length < 6) {
-      alert('Please enter a valid 6-digit verification code');
+  const handleSendVerification = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
       return;
     }
-    
-    // Handle confirm reset password logic
-    console.log('Reset password with:', { 
-      email, 
-      verificationCode, 
-      password, 
-      confirmPassword 
-    });
+
+    try {
+      await AuthService.sendValidationCode(email);
+      setVerificationSent(true);
+      setIsCountingDown(true);
+      setCountdown(60);
+      Alert.alert('Success', 'Verification code sent to your email');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send verification code');
+    }
+  };
+
+  const handleConfirmReset = async () => {
+    // Validate verification code
+    if (!verificationCode || verificationCode.length !== 6) {
+      Alert.alert('Error', 'Please enter a valid 6-digit verification code');
+      return;
+    }
+
+    // Validate passwords
+    if (!password || password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    try {
+      await AuthService.resetPassword(email, verificationCode, password);
+      Alert.alert('Success', 'Password reset successfully! You can now log in with your new password.');
+      // Reset form
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setVerificationCode('');
+      setVerificationSent(false);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to reset password');
+    }
   };
 
   const togglePasswordVisibility = () => {
@@ -129,7 +153,7 @@ export default function ResetPasswordForm() {
         <View style={styles.verificationContainer}>
           <TextInput
             style={styles.verificationInput}
-            placeholder="Verification Code"
+            placeholder="6-digit code"
             placeholderTextColor="#999"
             value={verificationCode}
             onChangeText={setVerificationCode}

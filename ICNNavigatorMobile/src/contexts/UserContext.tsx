@@ -35,7 +35,7 @@ const MOCK_USER_DATA: UserData = {
   avatar: null,
 };
 
-const USE_BACKEND = false; // Set to true when backend is ready
+const USE_BACKEND = true; // Set to true when backend is ready
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
@@ -103,8 +103,21 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
 
       const userData = await response.json();
-      setUser(userData);
-      await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+      
+      // Convert UserFull to UserData format
+      const convertedUser: UserData = {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone || '',
+        company: userData.company || '',
+        role: userData.role || 'User',
+        memberSince: userData.createdAt ? new Date(userData.createdAt).getFullYear().toString() : '2024',
+        avatar: userData.avatar || null,
+      };
+      
+      setUser(convertedUser);
+      await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
     } catch (err) {
       console.warn('Token validation failed:', err);
       await logout();
@@ -131,17 +144,23 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
           throw new Error(errorData.message || 'Login failed');
         }
 
-        const { token, refreshToken, user: userData } = await response.json();
+        const userData = await response.json();
         
-        // Store tokens
-        await AsyncStorage.setItem('@auth_token', token);
-        if (refreshToken) {
-          await AsyncStorage.setItem('@refresh_token', refreshToken);
-        }
+        // Convert UserFull to UserData format
+        const convertedUser: UserData = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          phone: userData.phone || '',
+          company: userData.company || '',
+          role: userData.role || 'User',
+          memberSince: userData.createdAt ? new Date(userData.createdAt).getFullYear().toString() : '2024',
+          avatar: userData.avatar || null,
+        };
         
         // Store and set user data
-        setUser(userData);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+        setUser(convertedUser);
+        await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
       } else {
         // Mock authentication for development
         if (email && password) {
@@ -248,8 +267,21 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         if (!response.ok) throw new Error('Failed to fetch user data');
 
         const userData = await response.json();
-        setUser(userData);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+        
+        // Convert UserFull to UserData format
+        const convertedUser: UserData = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          phone: userData.phone || '',
+          company: userData.company || '',
+          role: userData.role || 'User',
+          memberSince: userData.createdAt ? new Date(userData.createdAt).getFullYear().toString() : '2024',
+          avatar: userData.avatar || null,
+        };
+        
+        setUser(convertedUser);
+        await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh user');

@@ -7,44 +7,55 @@ class AuthService {
   private static REFRESH_TOKEN_KEY = '@refresh_token';
 
   /**
-   * 用户登录 - 集成后端API
+   * User login - integrated with backend API
    */
   static async login(email: string, password: string): Promise<UserFull> {
     const response = await userApiService.login(email, password);
     
     if (response.success && response.data) {
-      // 保存认证令牌（如果后端提供）
+      // Save authentication token (if provided by backend)
       // await AsyncStorage.setItem(this.TOKEN_KEY, token);
       return response.data;
     } else {
-      throw new Error(response.error || '登录失败');
+      throw new Error(response.error || 'Login failed');
     }
   }
 
   /**
-   * 用户注册 - 集成后端API
+   * User registration - integrated with backend API
    */
   static async register(userData: InitialUser): Promise<void> {
     const response = await userApiService.createUser(userData);
     
     if (!response.success) {
-      throw new Error(response.error || '注册失败');
+      throw new Error(response.error || 'Registration failed');
     }
   }
 
   /**
-   * 发送验证码
+   * Send verification code
    */
   static async sendValidationCode(email: string): Promise<void> {
     const response = await userApiService.sendValidationCode(email);
     
     if (!response.success) {
-      throw new Error(response.error || '发送验证码失败');
+      throw new Error(response.error || 'Failed to send verification code');
     }
   }
 
   /**
-   * 用户登出
+   * Reset password
+   */
+  static async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    const response = await userApiService.resetPassword(email, code, newPassword);
+    
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to reset password');
+    }
+  }
+
+  /**
+   * User logout
    */
   static async signOut(): Promise<void> {
     try {
@@ -70,14 +81,14 @@ class AuthService {
   }
 
   /**
-   * 检查是否已登录
+   * Check if user is logged in
    */
   static async isLoggedIn(): Promise<boolean> {
     return await userApiService.isLoggedIn();
   }
 
   /**
-   * 获取当前用户数据
+   * Get current user data
    */
   static async getCurrentUser(): Promise<UserFull | null> {
     return await userApiService.getLocalUserData();

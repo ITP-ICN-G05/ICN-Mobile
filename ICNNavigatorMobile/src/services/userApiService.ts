@@ -1,8 +1,8 @@
-// services/userApiService.ts - 基于后端API指南的用户服务
+// services/userApiService.ts - User service based on backend API guide
 import BaseApiService, { ApiResponse } from './apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 用户相关接口定义 - 基于后端API指南
+// User-related interface definitions - based on backend API guide
 export interface User {
   id: string;
   VIP: number;
@@ -13,48 +13,57 @@ export interface User {
 }
 
 export interface UserFull {
+  id: string;
   name: string;
+  email: string;
+  phone: string;
+  company: string;
+  role: string;
+  avatar: string;
   VIP: number;
   cards: OrganisationCard[];
+  endDate: string;
+  createdAt: string;
 }
 
 export interface InitialUser {
   email: string;
   name: string;
   password: string;
+  phone: string;
   code: string;
 }
 
 export interface OrganisationCard {
-  // 组织卡片数据结构（根据实际后端返回调整）
+  // Organization card data structure (adjust based on actual backend response)
   _id: string;
   itemName: string;
   sectorName: string;
-  // ... 其他字段
+  // ... other fields
 }
 
 export interface UserPayment {
-  // 支付相关数据结构（待后端实现）
+  // Payment-related data structure (pending backend implementation)
 }
 
 /**
- * 用户API服务类
- * 基于后端API指南 (http://localhost:8082/api) 实现
+ * User API Service Class
+ * Implementation based on backend API guide (http://localhost:8082/api)
  */
 export class UserApiService extends BaseApiService {
   
   /**
-   * 用户登录
+   * User login
    * GET /api/user?email={email}&password={password}
    * 
-   * @param email 用户邮箱
-   * @param password 用户密码
+   * @param email User email
+   * @param password User password
    * @returns Promise<ApiResponse<UserFull>>
    */
   async login(email: string, password: string): Promise<ApiResponse<UserFull>> {
     const response = await this.get<UserFull>('/user', { email, password });
     
-    // 如果登录成功，可以在这里保存用户信息
+    // If login successful, save user information here
     if (response.success && response.data) {
       await this.saveUserData(response.data);
     }
@@ -63,10 +72,10 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 更新用户信息
+   * Update user information
    * PUT /api/user
    * 
-   * @param userData 用户数据
+   * @param userData User data
    * @returns Promise<ApiResponse<void>>
    */
   async updateUser(userData: User): Promise<ApiResponse<void>> {
@@ -74,10 +83,10 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 发送邮箱验证码
+   * Send email verification code
    * GET /api/user/getCode?email={email}
    * 
-   * @param email 用户邮箱
+   * @param email User email
    * @returns Promise<ApiResponse<void>>
    */
   async sendValidationCode(email: string): Promise<ApiResponse<void>> {
@@ -85,10 +94,10 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 创建用户账户
+   * Create user account
    * POST /api/user/create
    * 
-   * @param userData 初始用户数据
+   * @param userData Initial user data
    * @returns Promise<ApiResponse<void>>
    */
   async createUser(userData: InitialUser): Promise<ApiResponse<void>> {
@@ -96,10 +105,24 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 用户支付（未实现）
+   * Reset password
+   * POST /api/user/resetPassword?email={email}&code={code}&newPassword={newPassword}
+   * 
+   * @param email User email
+   * @param code Verification code
+   * @param newPassword New password
+   * @returns Promise<ApiResponse<void>>
+   */
+  async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<void>> {
+    const endpoint = `/user/resetPassword?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&newPassword=${encodeURIComponent(newPassword)}`;
+    return this.post<void>(endpoint);
+  }
+
+  /**
+   * User payment (not implemented)
    * POST /api/user/payment
    * 
-   * @param paymentData 支付数据
+   * @param paymentData Payment data
    * @returns Promise<ApiResponse<void>>
    */
   async processPayment(paymentData: UserPayment): Promise<ApiResponse<void>> {
@@ -107,7 +130,7 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 保存用户数据到本地存储
+   * Save user data to local storage
    */
   private async saveUserData(userData: UserFull): Promise<void> {
     try {
@@ -119,7 +142,7 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 获取本地存储的用户数据
+   * Get user data from local storage
    */
   async getLocalUserData(): Promise<UserFull | null> {
     try {
@@ -132,7 +155,7 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 清除本地用户数据
+   * Clear local user data
    */
   async clearLocalUserData(): Promise<void> {
     try {
@@ -144,7 +167,7 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 检查用户是否已登录
+   * Check if user is logged in
    */
   async isLoggedIn(): Promise<boolean> {
     const userData = await this.getLocalUserData();
@@ -152,13 +175,13 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * 用户登出
+   * User logout
    */
   async logout(): Promise<void> {
     await this.clearLocalUserData();
   }
 }
 
-// 导出单例实例
+// Export singleton instance
 export const userApiService = new UserApiService();
 export default userApiService;
