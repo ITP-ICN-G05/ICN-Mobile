@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import AuthService from '../services/authService';
 
 interface UserData {
   id: string;
@@ -130,32 +131,19 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       setError(null);
 
       if (USE_BACKEND) {
-        // Backend authentication
-        const response = await fetchWithTimeout('https://api.icnvictoria.com/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Login failed');
-        }
-
-        const userData = await response.json();
+        // Use AuthService which calls the correct backend API
+        const userFull = await AuthService.login(email, password);
         
         // Convert UserFull to UserData format
         const convertedUser: UserData = {
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          phone: userData.phone || '',
-          company: userData.company || '',
-          role: userData.role || 'User',
-          memberSince: userData.createdAt ? new Date(userData.createdAt).getFullYear().toString() : '2024',
-          avatar: userData.avatar || null,
+          id: userFull.id,
+          name: userFull.name,
+          email: userFull.email,
+          phone: userFull.phone || '',
+          company: userFull.company || '',
+          role: userFull.role || 'User',
+          memberSince: userFull.createdAt ? new Date(userFull.createdAt).getFullYear().toString() : '2024',
+          avatar: userFull.avatar || null,
         };
         
         // Store and set user data
