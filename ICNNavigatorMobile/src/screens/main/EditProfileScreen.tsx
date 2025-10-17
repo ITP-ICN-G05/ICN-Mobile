@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect } from 'react';
 import {
   View,
   Text,
@@ -57,6 +57,7 @@ export default function EditProfileScreen() {
 
   const [errors, setErrors] = useState<Partial<ProfileFormData>>({});
 
+  // Effect 1: Set header (only depends on navigation and saving)
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -69,7 +70,10 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       ),
     });
+  }, [navigation, saving]); // ✅ Only depends on navigation and saving
 
+  // Effect 2: Load profile data (runs only once on mount)
+  useEffect(() => {
     // Load profile data from context
     if (profile) {
       setFormData({
@@ -94,7 +98,7 @@ export default function EditProfileScreen() {
         role: user.role || '',
       }));
     }
-  }, [navigation, saving, formData, profile, user]);
+  }, []); // ✅ Empty dependency array, runs only once on mount
 
   // Image picker functions
   const pickImageFromGallery = async () => {

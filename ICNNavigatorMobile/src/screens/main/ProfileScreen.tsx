@@ -154,11 +154,11 @@ export default function ProfileScreen() {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       refreshSubscription();
-      refreshUser();
+      // refreshUser(); // Disabled auto-refresh because backend has no profile refresh endpoint, using cached data from login
       syncSettings();
     });
     return unsubscribe;
-  }, [navigation, refreshSubscription, refreshUser, syncSettings]);
+  }, [navigation, refreshSubscription, syncSettings]); // Removed refreshUser from dependencies
 
   // Stats based on tier
   const getStats = () => {
