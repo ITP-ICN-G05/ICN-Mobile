@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,17 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
+
+// 工具函数：确保文本渲染安全
+const safeText = (value: any): React.ReactNode => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    return <Text>{String(value)}</Text>;
+  }
+  return value;
+};
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,10 +30,11 @@ import { useNavigation } from '@react-navigation/native';
 import { Colors, Spacing } from '../../constants/colors';
 import { useProfile } from '../../contexts/ProfileContext';
 import { useUser } from '../../contexts/UserContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ProfileFormData {
-  firstName: string;
-  lastName: string;
+  displayName: string;
+  accountName: string;
   email: string;
   phone: string;
   company: string;
@@ -36,51 +48,36 @@ interface ProfileFormData {
 export default function EditProfileScreen() {
   const navigation = useNavigation();
   const { profile, updateProfile } = useProfile();
-  const { user, updateUser } = useUser();
+  const { user, updateUser, logout, isLoading: userLoading } = useUser();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState<ProfileFormData>({
-    firstName: 'John',
-    lastName: 'Smith',
-    email: 'john.smith@example.com',
-    phone: '+61 400 123 456',
-    company: 'ABC Construction',
-    role: 'Project Manager',
-    bio: 'Experienced project manager with over 10 years in the construction industry.',
-    linkedIn: 'linkedin.com/in/johnsmith',
-    website: 'johnsmith.com',
+    displayName: '',
+    accountName: '',
+    email: '',
+    phone: '',
+    company: '',
+    role: '',
+    bio: '',
+    linkedIn: '',
+    website: '',
     avatar: null,
   });
 
   const [errors, setErrors] = useState<Partial<ProfileFormData>>({});
 
-  // Effect 1: Set header (only depends on navigation and saving)
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity onPress={handleSave} disabled={saving}>
-          {saving ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
-          ) : (
-            <Text style={styles.saveButton}>Save</Text>
-          )}
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, saving]); // ✅ Only depends on navigation and saving
-
-  // Effect 2: Load profile data (runs only once on mount)
+  // Effect 1: Load profile data (reactive to profile/user changes)
   useEffect(() => {
     // Load profile data from context
     if (profile) {
       setFormData({
-        firstName: profile.firstName || '',
-        lastName: profile.lastName || '',
-        email: profile.email || '',
-        phone: profile.phone || '',
+        displayName: profile.displayName || user?.name || '',
+        accountName: user?.email?.split('@')[0] || '',
+        email: profile.email || user?.email || '',
+        phone: profile.phone || user?.phone || '',
         company: profile.company || '',
         role: profile.role || '',
         bio: profile.bio || '',
@@ -92,13 +89,15 @@ export default function EditProfileScreen() {
       // Fallback to user data if profile is not available
       setFormData(prev => ({
         ...prev,
+        displayName: user.name || '',
+        accountName: user.email?.split('@')[0] || '',
         email: user.email || '',
         phone: user.phone || '',
         company: user.company || '',
         role: user.role || '',
       }));
     }
-  }, []); // ✅ Empty dependency array, runs only once on mount
+  }, [profile, user]); // Added dependencies to react to changes
 
   // Image picker functions
   const pickImageFromGallery = async () => {
@@ -181,26 +180,21 @@ export default function EditProfileScreen() {
   };
 
   // Validation
-  const validateForm = (): boolean => {
+  const validateForm = useCallback((): boolean => {
     const newErrors: Partial<ProfileFormData> = {};
 
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
+    if (!formData.displayName.trim()) {
+      newErrors.displayName = 'Display name is required';
     }
 
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
-    }
-
-    if (!formData.email.trim()) {
+    const email = formData.email.trim();
+    if (!email) {
       newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email';
     }
 
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^\+?[\d\s()-]+$/.test(formData.phone)) {
+    if (formData.phone.trim() && !/^\+?[\d\s()-]+$/.test(formData.phone)) {
       newErrors.phone = 'Please enter a valid phone number';
     }
 
@@ -214,9 +208,23 @@ export default function EditProfileScreen() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
+    // 1. Check user authentication state (keep this)
+    if (!user || userLoading) {
+      Alert.alert(
+        'Login Required',
+        'Please login to update your profile.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Go to Login', onPress: () => navigation.navigate('Auth' as never) },
+        ]
+      );
+      return;
+    }
+
+    // 2. Form validation
     if (!validateForm()) {
       Alert.alert('Validation Error', 'Please check the form and fix any errors.');
       return;
@@ -225,10 +233,9 @@ export default function EditProfileScreen() {
     setSaving(true);
 
     try {
-      // Update profile in context
+      // Attempt to update profile
       await updateProfile({
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+        displayName: formData.displayName,
         email: formData.email,
         phone: formData.phone,
         company: formData.company,
@@ -239,10 +246,11 @@ export default function EditProfileScreen() {
         avatar: formData.avatar,
       });
 
-      // Also update user context with basic info
+      // Also update user context
       if (user) {
         await updateUser({
           ...user,
+          name: formData.displayName, // Update user.name with displayName
           email: formData.email,
           phone: formData.phone,
           company: formData.company,
@@ -250,17 +258,50 @@ export default function EditProfileScreen() {
         });
       }
       
-      Alert.alert(
-        'Success',
-        'Your profile has been updated successfully.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      // SUCCESS: Go back immediately
+      navigation.goBack();
+      
     } catch (error) {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      console.error('Profile update error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update profile.';
+      
+      // If auth error, save draft and redirect to login
+      if (errorMessage.includes('auth') || errorMessage.includes('token') || errorMessage.includes('login')) {
+        await AsyncStorage.setItem('@profile_draft', JSON.stringify(formData));
+        Alert.alert(
+          'Login Required',
+          'Please login again to save your changes.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Login', onPress: async () => {
+              await logout();
+              navigation.navigate('Auth' as never);
+            }},
+          ]
+        );
+      } else {
+        // Other errors
+        Alert.alert('Error', errorMessage);
+      }
     } finally {
       setSaving(false);
     }
-  };
+  }, [formData, validateForm, user, userLoading, updateProfile, updateUser, logout, navigation]);
+
+  // Effect 2: Set header (after handleSave is defined)
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={handleSave} disabled={saving}>
+          {saving ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <Text style={styles.saveButton}>Save</Text>
+          )}
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, saving, handleSave]); // Added handleSave dependency
 
   const renderInput = (
     label: string,
@@ -283,9 +324,9 @@ export default function EditProfileScreen() {
         ]}
         value={formData[key] as string}
         onChangeText={(text) => {
-          setFormData({ ...formData, [key]: text });
+          setFormData(prev => ({ ...prev, [key]: text })); // Functional update
           if (errors[key]) {
-            setErrors({ ...errors, [key]: undefined });
+            setErrors(prev => ({ ...prev, [key]: undefined })); // Functional update
           }
         }}
         placeholder={placeholder}
@@ -329,7 +370,7 @@ export default function EditProfileScreen() {
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarInitials}>
-                    {formData.firstName[0]}{formData.lastName[0]}
+                    {String(formData.displayName || '').split(' ').map((n: string) => n[0]).join('')}
                   </Text>
                 </View>
               )}
@@ -344,36 +385,18 @@ export default function EditProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Personal Information</Text>
             
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.label}>First Name *</Text>
-                <TextInput
-                  style={[styles.input, errors.firstName && styles.inputError]}
-                  value={formData.firstName}
-                  onChangeText={(text) => {
-                    setFormData({ ...formData, firstName: text });
-                    if (errors.firstName) setErrors({ ...errors, firstName: undefined });
-                  }}
-                  placeholder="First Name"
-                  placeholderTextColor={Colors.black50}
-                />
-                {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
-              </View>
-              
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.label}>Last Name *</Text>
-                <TextInput
-                  style={[styles.input, errors.lastName && styles.inputError]}
-                  value={formData.lastName}
-                  onChangeText={(text) => {
-                    setFormData({ ...formData, lastName: text });
-                    if (errors.lastName) setErrors({ ...errors, lastName: undefined });
-                  }}
-                  placeholder="Last Name"
-                  placeholderTextColor={Colors.black50}
-                />
-                {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
-              </View>
+            {renderInput('Display Name *', 'displayName', 'Enter your display name')}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Account Name</Text>
+              <TextInput
+                style={[styles.input, styles.disabledInput]}
+                value={formData.accountName}
+                editable={false}
+                placeholder="Account Name"
+                placeholderTextColor={Colors.black50}
+              />
+              <Text style={styles.helperText}>This is your unique account identifier and cannot be changed</Text>
             </View>
 
             {renderInput('Email *', 'email', 'email@example.com', {
@@ -381,7 +404,7 @@ export default function EditProfileScreen() {
               autoCapitalize: 'none',
             })}
             
-            {renderInput('Phone *', 'phone', '+61 400 000 000', {
+            {renderInput('Phone', 'phone', '+61 400 000 000 (optional)', {
               keyboardType: 'phone-pad',
             })}
           </View>
@@ -398,7 +421,7 @@ export default function EditProfileScreen() {
             })}
             {formData.bio && (
               <Text style={styles.charCount}>
-                {formData.bio.length}/500 characters
+                {(formData.bio || '').length}/500 characters
               </Text>
             )}
           </View>
@@ -597,5 +620,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.error,
     fontWeight: '500',
+  },
+  disabledInput: {
+    backgroundColor: 'rgba(27, 62, 111, 0.05)',
+    color: 'rgba(27, 62, 111, 0.5)',
+  },
+  helperText: {
+    fontSize: 11,
+    color: 'rgba(27, 62, 111, 0.5)',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });

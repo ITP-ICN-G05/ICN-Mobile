@@ -5,8 +5,7 @@ import { useUser } from './UserContext';
 
 interface UserProfile {
   id: string;
-  firstName: string;
-  lastName: string;
+  displayName: string;
   email: string;
   phone: string;
   company: string;
@@ -71,7 +70,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       
-      // Try to load from cache first
+      // Try to load from cache first for immediate display
       const cachedProfile = await AsyncStorage.getItem('userProfile');
       if (cachedProfile) {
         setProfile(JSON.parse(cachedProfile));
@@ -84,15 +83,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      // Then fetch from API
+      // Then fetch from API - this now combines backend data with locally stored extended fields
       try {
         const profileData = await profileApi.getProfile();
         
-        // Convert ProfileData to UserProfile
+        // profileData already contains the complete profile with both backend and extended fields
         const fullProfile: UserProfile = {
           id: profileData.id,
-          firstName: profileData.firstName,
-          lastName: profileData.lastName,
+          displayName: profileData.displayName,
           email: profileData.email,
           phone: profileData.phone,
           company: profileData.company,
@@ -107,7 +105,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setProfile(fullProfile);
         await AsyncStorage.setItem('userProfile', JSON.stringify(fullProfile));
       } catch (apiError) {
-        console.warn('Failed to fetch profile from API, using cached data');
+        console.warn('Failed to fetch profile from API, using cached data', apiError);
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -144,29 +142,39 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
-      const updatedData = await profileApi.updateProfile({
-        id: data.id || profile?.id || '',
-        firstName: data.firstName || profile?.firstName || '',
-        lastName: data.lastName || profile?.lastName || '',
-        email: data.email || profile?.email || '',
-        phone: data.phone || profile?.phone || '',
-        company: data.company || profile?.company || '',
-        role: data.role || profile?.role || '',
-        bio: data.bio || profile?.bio || '',
-        linkedIn: data.linkedIn || profile?.linkedIn || '',
-        website: data.website || profile?.website || '',
-        memberSince: data.memberSince || profile?.memberSince || '',
-      });
+      // Ensure email is included for user identification and handle avatar type correctly
+      const updateData: Partial<{
+        displayName?: string;
+        email: string;
+        phone?: string;
+        company?: string;
+        role?: string;
+        bio?: string;
+        linkedIn?: string;
+        website?: string;
+        avatar?: string;
+        memberSince?: string;
+      }> = {
+        ...data,
+        email: data.email || profile?.email || user?.email || '', // Required for identification
+        avatar: data.avatar || undefined, // Convert null to undefined for type compatibility
+      };
       
+      // Use the updated profileApi which handles field mapping internally
+      const updatedData = await profileApi.updateProfile(updateData);
+      
+      // Update local state with the returned data
       const updatedProfile: UserProfile = {
         ...profile!,
         ...updatedData,
+        // Ensure we have an avatar value (null if not provided)
         avatar: updatedData.avatar || null,
       };
       
       setProfile(updatedProfile);
       await AsyncStorage.setItem('userProfile', JSON.stringify(updatedProfile));
     } catch (error) {
+      console.error('Failed to update profile:', error);
       throw error;
     }
   };

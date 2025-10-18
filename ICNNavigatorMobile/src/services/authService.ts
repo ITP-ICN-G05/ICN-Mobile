@@ -13,8 +13,7 @@ class AuthService {
     const response = await userApiService.login(email, password);
     
     if (response.success && response.data) {
-      // Save authentication token (if provided by backend)
-      // await AsyncStorage.setItem(this.TOKEN_KEY, token);
+      // Backend should return token in response
       return response.data;
     } else {
       throw new Error(response.error || 'Login failed');

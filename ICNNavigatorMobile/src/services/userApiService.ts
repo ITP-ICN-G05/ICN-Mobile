@@ -24,6 +24,8 @@ export interface UserFull {
   cards: OrganisationCard[];
   endDate: string;
   createdAt: string;
+  token?: string; // Optional auth token from backend
+  refreshToken?: string; // Optional refresh token from backend
 }
 
 export interface InitialUser {
