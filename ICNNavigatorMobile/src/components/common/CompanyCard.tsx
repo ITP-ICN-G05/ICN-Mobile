@@ -131,22 +131,31 @@ export default function CompanyCard({
         </View>
         
         {/* Show capabilities if from ICN data */}
-        {company.icnCapabilities && company.icnCapabilities.length > 0 && (
-          <View style={styles.capabilities}>
-            {company.icnCapabilities.slice(0, 2).map((cap, index) => (
-              <View key={`${cap.itemId}-${index}`} style={styles.capabilityChip}>
-                <Text style={styles.capabilityText} numberOfLines={1}>
-                  {cap.itemName}
-                </Text>
-              </View>
-            ))}
-            {company.icnCapabilities.length > 2 && (
-              <View style={styles.moreChip}>
-                <Text style={styles.moreText}>+{company.icnCapabilities.length - 2} more</Text>
-              </View>
-            )}
-          </View>
-        )}
+        {company.icnCapabilities && company.icnCapabilities.length > 0 && (() => {
+          // Deduplicate capabilities by itemName for display, keeping only the first occurrence
+          const uniqueCapabilities = Array.from(
+            new Map(
+              company.icnCapabilities.map(cap => [cap.itemName, cap])
+            ).values()
+          );
+          
+          return (
+            <View style={styles.capabilities}>
+              {uniqueCapabilities.slice(0, 2).map((cap, index) => (
+                <View key={`${cap.itemId}-${index}`} style={styles.capabilityChip}>
+                  <Text style={styles.capabilityText} numberOfLines={1}>
+                    {cap.itemName}
+                  </Text>
+                </View>
+              ))}
+              {company.icnCapabilities.length > 2 && (
+                <View style={styles.moreChip}>
+                  <Text style={styles.moreText}>+{company.icnCapabilities.length - 2} items total</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
         
         {/* Show sectors */}
         {company.keySectors.length > 0 && (
