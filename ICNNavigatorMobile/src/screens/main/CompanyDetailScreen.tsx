@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Company } from '../../types';
 import { Colors, Spacing } from '../../constants/colors';
 import { useUserTier } from '../../contexts/UserTierContext';
+import { useBookmark } from '../../contexts/BookmarkContext';
 import { hybridDataService } from '../../services/hybridDataService';
 
 interface CompanyDetailScreenProps {
@@ -55,12 +56,14 @@ const getDisplayValue = (
 export default function CompanyDetailScreen({ route, navigation }: CompanyDetailScreenProps) {
   const { company: initialCompany } = route.params as { company: Company };
   
-  // ✅ Use state to manage company data
+  // Use state to manage company data
   const [company, setCompany] = useState<Company>(initialCompany);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  // Use Bookmark Context
+  const { isBookmarked, toggleBookmark } = useBookmark();
+  
   const [isItemsExpanded, setIsItemsExpanded] = useState(false);
   const [isNewsExpanded, setIsNewsExpanded] = useState(false);
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(false);
@@ -184,9 +187,9 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
     );
   }
 
-  // Handle bookmark toggle
-  const handleBookmark = () => {
-    setIsBookmarked(!isBookmarked);
+  // Handle bookmark toggle - now uses BookmarkContext
+  const handleBookmark = async () => {
+    await toggleBookmark(company.id);
   };
 
   // Handle share
@@ -414,9 +417,9 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
                     <Text style={styles.companyName}>{displayName}</Text>
                     <TouchableOpacity onPress={handleBookmark} style={styles.bookmarkButton} activeOpacity={1}>
                       <Ionicons 
-                        name={isBookmarked ? "bookmark" : "bookmark-outline"} 
+                        name={isBookmarked(company.id) ? "bookmark" : "bookmark-outline"} 
                         size={24} 
-                        color={isBookmarked ? Colors.primary : Colors.black50} 
+                        color={isBookmarked(company.id) ? Colors.primary : Colors.black50} 
                       />
                     </TouchableOpacity>
                   </View>

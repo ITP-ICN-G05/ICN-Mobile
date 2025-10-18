@@ -24,6 +24,7 @@ import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { useUserTier } from '../../contexts/UserTierContext';
 import { useICNData } from '../../hooks/useICNData';
+import { useBookmark } from '../../contexts/BookmarkContext';
 
 // Extended local colors (adding to the imported Colors)
 const LocalColors = {
@@ -72,6 +73,9 @@ export default function CompaniesScreen() {
   const navigation = useNavigation<any>();
   const { currentTier, features } = useUserTier();
   
+  // Use Bookmark Context
+  const { bookmarkedIds, toggleBookmark, isBookmarked } = useBookmark();
+  
   // Use ICN Data Hook
   const {
     companies: allCompanies,
@@ -87,7 +91,6 @@ export default function CompaniesScreen() {
   
   // State management
   const [searchText, setSearchText] = useState('');
-  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -421,10 +424,10 @@ export default function CompaniesScreen() {
     return badges;
   };
 
-  // Toggle bookmark
-  const toggleBookmark = (id: string) => {
+  // Toggle bookmark - now uses BookmarkContext
+  const handleToggleBookmark = async (id: string) => {
     // Check bookmark limit for free tier
-    if (currentTier === 'free' && !bookmarkedIds.includes(id) && bookmarkedIds.length >= 10) {
+    if (currentTier === 'free' && !isBookmarked(id) && bookmarkedIds.length >= 10) {
       Alert.alert(
         'Bookmark Limit',
         'Free tier allows up to 10 bookmarks. Upgrade to save more companies.',
@@ -437,11 +440,7 @@ export default function CompaniesScreen() {
     }
     
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setBookmarkedIds(prev =>
-      prev.includes(id) 
-        ? prev.filter(bookId => bookId !== id)
-        : [...prev, id]
-    );
+    await toggleBookmark(id);
   };
 
   // Handle company press
@@ -779,10 +778,10 @@ export default function CompaniesScreen() {
         </Text>
         <TouchableOpacity 
           style={styles.gridBookmark}
-          onPress={() => toggleBookmark(item.id)}
+          onPress={() => handleToggleBookmark(item.id)}
         >
           <Ionicons 
-            name={bookmarkedIds.includes(item.id) ? 'bookmark' : 'bookmark-outline'} 
+            name={isBookmarked(item.id) ? 'bookmark' : 'bookmark-outline'} 
             size={16} 
             color={Colors.black50}
           />
@@ -832,8 +831,8 @@ export default function CompaniesScreen() {
             <CompanyCard
               company={item}
               onPress={() => handleCompanyPress(item)}
-              onBookmark={() => toggleBookmark(item.id)}
-              isBookmarked={bookmarkedIds.includes(item.id)}
+              onBookmark={() => handleToggleBookmark(item.id)}
+              isBookmarked={isBookmarked(item.id)}
             />
           ) : 
           renderGridItem
