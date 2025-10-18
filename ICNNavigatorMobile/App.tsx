@@ -7,6 +7,7 @@ import { UserTierProvider } from './src/contexts/UserTierContext';
 import { SettingsProvider } from './src/contexts/SettingsContext';
 import { ProfileProvider } from './src/contexts/ProfileContext';
 import { BookmarkProvider } from './src/contexts/BookmarkContext';
+import { FilterProvider } from './src/contexts/FilterContext';
 import { AuthGate } from './src/components/AuthGate';
 // import ApiIntegrationTest from './src/components/ApiIntegrationTest'; // API Test component - DISABLED
 
@@ -19,9 +20,11 @@ export default function App() {
             <SettingsProvider>
               <UserTierProvider>
                 <BookmarkProvider>
-                  <StatusBar style="auto" />
-                  <AppNavigator />
-                  {/* <ApiIntegrationTest /> */} {/* API Test component - DISABLED for real app testing */}
+                  <FilterProvider>  {/* New: Global filter state for CompaniesScreen and MapScreen sync */}
+                    <StatusBar style="auto" />
+                    <AppNavigator />
+                    {/* <ApiIntegrationTest /> */} {/* API Test component - DISABLED for real app testing */}
+                  </FilterProvider>
                 </BookmarkProvider>
               </UserTierProvider>
             </SettingsProvider>

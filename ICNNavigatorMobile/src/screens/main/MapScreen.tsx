@@ -12,6 +12,7 @@ import { Company } from '../../types';
 import { useUserTier } from '../../contexts/UserTierContext';
 import hybridDataService from '../../services/hybridDataService';
 import { normaliseLatLng, hasValidCoords, extractValidCoordinates, diagnoseCoordinates } from '../../utils/coords';
+import { useFilter } from '../../contexts/FilterContext';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -29,6 +30,9 @@ export default function MapScreen() {
   const { features } = useUserTier();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight(); // NEW: use tab bar height for watermark spacing
+
+  // Use global filter context for synchronization with CompaniesScreen
+  const { filters, setFilters, clearFilters: clearGlobalFilters } = useFilter();
 
   const mapRef = useRef<MapView>(null);
   const [searchText, setSearchText] = useState('');
@@ -91,6 +95,8 @@ export default function MapScreen() {
     states: string[];
     cities: string[];
     capabilities: string[];
+    capabilityTypes?: string[];
+    itemNames?: string[];
   }>({ sectors: [], states: [], cities: [], capabilities: [] });
 
   useEffect(() => {
@@ -128,13 +134,6 @@ export default function MapScreen() {
     });
   };
 
-  // Filters
-  const [filters, setFilters] = useState<EnhancedFilterOptions>({
-    capabilities: [],
-    sectors: [],
-    distance: 'All',
-  });
-
   // Derived list
   const filteredCompanies = useMemo(() => {
     let filtered = [...companies];
@@ -142,14 +141,12 @@ export default function MapScreen() {
     // Search
     if (searchText) filtered = hybridDataService.searchCompaniesSync(searchText);
 
-    // Capabilities
+    // Capabilities (now checks itemName)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
         filters.capabilities.some(capability =>
-          company.capabilities?.includes(capability) ||
           company.icnCapabilities?.some(cap =>
-            cap.itemName.toLowerCase().includes(capability.toLowerCase()) ||
-            cap.detailedItemName.toLowerCase().includes(capability.toLowerCase())
+            cap.itemName.toLowerCase().includes(capability.toLowerCase())
           )
         )
       );
@@ -169,24 +166,13 @@ export default function MapScreen() {
       filtered = filtered.filter(company => company.billingAddress?.state === filters.state);
     }
 
-    // Company type (supports grouped labels and "Both")
+    // Company type (simplified - direct match only)
     if (filters.companyTypes && filters.companyTypes.length > 0) {
       filtered = filtered.filter(company => {
         const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
-        for (const filterType of filters.companyTypes!) {
-          if (filterType === 'Both') {
-            const hasSupplier = capabilityTypes.some(t => t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier');
-            const hasManufacturer = capabilityTypes.some(t => t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler');
-            if (hasSupplier && hasManufacturer) return true;
-          } else if (capabilityTypes.includes(filterType as any)) {
-            return true;
-          } else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
-            if (capabilityTypes.some(t => t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier')) return true;
-          } else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
-            if (capabilityTypes.some(t => t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler')) return true;
-          }
-        }
-        return false;
+        return filters.companyTypes!.some(filterType =>
+          capabilityTypes.includes(filterType as any)
+        );
       });
     }
 
@@ -350,6 +336,7 @@ export default function MapScreen() {
   };
 
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
+    console.log('[MapScreen] Applying filters:', newFilters);
     setFilters(newFilters);
     setFilterModalVisible(false);
     scheduleZoom(250, true); // force auto-fit on explicit filter changes
@@ -372,9 +359,9 @@ export default function MapScreen() {
   const getMarkerColor = (company: Company) => (searchText && company.name.toLowerCase().includes(searchText.toLowerCase()) ? Colors.warning : (company.verificationStatus === 'verified' ? Colors.success : Colors.primary));
 
   const clearFilters = () => {
+    clearGlobalFilters();
     setIsFromDropdownSelection(false);
     setSelectedCompany(null);
-    setFilters({ capabilities: [], sectors: [], distance: 'All' });
     // Move to default city view; also respect user's next gesture by adding a brief manual lock
     bumpManualLock(1500);
     mapRef.current?.animateCamera({ center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 11 }, { duration: 400 });

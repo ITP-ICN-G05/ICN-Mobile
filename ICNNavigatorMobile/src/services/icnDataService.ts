@@ -738,6 +738,7 @@ class ICNDataService {
     const cities = new Set<string>();
     const capabilities = new Set<string>();
     const capabilityTypes = new Set<string>();
+    const itemNames = new Set<string>();
     
     this.companies.forEach(company => {
       company.keySectors.forEach(sector => {
@@ -766,6 +767,10 @@ class ICNDataService {
         if (icnCap.capabilityType) {
           capabilityTypes.add(icnCap.capabilityType);
         }
+        // Extract itemName for items/services filter
+        if (icnCap.itemName && icnCap.itemName !== 'Unknown Item' && !isInvalidValue(icnCap.itemName)) {
+          itemNames.add(icnCap.itemName);
+        }
       });
     });
     
@@ -779,7 +784,8 @@ class ICNDataService {
       states: orderedStates,
       cities: Array.from(cities).sort(),
       capabilities: Array.from(capabilities).sort().slice(0, 100),
-      capabilityTypes: Array.from(capabilityTypes).sort()
+      capabilityTypes: Array.from(capabilityTypes).sort(),
+      itemNames: Array.from(itemNames).sort()
     };
   }
   
