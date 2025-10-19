@@ -1,10 +1,11 @@
 ﻿import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import * as Location from 'expo-location';
 import SearchBarWithDropdown from '../../components/common/SearchBarWithDropdown';
 import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/common/EnhancedFilterModal';
 import { Colors } from '../../constants/colors';
@@ -19,6 +20,13 @@ const MELBOURNE_REGION: Region = {
   longitude: 144.9631,
   latitudeDelta: 0.0922,
   longitudeDelta: 0.0421,
+};
+
+const AUSTRALIA_REGION: Region = {
+  latitude: -25.2744,  // Australia center
+  longitude: 133.7751,
+  latitudeDelta: 30,   // Cover entire Australia
+  longitudeDelta: 30,
 };
 
 const CARD_RAISE = 330; // keep in sync with rightButtonsWithCompanyDetail.bottom
@@ -41,6 +49,7 @@ export default function MapScreen() {
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   // ===== Auto-zoom debouncer with selection/camera lock (prevents zoom-out after selecting) =====
   const zoomTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -358,13 +367,81 @@ export default function MapScreen() {
 
   const getMarkerColor = (company: Company) => (searchText && company.name.toLowerCase().includes(searchText.toLowerCase()) ? Colors.warning : (company.verificationStatus === 'verified' ? Colors.success : Colors.primary));
 
+  const handleRecenterToUserLocation = async () => {
+    setIsLocating(true);
+    try {
+      // Request location permissions
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Permission Required',
+          'ICN Navigator needs location access to show your position on the map. Please enable location permissions in your device settings.',
+          [{ text: 'OK' }]
+        );
+        setIsLocating(false);
+        return;
+      }
+
+      // Get current position
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      // Zoom to user location
+      bumpManualLock(2500); // Prevent immediate auto-fit after recenter
+      mapRef.current?.animateCamera(
+        { 
+          center: { 
+            latitude: location.coords.latitude, 
+            longitude: location.coords.longitude 
+          }, 
+          zoom: 15 
+        },
+        { duration: 500 }
+      );
+    } catch (error) {
+      console.error('Error getting user location:', error);
+      Alert.alert(
+        'Location Unavailable',
+        'Unable to get your current location. Please ensure location services are enabled and try again.',
+        [
+          { 
+            text: 'Use Default View', 
+            onPress: () => {
+              // Fallback to Melbourne default view
+              bumpManualLock(2500);
+              mapRef.current?.animateCamera(
+                { 
+                  center: { 
+                    latitude: MELBOURNE_REGION.latitude, 
+                    longitude: MELBOURNE_REGION.longitude 
+                  }, 
+                  zoom: 11 
+                },
+                { duration: 400 }
+              );
+            }
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
   const clearFilters = () => {
     clearGlobalFilters();
+    setSearchText('');  // Clear search text
     setIsFromDropdownSelection(false);
     setSelectedCompany(null);
-    // Move to default city view; also respect user's next gesture by adding a brief manual lock
+    // Zoom out to show entire Australia view
     bumpManualLock(1500);
-    mapRef.current?.animateCamera({ center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 11 }, { duration: 400 });
+    mapRef.current?.animateCamera({ 
+      center: { latitude: AUSTRALIA_REGION.latitude, longitude: AUSTRALIA_REGION.longitude }, 
+      zoom: 5  // Show entire Australia
+    }, { duration: 500 });
   };
 
   const hasAnyFilters = (
@@ -383,6 +460,14 @@ export default function MapScreen() {
     (filters.localContentPercentage && filters.localContentPercentage > 0)
   );
   const shouldShowFilterBar = hasAnyFilters && !isFromDropdownSelection;
+
+  // Dynamic button text based on what needs to be cleared
+  const getClearButtonText = () => {
+    const hasSearch = searchText.trim().length > 0;
+    if (hasSearch && hasAnyFilters) return 'Clear All';
+    if (hasSearch) return 'Clear Search';
+    return 'Clear Filters';
+  };
 
   if (isLoading) {
     return (
@@ -470,7 +555,7 @@ export default function MapScreen() {
             <Text style={styles.filterText}>{filteredCompanies.length} of {companies.length} companies</Text>
           </View>
           <TouchableOpacity onPress={clearFilters}>
-            <Text style={styles.clearText}>Clear</Text>
+            <Text style={styles.clearText}>{getClearButtonText()}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -479,9 +564,9 @@ export default function MapScreen() {
         <View style={styles.noResultsOverlay}>
           <Ionicons name="search" size={48} color={Colors.black50} />
           <Text style={styles.noResultsText}>No companies found</Text>
-          <Text style={styles.noResultsSubText}>Try adjusting your filters</Text>
+          <Text style={styles.noResultsSubText}>Try adjusting your filters or search</Text>
           <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
-            <Text style={styles.clearButtonText}>Clear Filters</Text>
+            <Text style={styles.clearButtonText}>{getClearButtonText()}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -503,16 +588,14 @@ export default function MapScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.myLocationButton}
-          onPress={() => {
-            // Recenter to default city view (or swap with user GPS center if you wire it)
-            bumpManualLock(2500); // prevent immediate auto-fit after recenter
-            mapRef.current?.animateCamera(
-              { center: { latitude: MELBOURNE_REGION.latitude, longitude: MELBOURNE_REGION.longitude }, zoom: 15 },
-              { duration: 400 }
-            );
-          }}
+          onPress={handleRecenterToUserLocation}
+          disabled={isLocating}
         >
-          <Ionicons name="locate" size={24} color={Colors.primary} />
+          {isLocating ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <Ionicons name="locate" size={24} color={Colors.primary} />
+          )}
         </TouchableOpacity>
       </View>
 
