@@ -72,6 +72,22 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [currentProjectPage, setCurrentProjectPage] = useState(0);
+  
+  // Manage expand/collapse state for each capability group
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (itemName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(itemName)) {
+        next.delete(itemName);
+      } else {
+        next.add(itemName);
+      }
+      return next;
+    });
+  };
+  
   const { features, currentTier } = useUserTier();
   const insets = useSafeAreaInsets();
 
@@ -327,14 +343,41 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
     return Array.from(types);
   }, [company.icnCapabilities]);
 
+  // Group capabilities by itemName
+  const groupedCapabilities = React.useMemo(() => {
+    if (!company.icnCapabilities) return [];
+    
+    const groups = new Map<string, typeof company.icnCapabilities>();
+    
+    company.icnCapabilities.forEach(cap => {
+      const key = cap.itemName;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(cap);
+    });
+    
+    // Convert to array format with grouping information
+    return Array.from(groups.entries()).map(([itemName, items]) => ({
+      itemName,
+      items,
+      isGroup: items.length > 1,
+      count: items.length
+    }));
+  }, [company.icnCapabilities]);
+
   // Adaptive pagination logic for Items & Services
   const screenHeight = Dimensions.get('window').height;
   const availableHeight = screenHeight - 400; // Reserve space for header, company info, other sections
   const itemHeight = 80; // Approximate height of each capability item
   const itemsPerPage = Math.max(3, Math.floor(availableHeight / itemHeight)); // Minimum 3 items, adaptive based on screen
-  const totalPages = company.icnCapabilities ? Math.ceil(company.icnCapabilities.length / itemsPerPage) : 0;
-  const currentItems = company.icnCapabilities ? 
-    company.icnCapabilities.slice(currentPage * itemsPerPage, (currentPage + 1) * itemsPerPage) : [];
+  
+  // Calculate pagination based on grouped data
+  const totalPages = Math.ceil(groupedCapabilities.length / itemsPerPage);
+  const currentGroups = groupedCapabilities.slice(
+    currentPage * itemsPerPage, 
+    (currentPage + 1) * itemsPerPage
+  );
 
   const handleNextPage = () => {
     if (currentPage < totalPages - 1) {
@@ -565,8 +608,8 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
                      <View style={styles.itemsCountBadge}>
                        <Text style={styles.itemsCountBadgeText}>
                          {totalPages > 1 && isItemsExpanded 
-                           ? `${Math.min((currentPage + 1) * itemsPerPage, company.icnCapabilities.length)}/${company.icnCapabilities.length}`
-                           : `${company.icnCapabilities.length}`
+                           ? `${Math.min((currentPage + 1) * itemsPerPage, groupedCapabilities.length)}/${groupedCapabilities.length}`
+                           : `${groupedCapabilities.length}`
                          }
                        </Text>
                      </View>
@@ -628,61 +671,137 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
                      )}
                      
                      {/* Current Page Items */}
-                     {currentItems.map((cap, index) => (
-                       <View key={`${cap.capabilityId}-${currentPage}-${index}`} style={styles.modernCapabilityItem}>
-                         <View style={styles.capabilityHeader}>
-                           <View style={styles.capabilityIcon}>
-                             <Ionicons name="cube-outline" size={18} color={Colors.primary} />
-                           </View>
-                           <View style={styles.capabilityContent}>
-                             <Text style={styles.modernCapabilityName}>{cap.itemName}</Text>
-                             {isValidData(cap.detailedItemName) && (
-                               <Text style={styles.modernCapabilityDetail}>{cap.detailedItemName}</Text>
-                             )}
-                           </View>
-                         </View>
-                         
-                         {/* Tags Row */}
-                         <View style={styles.capabilityTags}>
-                           {/* Capability Types - Plus tier only */}
-                           {(currentTier === 'plus' || currentTier === 'premium') && (
-                             <View style={styles.modernCapabilityTypeBadge}>
-                               <Text style={styles.modernCapabilityTypeText}>{cap.capabilityType}</Text>
+                     {currentGroups.map((group, groupIndex) => {
+                       // Single item: display directly with original style
+                       if (!group.isGroup) {
+                         const cap = group.items[0];
+                         return (
+                           <View key={`${cap.capabilityId}-${currentPage}-${groupIndex}`} style={styles.modernCapabilityItem}>
+                             <View style={styles.capabilityHeader}>
+                               <View style={styles.capabilityIcon}>
+                                 <Ionicons name="cube-outline" size={18} color={Colors.primary} />
+                               </View>
+                               <View style={styles.capabilityContent}>
+                                 <Text style={styles.modernCapabilityName}>{cap.itemName}</Text>
+                                 {isValidData(cap.detailedItemName) && (
+                                   <Text style={styles.modernCapabilityDetail}>{cap.detailedItemName}</Text>
+                                 )}
+                               </View>
                              </View>
-                           )}
+                             
+                             {/* Tags Row */}
+                             <View style={styles.capabilityTags}>
+                               {/* Capability Types - Plus tier only */}
+                               {(currentTier === 'plus' || currentTier === 'premium') && (
+                                 <View style={styles.modernCapabilityTypeBadge}>
+                                   <Text style={styles.modernCapabilityTypeText}>{cap.capabilityType}</Text>
+                                 </View>
+                               )}
+                               
+                               {/* Local Content % - Premium only */}
+                               {currentTier === 'premium' && cap.localContentPercentage && (
+                                 <View style={styles.localContentBadge}>
+                                   <Text style={styles.localContentBadgeText}>
+                                     {cap.localContentPercentage}% Local
+                                   </Text>
+                                 </View>
+                               )}
+                             </View>
+                           </View>
+                         );
+                       }
+                       
+                       // Multiple items: render as collapsible group
+                       const isExpanded = expandedGroups.has(group.itemName);
+                       return (
+                         <View key={`group-${group.itemName}-${groupIndex}`} style={styles.capabilityGroupContainer}>
+                           {/* Group header */}
+                           <TouchableOpacity 
+                             style={styles.capabilityGroupHeader}
+                             onPress={() => toggleGroup(group.itemName)}
+                             activeOpacity={1}
+                           >
+                             <View style={styles.capabilityGroupLeft}>
+                               <View style={styles.capabilityIcon}>
+                                 <Ionicons name="cube-outline" size={18} color={Colors.primary} />
+                               </View>
+                               <Text style={styles.capabilityGroupTitle}>{group.itemName}</Text>
+                               <View style={styles.groupCountBadge}>
+                                 <Text style={styles.groupCountText}>{group.count}</Text>
+                               </View>
+                             </View>
+                             <Ionicons 
+                               name={isExpanded ? "chevron-up" : "chevron-down"} 
+                               size={20} 
+                               color={Colors.black50} 
+                             />
+                           </TouchableOpacity>
                            
-                           {/* Local Content % - Premium only */}
-                           {currentTier === 'premium' && cap.localContentPercentage && (
-                             <View style={styles.localContentBadge}>
-                               <Text style={styles.localContentBadgeText}>
-                                 {cap.localContentPercentage}% Local
-                               </Text>
+                           {/* Expanded sub-items list */}
+                           {isExpanded && (
+                             <View style={styles.capabilityGroupItems}>
+                               {group.items.map((cap, itemIndex) => (
+                                 <View key={`${cap.capabilityId}-${itemIndex}`} style={styles.capabilitySubItem}>
+                                   {/* Visual identifier for each sub-item */}
+                                   <View style={styles.subItemIndicator}>
+                                     <View style={styles.subItemBullet} />
+                                     <Text style={styles.subItemNumber}>{itemIndex + 1}</Text>
+                                   </View>
+                                   
+                                   <View style={styles.capabilitySubContent}>
+                                     {isValidData(cap.detailedItemName) && (
+                                       <Text style={styles.capabilitySubItemName}>
+                                         {cap.detailedItemName}
+                                       </Text>
+                                     )}
+                                     
+                                     {/* Tags row - preserve tier logic */}
+                                     <View style={styles.capabilityTags}>
+                                       {(currentTier === 'plus' || currentTier === 'premium') && (
+                                         <View style={styles.modernCapabilityTypeBadge}>
+                                           <Text style={styles.modernCapabilityTypeText}>{cap.capabilityType}</Text>
+                                         </View>
+                                       )}
+                                       
+                                       {currentTier === 'premium' && cap.localContentPercentage && (
+                                         <View style={styles.localContentBadge}>
+                                           <Text style={styles.localContentBadgeText}>
+                                             {cap.localContentPercentage}% Local
+                                           </Text>
+                                         </View>
+                                       )}
+                                     </View>
+                                   </View>
+                                 </View>
+                               ))}
                              </View>
                            )}
                          </View>
-                       </View>
-                     ))}
+                       );
+                     })}
                      
                    </View>
                  )}
                 
-                {/* Show preview when collapsed */}
-                {!isItemsExpanded && (
-                  <View style={styles.previewContainer}>
-                    <View style={styles.previewTags}>
-                      {company.icnCapabilities.slice(0, 3).map((cap, index) => (
-                        <View key={index} style={styles.previewTag}>
-                          <Text style={styles.previewTagText}>{cap.itemName}</Text>
-                        </View>
-                      ))}
-                      {company.icnCapabilities.length > 3 && (
-                        <View style={styles.moreTag}>
-                          <Text style={styles.moreTagText}>+{company.icnCapabilities.length - 3} more</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                )}
+               {/* Show preview when collapsed */}
+               {!isItemsExpanded && (
+                 <View style={styles.previewContainer}>
+                   <View style={styles.previewTags}>
+                     {groupedCapabilities.slice(0, 3).map((group, index) => (
+                       <View key={index} style={styles.previewTag}>
+                         <Text style={styles.previewTagText}>
+                           {group.itemName}{group.isGroup ? ` (${group.count})` : ''}
+                         </Text>
+                       </View>
+                     ))}
+                     {groupedCapabilities.length > 3 && (
+                       <View style={styles.moreTag}>
+                         <Text style={styles.moreTagText}>+{groupedCapabilities.length - 3} more</Text>
+                       </View>
+                     )}
+                   </View>
+                 </View>
+               )}
               </View>
             )}
 
@@ -1489,6 +1608,89 @@ const styles = StyleSheet.create({
   contactValue: {
     fontSize: 14,
     color: Colors.text,
+  },
+  capabilityGroupContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    marginVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(248, 182, 87, 0.3)',
+    overflow: 'hidden',
+  },
+  capabilityGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: 'rgba(248, 182, 87, 0.05)',
+  },
+  capabilityGroupLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  capabilityGroupTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    flex: 1,
+  },
+  groupCountBadge: {
+    backgroundColor: Colors.primary,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  groupCountText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  capabilityGroupItems: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  capabilitySubItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingLeft: 12,
+    paddingRight: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(248, 182, 87, 0.15)',
+  },
+  subItemIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 12,
+    minWidth: 36,
+  },
+  subItemBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.primary,
+    marginRight: 6,
+  },
+  subItemNumber: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
+    minWidth: 20,
+  },
+  capabilitySubContent: {
+    flex: 1,
+  },
+  capabilitySubItemName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   summaryContainer: {
     marginTop: 12,
