@@ -3,7 +3,7 @@
  * Handles all bookmark-related API calls to the backend
  */
 
-const API_URL = __DEV__ ? 'http://10.0.2.2:8082' : 'https://api.icnvictoria.com';
+import { getApiBaseUrl, fetchWithTimeout } from './apiConfig';
 
 export interface BookmarkResponse {
   success: boolean;
@@ -15,7 +15,7 @@ class BookmarkService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = API_URL;
+    this.baseUrl = getApiBaseUrl();
   }
 
   /**
@@ -29,7 +29,7 @@ class BookmarkService {
       const url = `${this.baseUrl}/user/bookmarks/add?userId=${encodeURIComponent(userId)}&companyId=${encodeURIComponent(companyId)}`;
       console.log('[BookmarkService] POST addBookmark:', url);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,7 +72,7 @@ class BookmarkService {
       const url = `${this.baseUrl}/user/bookmarks/remove?userId=${encodeURIComponent(userId)}&companyId=${encodeURIComponent(companyId)}`;
       console.log('[BookmarkService] POST removeBookmark:', url);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +114,7 @@ class BookmarkService {
       const url = `${this.baseUrl}/user/bookmarks?userId=${encodeURIComponent(userId)}`;
       console.log('[BookmarkService] GET fetchBookmarks:', url);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -159,7 +159,7 @@ class BookmarkService {
       const url = `${this.baseUrl}/user/bookmarks/sync?userId=${encodeURIComponent(userId)}`;
       console.log('[BookmarkService] POST syncBookmarks:', url, 'count:', bookmarks.length);
       
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

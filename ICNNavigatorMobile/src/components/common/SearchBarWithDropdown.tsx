@@ -34,8 +34,14 @@ export default function SearchBarWithDropdown({
   const [showDropdown, setShowDropdown] = useState(false);
   const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([]);
   const dropdownAnimation = useRef(new Animated.Value(0)).current;
+  const justSelectedRef = useRef(false); // Track if item was just selected to prevent dropdown from reopening
 
   useEffect(() => {
+    // Don't show dropdown if item was just selected (prevents reopening when MapScreen updates search text)
+    if (justSelectedRef.current) {
+      return;
+    }
+
     if (value.length > 0) {
       // Filter companies based on search text
       const filtered = companies
@@ -75,10 +81,19 @@ export default function SearchBarWithDropdown({
   };
 
   const handleSelectCompany = (company: Company) => {
+    // Set flag to prevent dropdown from reopening when MapScreen updates the search text
+    justSelectedRef.current = true;
+    
     Keyboard.dismiss();
-    onSelectCompany(company);
-    onChangeText(company.name); // Show selected company name
     hideDropdownAnimation();
+    onSelectCompany(company);
+    // Note: Don't call onChangeText here - MapScreen.handleCompanySelection 
+    // will update the search text after the map zoom animation completes
+    
+    // Clear the flag after a delay (must be longer than MapScreen's CAMERA_ANIM_MS + setTimeout)
+    setTimeout(() => {
+      justSelectedRef.current = false;
+    }, 800); // 800ms should cover the 500ms animation + buffer
   };
 
   const handleClear = () => {

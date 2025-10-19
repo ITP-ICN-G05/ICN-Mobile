@@ -30,6 +30,7 @@ const AUSTRALIA_REGION: Region = {
 };
 
 const CARD_RAISE = 330; // keep in sync with rightButtonsWithCompanyDetail.bottom
+const CAMERA_ANIM_MS = 500; // Duration for camera animation when selecting from search
 
 // Coordinate validation now handled by coords utility
 
@@ -43,6 +44,7 @@ export default function MapScreen() {
   const { filters, setFilters, clearFilters: clearGlobalFilters } = useFilter();
 
   const mapRef = useRef<MapView>(null);
+  const markerRefs = useRef<Record<string, any>>({});
   const [searchText, setSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const slideAnimation = useRef(new Animated.Value(300)).current;
@@ -276,6 +278,10 @@ export default function MapScreen() {
   // --- Shared close helper so search <-> card can stay in sync ---
   const closeCompanyCard = (opts?: { clearSearch?: boolean; animate?: boolean }) => {
     if (!selectedCompany) return; // only when card is displayed
+    
+    // Close the map callout when closing the bottom card
+    markerRefs.current[selectedCompany.id]?.hideCallout();
+    
     const { clearSearch = false, animate = true } = opts || {};
 
     const doClearSearch = () => {
@@ -305,7 +311,7 @@ export default function MapScreen() {
   };
 
   const animateToCompany = (company: Company) => {
-    startSelectionLock(1200);
+    startSelectionLock(1500);
     setSelectedCompany(company);
 
     // Slide up the detail card immediately
@@ -318,7 +324,7 @@ export default function MapScreen() {
     }
 
     // Release the lock slightly after the camera settles
-    releaseSelectionLockSoon(800);
+    releaseSelectionLockSoon(1000);
   };
 
   const handleMarkerPress = (company: Company) => {
@@ -329,13 +335,77 @@ export default function MapScreen() {
   const navigateToDetail = (company: Company) => navigation.navigate('CompanyDetail', { company });
   const handleCalloutPress = (company: Company) => navigateToDetail(company);
 
-  // Selecting from search mirrors a pin tap & keeps text visible
+  // Selecting from search: zoom camera first, then reveal card & callout
   const handleCompanySelection = (company: Company) => {
+    console.log('[MapScreen] Company selected from search dropdown:', company.name, company.id);
+    
+    // Close any existing card first (without animation to avoid conflicts)
+    if (selectedCompany) {
+      closeCompanyCard({ clearSearch: false, animate: false });
+    }
+    
     setIsFromDropdownSelection(true);
-    setSearchText(company.name);
-    animateToCompany(company);
-    // allow dropdown state to relax after animation
-    setTimeout(() => setIsFromDropdownSelection(false), 900);
+    // DON'T update searchText yet - wait until after camera animation to prevent filteredCompanies recalculation
+
+    // Lock auto-fit during programmatic camera movement
+    startSelectionLock(CAMERA_ANIM_MS + 1000);
+    cameraBusyRef.current = true;
+    bumpManualLock(CAMERA_ANIM_MS + 1000); // Also bump manual lock to prevent auto-zoom interference
+
+    // Step 1: Zoom camera first
+    const center = normaliseLatLng(company);
+    if (center && mapRef.current) {
+      console.log('[MapScreen] Zooming to company coordinates:', {
+        company: company.name,
+        lat: center.latitude,
+        lng: center.longitude,
+        mapRefExists: !!mapRef.current
+      });
+      
+      mapRef.current.animateCamera(
+        { 
+          center, 
+          zoom: 15, 
+          heading: 0, 
+          pitch: 0 
+        }, 
+        { duration: CAMERA_ANIM_MS }
+      );
+    } else {
+      console.error('[MapScreen] Cannot zoom - Invalid coordinates or missing mapRef:', {
+        company: company.name,
+        hasCoordinates: !!center,
+        hasMapRef: !!mapRef.current,
+        rawCoords: { lat: company.latitude, lng: company.longitude }
+      });
+      
+      // Even if zoom fails, still show the company card
+    }
+
+    // Step 2: After camera finishes, show card and callout
+    setTimeout(() => {
+      // NOW update the search text after camera animation
+      setSearchText(company.name);
+      setSelectedCompany(company);
+
+      // Slide up the detail card
+      Animated.timing(slideAnimation, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+
+      // Optionally show the map callout too
+      const marker = markerRefs.current[company.id];
+      if (marker && marker.showCallout) {
+        marker.showCallout();
+        console.log('[MapScreen] Showing marker callout for:', company.name);
+      } else {
+        console.warn('[MapScreen] Marker ref not found or showCallout unavailable for:', company.id);
+      }
+
+      cameraBusyRef.current = false;
+      releaseSelectionLockSoon(400);
+      setIsFromDropdownSelection(false);
+      
+      console.log('[MapScreen] Company selection complete:', company.name);
+    }, CAMERA_ANIM_MS);
   };
 
   // NOTE: details?.isGesture is supported in recent react-native-maps. We also hook onPanDrag as a fallback.
@@ -365,7 +435,19 @@ export default function MapScreen() {
     if (text === '' || text.length > 2) scheduleZoom(250, true); // search is an explicit intent — bypass manual lock
   };
 
-  const getMarkerColor = (company: Company) => (searchText && company.name.toLowerCase().includes(searchText.toLowerCase()) ? Colors.warning : (company.verificationStatus === 'verified' ? Colors.success : Colors.primary));
+  const getMarkerColor = (company: Company) => {
+    const baseColor = company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
+    
+    // Keep default color when card is open or selection from dropdown
+    if (selectedCompany || isFromDropdownSelection) return baseColor;
+    
+    // Only highlight during active typing search (not after selection)
+    if (searchText && company.name.toLowerCase().includes(searchText.toLowerCase())) {
+      return Colors.warning;
+    }
+    
+    return baseColor;
+  };
 
   const handleRecenterToUserLocation = async () => {
     setIsLocating(true);
@@ -503,6 +585,7 @@ export default function MapScreen() {
           
           return (
             <Marker
+              ref={(ref) => { markerRefs.current[company.id] = ref; }}
               key={company.id}
               coordinate={coord}
               onPress={() => handleMarkerPress(company)}

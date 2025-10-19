@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExtendedProfileFields, LocalProfileStore } from './LocalProfileStore';
-
-const API_BASE_URL = __DEV__ ? 'http://10.0.2.2:8082' : 'https://api.icnvictoria.com';
+import { getApiBaseUrl, fetchWithTimeout } from './apiConfig';
 
 // Backend-compatible fields only - matches the Java User class
 interface BackendProfileData {
@@ -53,6 +52,7 @@ class ProfileApiService {
     body?: any
   ) {
     const token = await this.getAuthToken();
+    const API_BASE_URL = getApiBaseUrl();
     
     // Add debug logging
     const fullUrl = `${API_BASE_URL}${endpoint}`;
@@ -66,7 +66,7 @@ class ProfileApiService {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(fullUrl, {
+    const response = await fetchWithTimeout(fullUrl, {
       method,
       headers,
       body: body instanceof FormData ? body : JSON.stringify(body),
