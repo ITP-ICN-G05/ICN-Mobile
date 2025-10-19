@@ -55,15 +55,19 @@ export interface UserPayment {
 export class UserApiService extends BaseApiService {
   
   /**
-   * User login
-   * GET /api/user?email={email}&password={password}
+   * User login - secure POST endpoint
+   * POST /api/user/login
    * 
    * @param email User email
    * @param password User password
    * @returns Promise<ApiResponse<UserFull>>
    */
   async login(email: string, password: string): Promise<ApiResponse<UserFull>> {
-    const response = await this.get<UserFull>('/user', { email, password });
+    // Changed from GET to POST for security
+    const response = await this.post<UserFull>('/user/login', { 
+      email, 
+      password 
+    });
     
     // If login successful, save user information here
     if (response.success && response.data) {
@@ -107,8 +111,8 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * Reset password
-   * POST /api/user/resetPassword?email={email}&code={code}&newPassword={newPassword}
+   * Reset password - secure POST endpoint
+   * POST /api/user/resetPassword
    * 
    * @param email User email
    * @param code Verification code
@@ -116,6 +120,7 @@ export class UserApiService extends BaseApiService {
    * @returns Promise<ApiResponse<void>>
    */
   async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<void>> {
+    // Send parameters in POST body for security instead of URL
     const endpoint = `/user/resetPassword?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&newPassword=${encodeURIComponent(newPassword)}`;
     return this.post<void>(endpoint);
   }

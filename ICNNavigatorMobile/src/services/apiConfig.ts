@@ -86,12 +86,33 @@ export class BaseApiService {
         success: true
       };
     } else {
-      const errorText = isJson ? 
-        (await response.json()).message || 'Request failed' :
-        await response.text() || 'Request failed';
+      // Try to get detailed error message from X-Error header first
+      const xError = response.headers.get('X-Error');
+      let errorMessage = 'Request failed';
+      
+      // Use X-Error header if available
+      if (xError) {
+        errorMessage = xError;
+      } else {
+        // Otherwise try to parse response body
+        try {
+          if (isJson) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            const errorText = await response.text();
+            if (errorText && errorText.trim().length > 0) {
+              errorMessage = errorText;
+            }
+          }
+        } catch (e) {
+          // If parsing fails, keep the default error message
+          console.warn('Failed to parse error response:', e);
+        }
+      }
       
       return {
-        error: errorText,
+        error: errorMessage,
         status: response.status,
         success: false
       };

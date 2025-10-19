@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, CommonActions } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '../../contexts/UserContext';
 import AuthService from '../../services/authService';
 
@@ -10,7 +11,7 @@ interface SignUpFormProps {
 }
 
 export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
-  const { login } = useUser();
+  const { login, setShowOnboarding } = useUser();
   const [userName, setUserName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -102,7 +103,15 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
 
       // After successful registration, log in
       await login(email, password);
-      Alert.alert('Success', 'Account created successfully!');
+      
+      // Clear onboarding flag for new registrations
+      await AsyncStorage.removeItem('@onboarding_completed');
+      
+      // Force show onboarding for new users
+      setShowOnboarding(true);
+      
+      // Remove Alert - onboarding modal will show instead
+      console.log('User registered and logged in successfully');
     } catch (e: any) {
       Alert.alert('Registration Failed', e.message || 'Failed to create account');
     } finally {
