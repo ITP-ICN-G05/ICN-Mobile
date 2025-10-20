@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { Colors, Spacing } from '../../constants/colors';
+import { useProfile } from '../../contexts/ProfileContext';
+import { useUser } from '../../contexts/UserContext';
 
 interface ProfileFormData {
   firstName: string;
@@ -33,6 +35,8 @@ interface ProfileFormData {
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
+  const { profile, updateProfile } = useProfile();
+  const { user, updateUser } = useUser();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
@@ -53,6 +57,7 @@ export default function EditProfileScreen() {
 
   const [errors, setErrors] = useState<Partial<ProfileFormData>>({});
 
+  // Effect 1: Set header (only depends on navigation and saving)
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -65,7 +70,35 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, saving, formData]);
+  }, [navigation, saving]); // ✅ Only depends on navigation and saving
+
+  // Effect 2: Load profile data (runs only once on mount)
+  useEffect(() => {
+    // Load profile data from context
+    if (profile) {
+      setFormData({
+        firstName: profile.firstName || '',
+        lastName: profile.lastName || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        company: profile.company || '',
+        role: profile.role || '',
+        bio: profile.bio || '',
+        linkedIn: profile.linkedIn || '',
+        website: profile.website || '',
+        avatar: profile.avatar || null,
+      });
+    } else if (user) {
+      // Fallback to user data if profile is not available
+      setFormData(prev => ({
+        ...prev,
+        email: user.email || '',
+        phone: user.phone || '',
+        company: user.company || '',
+        role: user.role || '',
+      }));
+    }
+  }, []); // ✅ Empty dependency array, runs only once on mount
 
   // Image picker functions
   const pickImageFromGallery = async () => {
@@ -192,11 +225,30 @@ export default function EditProfileScreen() {
     setSaving(true);
 
     try {
-      // TODO: Implement actual API call to save profile
-      // await api.updateProfile(formData);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Update profile in context
+      await updateProfile({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        company: formData.company,
+        role: formData.role,
+        bio: formData.bio,
+        linkedIn: formData.linkedIn,
+        website: formData.website,
+        avatar: formData.avatar,
+      });
+
+      // Also update user context with basic info
+      if (user) {
+        await updateUser({
+          ...user,
+          email: formData.email,
+          phone: formData.phone,
+          company: formData.company,
+          role: formData.role,
+        });
+      }
       
       Alert.alert(
         'Success',

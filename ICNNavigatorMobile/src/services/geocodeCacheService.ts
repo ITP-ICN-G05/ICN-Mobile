@@ -140,7 +140,7 @@ class GeocodeCacheService {
       const cachedEntry = this.cache.entries[cacheKey];
       
       if (cachedEntry && !this.isExpired(cachedEntry.timestamp)) {
-        console.log(`Using cached coordinates for: ${cacheKey.substring(0, 30)}...`);
+        // console.log(`Using cached coordinates for: ${cacheKey.substring(0, 30)}...`);
         return {
           latitude: cachedEntry.latitude,
           longitude: cachedEntry.longitude,

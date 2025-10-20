@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+﻿import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, Callout, LatLng } from 'react-native-maps';
@@ -10,7 +10,8 @@ import EnhancedFilterModal, { EnhancedFilterOptions } from '../../components/com
 import { Colors } from '../../constants/colors';
 import { Company } from '../../types';
 import { useUserTier } from '../../contexts/UserTierContext';
-import icnDataService from '../../services/icnDataService';
+import hybridDataService from '../../services/hybridDataService';
+import { normaliseLatLng, hasValidCoords, extractValidCoordinates, diagnoseCoordinates } from '../../utils/coords';
 
 const MELBOURNE_REGION: Region = {
   latitude: -37.8136,
@@ -21,8 +22,7 @@ const MELBOURNE_REGION: Region = {
 
 const CARD_RAISE = 330; // keep in sync with rightButtonsWithCompanyDetail.bottom
 
-const toNumber = (v: any) => (typeof v === 'string' ? parseFloat(v) : v);
-const hasValidCoords = (c: Company) => Number.isFinite(toNumber(c.latitude)) && Number.isFinite(toNumber(c.longitude));
+// Coordinate validation now handled by coords utility
 
 export default function MapScreen() {
   const navigation = useNavigation<any>();
@@ -97,11 +97,15 @@ export default function MapScreen() {
     (async () => {
       try {
         setIsLoading(true);
-        await icnDataService.loadData();
-        const loadedCompanies = icnDataService.getCompanies();
-        const options = icnDataService.getFilterOptions();
+        await hybridDataService.loadData();
+        const loadedCompanies = hybridDataService.getCompanies();
+        const options = hybridDataService.getFilterOptions();
         setCompanies(loadedCompanies);
         setFilterOptions(options);
+        
+        // Diagnostic logging for coordinate issues
+        diagnoseCoordinates(loadedCompanies, 'Loaded Companies');
+        
         if (loadedCompanies.length > 0) setTimeout(() => zoomToAllCompanies(loadedCompanies), 400);
       } catch (e) {
         console.error('Error loading ICN data:', e);
@@ -112,9 +116,7 @@ export default function MapScreen() {
   }, []);
 
   const zoomToAllCompanies = (list: Company[]) => {
-    const coords = list
-      .filter(hasValidCoords)
-      .map(c => ({ latitude: toNumber(c.latitude), longitude: toNumber(c.longitude) }));
+    const coords = extractValidCoordinates(list);
     if (coords.length === 0) return;
     if (coords.length === 1) {
       mapRef.current?.animateCamera({ center: coords[0], zoom: 14 }, { duration: 500 });
@@ -138,7 +140,7 @@ export default function MapScreen() {
     let filtered = [...companies];
 
     // Search
-    if (searchText) filtered = icnDataService.searchCompanies(searchText);
+    if (searchText) filtered = hybridDataService.searchCompaniesSync(searchText);
 
     // Capabilities
     if (filters.capabilities.length > 0) {
@@ -195,9 +197,10 @@ export default function MapScreen() {
       else if (filters.distance.includes('km')) maxKm = parseInt(filters.distance);
       const kmToDeg = maxKm / 111;
       filtered = filtered.filter(company => {
-        if (!hasValidCoords(company)) return false;
-        const latDiff = Math.abs(toNumber(company.latitude) - region.latitude);
-        const lonDiff = Math.abs(toNumber(company.longitude) - region.longitude);
+        const coord = normaliseLatLng(company);
+        if (!coord) return false;
+        const latDiff = Math.abs(coord.latitude - region.latitude);
+        const lonDiff = Math.abs(coord.longitude - region.longitude);
         const approx = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
         return approx <= kmToDeg;
       });
@@ -263,7 +266,7 @@ export default function MapScreen() {
   }, [filteredCompanies, isLoading, selectedCompany]);
 
   const zoomToFilteredResults = () => {
-    const coords: LatLng[] = filteredCompanies.map(c => ({ latitude: toNumber(c.latitude), longitude: toNumber(c.longitude) }));
+    const coords = extractValidCoordinates(filteredCompanies);
     if (coords.length === 0) return;
     if (coords.length === 1) {
       mapRef.current?.animateCamera({ center: coords[0], zoom: 15 }, { duration: 400 });
@@ -314,8 +317,10 @@ export default function MapScreen() {
     Animated.timing(slideAnimation, { toValue: 0, duration: 300, useNativeDriver: true }).start();
 
     // Smooth camera focus using animateCamera (more reliable than animateToRegion for zoom level)
-    const center = { latitude: toNumber(company.latitude), longitude: toNumber(company.longitude) };
-    mapRef.current?.animateCamera({ center, zoom: 15, heading: 0, pitch: 0 }, { duration: 500 });
+    const center = normaliseLatLng(company);
+    if (center) {
+      mapRef.current?.animateCamera({ center, zoom: 15, heading: 0, pitch: 0 }, { duration: 500 });
+    }
 
     // Release the lock slightly after the camera settles
     releaseSelectionLockSoon(800);
@@ -420,15 +425,19 @@ export default function MapScreen() {
         showsMyLocationButton={false}
         showsCompass={false}
       >
-        {filteredCompanies.map(company => (
-          <Marker
-            key={company.id}
-            coordinate={{ latitude: toNumber(company.latitude), longitude: toNumber(company.longitude) }}
-            onPress={() => handleMarkerPress(company)}
-            onCalloutPress={() => handleCalloutPress(company)}
-            pinColor={getMarkerColor(company)}
-            tracksViewChanges={false}
-          >
+        {filteredCompanies.map(company => {
+          const coord = normaliseLatLng(company);
+          if (!coord) return null; // Skip invalid/out-of-range coordinates
+          
+          return (
+            <Marker
+              key={company.id}
+              coordinate={coord}
+              onPress={() => handleMarkerPress(company)}
+              onCalloutPress={() => handleCalloutPress(company)}
+              pinColor={getMarkerColor(company)}
+              tracksViewChanges={false}
+            >
             <Callout style={styles.callout} onPress={() => navigateToDetail(company)} tooltip={false}>
               <View style={styles.calloutContent}>
                 <Text style={styles.calloutTitle} numberOfLines={1}>{company.name}</Text>
@@ -453,7 +462,8 @@ export default function MapScreen() {
               </View>
             </Callout>
           </Marker>
-        ))}
+          );
+        })}
       </MapView>
 
       <View style={[styles.searchOverlay, { top: insets.top + 10 }]}>

@@ -1,10 +1,62 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { userApiService, UserFull, InitialUser } from './userApiService';
 
 class AuthService {
   private static TOKEN_KEY = '@auth_token';
   private static USER_KEY = '@user_data';
   private static REFRESH_TOKEN_KEY = '@refresh_token';
 
+  /**
+   * User login - integrated with backend API
+   */
+  static async login(email: string, password: string): Promise<UserFull> {
+    const response = await userApiService.login(email, password);
+    
+    if (response.success && response.data) {
+      // Save authentication token (if provided by backend)
+      // await AsyncStorage.setItem(this.TOKEN_KEY, token);
+      return response.data;
+    } else {
+      throw new Error(response.error || 'Login failed');
+    }
+  }
+
+  /**
+   * User registration - integrated with backend API
+   */
+  static async register(userData: InitialUser): Promise<void> {
+    const response = await userApiService.createUser(userData);
+    
+    if (!response.success) {
+      throw new Error(response.error || 'Registration failed');
+    }
+  }
+
+  /**
+   * Send verification code
+   */
+  static async sendValidationCode(email: string): Promise<void> {
+    const response = await userApiService.sendValidationCode(email);
+    
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to send verification code');
+    }
+  }
+
+  /**
+   * Reset password
+   */
+  static async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    const response = await userApiService.resetPassword(email, code, newPassword);
+    
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to reset password');
+    }
+  }
+
+  /**
+   * User logout
+   */
   static async signOut(): Promise<void> {
     try {
       // Clear all authentication tokens
@@ -17,12 +69,29 @@ class AuthService {
       // Clear any cached data
       await this.clearCachedData();
 
+      // Use the userApiService to logout
+      await userApiService.logout();
+
       // Optionally call backend to invalidate token
       await this.invalidateServerSession();
     } catch (error) {
       console.error('Error during sign out:', error);
       throw error;
     }
+  }
+
+  /**
+   * Check if user is logged in
+   */
+  static async isLoggedIn(): Promise<boolean> {
+    return await userApiService.isLoggedIn();
+  }
+
+  /**
+   * Get current user data
+   */
+  static async getCurrentUser(): Promise<UserFull | null> {
+    return await userApiService.getLocalUserData();
   }
 
   private static async clearCachedData(): Promise<void> {
@@ -39,7 +108,9 @@ class AuthService {
     try {
       const token = await AsyncStorage.getItem(this.TOKEN_KEY);
       if (token) {
-        await fetch('https://api.icnvictoria.com/auth/logout', {
+        // Use unified API configuration
+        const { API_BASE_URL } = await import('../constants');
+        await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -55,7 +126,9 @@ class AuthService {
   static async deleteAccount(password: string): Promise<void> {
     const token = await AsyncStorage.getItem(this.TOKEN_KEY);
     
-    const response = await fetch('https://api.icnvictoria.com/account/delete', {
+    // Use unified API configuration
+    const { API_BASE_URL } = await import('../constants');
+    const response = await fetch(`${API_BASE_URL}/account/delete`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,

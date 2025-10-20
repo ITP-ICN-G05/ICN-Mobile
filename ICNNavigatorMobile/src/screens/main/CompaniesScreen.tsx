@@ -39,6 +39,34 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// State normalization mapping
+const STATE_ALIASES: Record<string, string> = {
+  VIC: 'VIC', Victoria: 'VIC',
+  NSW: 'NSW', 'New South Wales': 'NSW',
+  QLD: 'QLD', Queensland: 'QLD',
+  SA: 'SA', 'South Australia': 'SA',
+  WA: 'WA', 'Western Australia': 'WA',
+  TAS: 'TAS', Tasmania: 'TAS',
+  ACT: 'ACT', 'Australian Capital Territory': 'ACT',
+  NT: 'NT', 'Northern Territory': 'NT',
+  NI: 'NI', 'North Island': 'NI',
+  SI: 'SI', 'South Island': 'SI'
+};
+
+// Helper function to normalize state codes
+const normaliseState = (s?: string): string | undefined => {
+  if (!s || s.trim() === '' || s.trim() === '#N/A') return undefined;
+  const trimmed = s.trim();
+  return STATE_ALIASES[trimmed] ?? trimmed.toUpperCase();
+};
+
+// Helper function to extract company sectors from multiple sources
+const extractCompanySectors = (c: Company): string[] => {
+  const list1 = Array.isArray((c as any).keySectors) ? (c as any).keySectors : [];
+  const list2 = c.icnCapabilities?.map(x => (x as any).sector ?? (x as any).sectorName)?.filter(Boolean) ?? [];
+  return Array.from(new Set([...list1, ...list2])).map(s => String(s).toLowerCase());
+};
+
 export default function CompaniesScreen() {
   // Navigation hook
   const navigation = useNavigation<any>();
@@ -87,6 +115,21 @@ export default function CompaniesScreen() {
     }
   }, [searchText]);
 
+  // Debug logging to verify company type derivation (temporary)
+  useEffect(() => {
+    if (allCompanies.length > 0) {
+      console.log('=== Company Type Debug Info ===');
+      const sampleCompanies = allCompanies.slice(0, 3);
+      sampleCompanies.forEach((company, index) => {
+        console.log(`Company ${index + 1}: ${company.name}`);
+        console.log(`  - companyType: ${company.companyType || 'undefined'}`);
+        console.log(`  - icnCapabilities:`, company.icnCapabilities?.map(c => c.capabilityType) || 'none');
+        console.log('---');
+      });
+    }
+  }, [allCompanies]);
+
+
   // Filter and sort companies
   const filteredAndSortedCompanies = useMemo(() => {
     // Start with search results or all companies
@@ -107,22 +150,30 @@ export default function CompaniesScreen() {
       );
     }
 
-    // Apply sector filter
+    // Apply sector filter - Fixed to support backend data structure
     if (filters.sectors && filters.sectors.length > 0) {
-      filtered = filtered.filter(company =>
-        filters.sectors.some(sector =>
-          company.keySectors.some(keySector =>
-            keySector.toLowerCase().includes(sector.toLowerCase())
-          )
-        )
-      );
+      const wantedSectors = filters.sectors
+        .filter(s => s !== 'All')
+        .map(s => s.toLowerCase());
+      
+      if (wantedSectors.length > 0) {
+        filtered = filtered.filter(company => {
+          const companySectors = extractCompanySectors(company);
+          return wantedSectors.some(wanted => 
+            companySectors.some(have => have.includes(wanted))
+          );
+        });
+      }
     }
 
-    // Apply state filter (ICN specific)
+    // Apply state filter - Fixed with normalization
     if (filters.state && filters.state !== 'All') {
-      filtered = filtered.filter(company =>
-        company.billingAddress?.state === filters.state
-      );
+      const targetState = normaliseState(filters.state);
+      if (targetState) {
+        filtered = filtered.filter(company => 
+          normaliseState(company.billingAddress?.state) === targetState
+        );
+      }
     }
 
     // Apply company type filter (ICN capability types)
@@ -274,6 +325,15 @@ export default function CompaniesScreen() {
     return filtered;
   }, [searchText, filters, sortBy, allCompanies, icnSearchResults, features]);
 
+  // Compute UI statistics from displayed data
+  const uiStats = useMemo(() => ({
+    total: filteredAndSortedCompanies.length,
+    verified: filteredAndSortedCompanies.filter(
+      c => c.verificationStatus === 'verified'
+    ).length,
+    saved: bookmarkedIds.length,
+  }), [filteredAndSortedCompanies, bookmarkedIds]);
+
   // Bookmarked companies section
   const bookmarkedCompanies = useMemo(() => {
     return allCompanies.filter(company => bookmarkedIds.includes(company.id));
@@ -399,9 +459,17 @@ export default function CompaniesScreen() {
     }
   }, [refreshICN]);
 
+  // Normalize filters to handle "All" values properly
+  const normaliseFilters = (f: EnhancedFilterOptions): EnhancedFilterOptions => ({
+    ...f,
+    sectors: f.sectors?.filter(s => s !== 'All') ?? [],
+    state: !f.state || f.state === 'All' ? undefined : f.state,
+    companySize: !f.companySize || f.companySize === 'All' ? undefined : f.companySize,
+  });
+
   // Apply filters
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
-    setFilters(newFilters);
+    setFilters(normaliseFilters(newFilters));
     setFilterModalVisible(false);
     
     // Don't apply to ICN data here as filtering is done in the useMemo
@@ -428,6 +496,53 @@ export default function CompaniesScreen() {
   const handleNavigateToPayment = () => {
     navigation.navigate('Payment');
   };
+
+  // Create robust filter options for modal with fallback mechanism
+  const modalFilterOptions = useMemo(() => {
+    // Use backend options if present, otherwise build from data in memory
+    const sectors = icnFilterOptions?.sectors?.length
+      ? icnFilterOptions.sectors
+      : Array.from(new Set(allCompanies.flatMap(c => extractCompanySectors(c)))).sort();
+
+    const states = icnFilterOptions?.states?.length
+      ? icnFilterOptions.states
+      : Array.from(new Set(
+          allCompanies
+            .map(c => normaliseState(c.billingAddress?.state))
+            .filter(Boolean) as string[]
+        )).sort();
+
+    const capabilities = icnFilterOptions?.capabilities?.length
+      ? icnFilterOptions.capabilities
+      : Array.from(new Set(
+          allCompanies.flatMap(c => c.capabilities || [])
+        )).sort();
+
+    const capabilityTypes = icnFilterOptions?.capabilityTypes?.length
+      ? icnFilterOptions.capabilityTypes
+      : Array.from(new Set(
+          allCompanies.flatMap(c => c.icnCapabilities?.map(ic => ic.capabilityType) || [])
+        )).sort();
+
+    const cities = icnFilterOptions?.cities?.length
+      ? icnFilterOptions.cities
+      : Array.from(new Set(
+          allCompanies
+            .map(c => c.billingAddress?.city)
+            .filter((city): city is string => 
+              Boolean(city && city !== 'City Not Available' && city !== '#N/A')
+            )
+        )).sort();
+
+    return { 
+      ...(icnFilterOptions ?? {}), 
+      sectors, 
+      states, 
+      capabilities, 
+      capabilityTypes,
+      cities
+    };
+  }, [icnFilterOptions, allCompanies]);
 
   // Handle export
   const handleExport = () => {
@@ -463,27 +578,25 @@ export default function CompaniesScreen() {
         )}
       </View>
 
-      {/* Stats Bar with ICN Statistics */}
-      {statistics && (
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{statistics.totalCompanies}</Text>
-            <Text style={styles.statLabel}>Companies</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{statistics.verified}</Text>
-            <Text style={styles.statLabel}>Verified</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{bookmarkedIds.length}</Text>
-            <Text style={styles.statLabel}>
-              Saved {currentTier === 'free' && '(10 max)'}
-            </Text>
-          </View>
+      {/* Stats Bar with UI Statistics */}
+      <View style={styles.statsBar}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{uiStats.total}</Text>
+          <Text style={styles.statLabel}>Companies</Text>
         </View>
-      )}
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{uiStats.verified}</Text>
+          <Text style={styles.statLabel}>Verified</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{uiStats.saved}</Text>
+          <Text style={styles.statLabel}>
+            Saved {currentTier === 'free' && '(10 max)'}
+          </Text>
+        </View>
+      </View>
 
       {/* Sort and View Options */}
       <View style={styles.controlsBar}>
@@ -617,6 +730,16 @@ export default function CompaniesScreen() {
     }
   };
 
+  // Format city and state, filtering out #N/A values
+  const formatCityState = (company: Company) => {
+    const city = company.billingAddress?.city;
+    const state = company.billingAddress?.state;
+    const cleanValue = (s?: string) => 
+      s && s !== '#N/A' && s.trim() !== '' ? s : null;
+    const parts = [cleanValue(city), cleanValue(state)].filter(Boolean);
+    return parts.length ? parts.join(', ') : 'Location unavailable';
+  };
+
   // Render empty state
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -652,7 +775,7 @@ export default function CompaniesScreen() {
         </View>
         <Text style={styles.gridName} numberOfLines={2}>{displayName}</Text>
         <Text style={styles.gridAddress} numberOfLines={1}>
-          {item.billingAddress ? `${item.billingAddress.city}, ${item.billingAddress.state}` : item.address}
+          {formatCityState(item)}
         </Text>
         <TouchableOpacity 
           style={styles.gridBookmark}
@@ -740,7 +863,7 @@ export default function CompaniesScreen() {
         onApply={handleApplyFilters}
         currentFilters={filters}
         onNavigateToPayment={handleNavigateToPayment}
-        filterOptions={icnFilterOptions || undefined} // Pass ICN filter options
+        filterOptions={modalFilterOptions} // Pass robust filter options with fallback
       />
     </View>
   );

@@ -114,3 +114,12 @@ ehthumbs.db
 .env*.local
 temp/
 tmp/
+
+
+# testing videos and images
+test video and pic/
+test video and pic/**/*.png
+test video and pic/**/*.jpg
+test video and pic/**/*.mp4
+
+

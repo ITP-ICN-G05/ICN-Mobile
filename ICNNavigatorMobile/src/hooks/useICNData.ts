@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Company, SearchFilters } from '../types';
-import icnDataService from '../services/icnDataService';
+import hybridDataService from '../services/hybridDataService';
 
 export interface UseICNDataResult {
   companies: Company[];
   loading: boolean;
   error: string | null;
   searchResults: Company[];
-  statistics: ReturnType<typeof icnDataService.getStatistics> | null;
-  filterOptions: ReturnType<typeof icnDataService.getFilterOptions> | null;
+  statistics: ReturnType<typeof hybridDataService.getStatistics> | null;
+  filterOptions: ReturnType<typeof hybridDataService.getFilterOptions> | null;
   search: (searchText: string) => void;
   applyFilters: (filters: Partial<SearchFilters>) => void;
   getCompanyById: (id: string) => Company | undefined;
@@ -20,8 +20,8 @@ export function useICNData(autoLoad: boolean = true): UseICNDataResult {
   const [searchResults, setSearchResults] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statistics, setStatistics] = useState<ReturnType<typeof icnDataService.getStatistics> | null>(null);
-  const [filterOptions, setFilterOptions] = useState<ReturnType<typeof icnDataService.getFilterOptions> | null>(null);
+  const [statistics, setStatistics] = useState<ReturnType<typeof hybridDataService.getStatistics> | null>(null);
+  const [filterOptions, setFilterOptions] = useState<ReturnType<typeof hybridDataService.getFilterOptions> | null>(null);
   const [currentFilters, setCurrentFilters] = useState<Partial<SearchFilters>>({});
 
   // Load data from JSON file
@@ -31,16 +31,16 @@ export function useICNData(autoLoad: boolean = true): UseICNDataResult {
       setError(null);
       
       if (forceReload) {
-        icnDataService.clearCache();
+        hybridDataService.clearCache();
       }
       
-      await icnDataService.loadData();
+      await hybridDataService.loadData();
       
-      const loadedCompanies = icnDataService.getCompanies();
+      const loadedCompanies = hybridDataService.getCompanies();
       setCompanies(loadedCompanies);
       setSearchResults(loadedCompanies); // Initially show all companies
-      setStatistics(icnDataService.getStatistics());
-      setFilterOptions(icnDataService.getFilterOptions());
+      setStatistics(hybridDataService.getStatistics());
+      setFilterOptions(hybridDataService.getFilterOptions());
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load ICN data';
@@ -66,7 +66,7 @@ export function useICNData(autoLoad: boolean = true): UseICNDataResult {
       return;
     }
     
-    const results = icnDataService.searchCompanies(searchText);
+    const results = hybridDataService.searchCompaniesSync(searchText);
     setSearchResults(results);
     setCurrentFilters(prev => ({ ...prev, searchText }));
   }, [companies]);
@@ -77,7 +77,7 @@ export function useICNData(autoLoad: boolean = true): UseICNDataResult {
     
     // Text search
     if (filters.searchText) {
-      filtered = icnDataService.searchCompanies(filters.searchText);
+      filtered = hybridDataService.searchCompaniesSync(filters.searchText);
     }
     
     // State filter
@@ -132,7 +132,7 @@ export function useICNData(autoLoad: boolean = true): UseICNDataResult {
 
   // Get company by ID
   const getCompanyById = useCallback((id: string): Company | undefined => {
-    return icnDataService.getCompanyById(id);
+    return hybridDataService.getCompanyById(id);
   }, []);
 
   // Refresh data

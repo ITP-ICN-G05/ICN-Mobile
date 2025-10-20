@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useUser } from '../../contexts/UserContext';
 
@@ -16,13 +16,24 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
 
   const handleSignIn = async () => {
     if (submitting) return;
+    
+    // Add basic validation
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    if (!email.includes('@')) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await login(email, password); 
-      // no imperative navigation here
-    } catch (e) {
-      console.log('Sign in failed:', e);
-      // optionally show a toast/alert
+      // UserContext will handle navigation automatically
+    } catch (e: any) {
+      Alert.alert('Login Failed', e.message || 'Invalid credentials. Please check your email and password.');
     } finally {
       setSubmitting(false);
     }

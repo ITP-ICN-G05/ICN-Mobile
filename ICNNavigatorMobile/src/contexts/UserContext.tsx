@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import AuthService from '../services/authService';
 
 interface UserData {
   id: string;
@@ -35,7 +36,7 @@ const MOCK_USER_DATA: UserData = {
   avatar: null,
 };
 
-const USE_BACKEND = false; // Set to true when backend is ready
+const USE_BACKEND = true; // Set to true when backend is ready
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
@@ -103,8 +104,21 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
 
       const userData = await response.json();
-      setUser(userData);
-      await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+      
+      // Convert UserFull to UserData format
+      const convertedUser: UserData = {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone || '',
+        company: userData.company || '',
+        role: userData.role || 'User',
+        memberSince: userData.createdAt ? new Date(userData.createdAt).getFullYear().toString() : '2024',
+        avatar: userData.avatar || null,
+      };
+      
+      setUser(convertedUser);
+      await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
     } catch (err) {
       console.warn('Token validation failed:', err);
       await logout();
@@ -117,31 +131,24 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       setError(null);
 
       if (USE_BACKEND) {
-        // Backend authentication
-        const response = await fetchWithTimeout('https://api.icnvictoria.com/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Login failed');
-        }
-
-        const { token, refreshToken, user: userData } = await response.json();
+        // Use AuthService which calls the correct backend API
+        const userFull = await AuthService.login(email, password);
         
-        // Store tokens
-        await AsyncStorage.setItem('@auth_token', token);
-        if (refreshToken) {
-          await AsyncStorage.setItem('@refresh_token', refreshToken);
-        }
+        // Convert UserFull to UserData format
+        const convertedUser: UserData = {
+          id: userFull.id,
+          name: userFull.name,
+          email: userFull.email,
+          phone: userFull.phone || '',
+          company: userFull.company || '',
+          role: userFull.role || 'User',
+          memberSince: userFull.createdAt ? new Date(userFull.createdAt).getFullYear().toString() : '2024',
+          avatar: userFull.avatar || null,
+        };
         
         // Store and set user data
-        setUser(userData);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+        setUser(convertedUser);
+        await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
       } else {
         // Mock authentication for development
         if (email && password) {
@@ -248,8 +255,21 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         if (!response.ok) throw new Error('Failed to fetch user data');
 
         const userData = await response.json();
-        setUser(userData);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+        
+        // Convert UserFull to UserData format
+        const convertedUser: UserData = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          phone: userData.phone || '',
+          company: userData.company || '',
+          role: userData.role || 'User',
+          memberSince: userData.createdAt ? new Date(userData.createdAt).getFullYear().toString() : '2024',
+          avatar: userData.avatar || null,
+        };
+        
+        setUser(convertedUser);
+        await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh user');
