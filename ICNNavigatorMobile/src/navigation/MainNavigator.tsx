@@ -2,10 +2,10 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import EditProfileScreen from '../screens/main/EditProfileScreen';
-import ChangePasswordScreen from '../screens/main/ChangePasswordScreen';
 import PaymentScreen from '../screens/subscription/PaymentScreen';
 import ManageSubscriptionScreen from '../screens/subscription/ManageSubscriptionScreen';
 import { Colors } from '../constants/colors';
+import ChangePasswordScreen from '@/screens/main/ChangePassword';
 
 export type MainStackParamList = {
   MainTabs: undefined;

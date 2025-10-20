@@ -140,14 +140,6 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         // Use AuthService which calls the correct backend API
         const userFull = await AuthService.login(email, password);
         
-        // Save token from backend response
-        if (userFull.token) {
-          await AsyncStorage.setItem('@auth_token', userFull.token);
-        }
-        if (userFull.refreshToken) {
-          await AsyncStorage.setItem('@refresh_token', userFull.refreshToken);
-        }
-        
         // Convert UserFull to UserData format
         const convertedUser: UserData = {
           id: userFull.id,
@@ -314,60 +306,6 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const clearUser = () => {
     setUser(null);
     AsyncStorage.removeItem('@user_data');
-  };
-
-  const applyPendingDraft = async () => {
-    try {
-      const draft = await AsyncStorage.getItem('@profile_draft');
-      if (draft) {
-        console.log('Found pending profile draft, applying...');
-        const draftData = JSON.parse(draft);
-        
-        // Import profileApi at top of file
-        const { profileApi } = await import('../services/profileApi');
-        
-        // Ensure we have user email for identification
-        const userEmail = user?.email || draftData.email;
-        if (!userEmail) {
-          console.warn('Cannot apply profile draft: no user email available');
-          return;
-        }
-        
-        // Prepare update data with required email field
-        const updateData = {
-          email: userEmail, // Required for user identification
-          ...(draftData.displayName && { displayName: draftData.displayName }),
-          ...(draftData.phone && { phone: draftData.phone }),
-          ...(draftData.company && { company: draftData.company }),
-          ...(draftData.role && { role: draftData.role }),
-          ...(draftData.bio && { bio: draftData.bio }),
-          ...(draftData.linkedIn && { linkedIn: draftData.linkedIn }),
-          ...(draftData.website && { website: draftData.website }),
-          ...(draftData.memberSince && { memberSince: draftData.memberSince }),
-        };
-        
-        // Apply the draft
-        await profileApi.updateProfile(updateData);
-        
-        // Update local user state
-        setUser(prev => prev ? {
-          ...prev,
-          name: draftData.displayName || prev.name,
-          email: draftData.email || prev.email,
-          phone: draftData.phone || prev.phone,
-          company: draftData.company || prev.company,
-          role: draftData.role || prev.role,
-        } : null);
-        
-        // Clear the draft only after successful update
-        await AsyncStorage.removeItem('@profile_draft');
-        console.log('Profile draft applied successfully');
-      }
-    } catch (error) {
-      console.warn('Failed to apply profile draft:', error);
-      // Keep the draft for next login attempt instead of clearing it
-      // Don't throw — let login succeed even if draft fails
-    }
   };
 
   useEffect(() => {
