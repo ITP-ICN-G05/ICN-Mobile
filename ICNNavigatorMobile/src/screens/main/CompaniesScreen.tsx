@@ -24,6 +24,8 @@ import { Colors, Spacing } from '../../constants/colors';
 import { Company } from '../../types';
 import { useUserTier } from '../../contexts/UserTierContext';
 import { useICNData } from '../../hooks/useICNData';
+import { useBookmark } from '../../contexts/BookmarkContext';
+import { useFilter } from '../../contexts/FilterContext';
 
 // Extended local colors (adding to the imported Colors)
 const LocalColors = {
@@ -72,6 +74,12 @@ export default function CompaniesScreen() {
   const navigation = useNavigation<any>();
   const { currentTier, features } = useUserTier();
   
+  // Use Bookmark Context
+  const { bookmarkedIds, toggleBookmark, isBookmarked } = useBookmark();
+  
+  // Use global filter context for synchronization with MapScreen
+  const { filters, setFilters, clearFilters: clearGlobalFilters } = useFilter();
+  
   // Use ICN Data Hook
   const {
     companies: allCompanies,
@@ -87,7 +95,6 @@ export default function CompaniesScreen() {
   
   // State management
   const [searchText, setSearchText] = useState('');
-  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -97,13 +104,6 @@ export default function CompaniesScreen() {
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
-  
-  // Enhanced filter state
-  const [filters, setFilters] = useState<EnhancedFilterOptions>({
-    capabilities: [],
-    sectors: [],
-    distance: 'All',
-  });
 
   // Use ICN search when text changes
   useEffect(() => {
@@ -135,16 +135,12 @@ export default function CompaniesScreen() {
     // Start with search results or all companies
     let filtered = searchText ? icnSearchResults : allCompanies;
 
-    // Apply capability filter (using ICN capabilities)
+    // Apply capability filter (now checks itemName for items/services)
     if (filters.capabilities.length > 0) {
       filtered = filtered.filter(company =>
         filters.capabilities.some(capability =>
-          company.capabilities?.some(cap => 
-            cap.toLowerCase().includes(capability.toLowerCase())
-          ) ||
           company.icnCapabilities?.some(cap =>
-            cap.itemName.toLowerCase().includes(capability.toLowerCase()) ||
-            cap.detailedItemName.toLowerCase().includes(capability.toLowerCase())
+            cap.itemName.toLowerCase().includes(capability.toLowerCase())
           )
         )
       );
@@ -176,40 +172,14 @@ export default function CompaniesScreen() {
       }
     }
 
-    // Apply company type filter (ICN capability types)
+    // Apply company type filter (simplified - direct match only)
     if (filters.companyTypes && filters.companyTypes.length > 0) {
       filtered = filtered.filter(company => {
         const capabilityTypes = company.icnCapabilities?.map(cap => cap.capabilityType) || [];
-        
-        for (const filterType of filters.companyTypes!) {
-          // Handle special "Both" case
-          if (filterType === 'Both') {
-            const hasSupplier = capabilityTypes.some(t => 
-              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
-            );
-            const hasManufacturer = capabilityTypes.some(t => 
-              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
-            );
-            if (hasSupplier && hasManufacturer) return true;
-          }
-          // Direct capability type match
-          else if (capabilityTypes.includes(filterType as any)) {
-            return true;
-          }
-          // Check for supplier group
-          else if (['Supplier', 'Item Supplier', 'Parts Supplier'].includes(filterType)) {
-            if (capabilityTypes.some(t => 
-              t === 'Supplier' || t === 'Item Supplier' || t === 'Parts Supplier'
-            )) return true;
-          }
-          // Check for manufacturer group
-          else if (['Manufacturer', 'Manufacturer (Parts)', 'Assembler'].includes(filterType)) {
-            if (capabilityTypes.some(t => 
-              t === 'Manufacturer' || t === 'Manufacturer (Parts)' || t === 'Assembler'
-            )) return true;
-          }
-        }
-        return false;
+        // Direct match - no grouping logic needed
+        return filters.companyTypes!.some(filterType =>
+          capabilityTypes.includes(filterType as any)
+        );
       });
     }
 
@@ -421,10 +391,10 @@ export default function CompaniesScreen() {
     return badges;
   };
 
-  // Toggle bookmark
-  const toggleBookmark = (id: string) => {
+  // Toggle bookmark - now uses BookmarkContext
+  const handleToggleBookmark = async (id: string) => {
     // Check bookmark limit for free tier
-    if (currentTier === 'free' && !bookmarkedIds.includes(id) && bookmarkedIds.length >= 10) {
+    if (currentTier === 'free' && !isBookmarked(id) && bookmarkedIds.length >= 10) {
       Alert.alert(
         'Bookmark Limit',
         'Free tier allows up to 10 bookmarks. Upgrade to save more companies.',
@@ -437,11 +407,7 @@ export default function CompaniesScreen() {
     }
     
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setBookmarkedIds(prev =>
-      prev.includes(id) 
-        ? prev.filter(bookId => bookId !== id)
-        : [...prev, id]
-    );
+    await toggleBookmark(id);
   };
 
   // Handle company press
@@ -461,28 +427,34 @@ export default function CompaniesScreen() {
 
   // Normalize filters to handle "All" values properly
   const normaliseFilters = (f: EnhancedFilterOptions): EnhancedFilterOptions => ({
-    ...f,
+    capabilities: f.capabilities || [],
     sectors: f.sectors?.filter(s => s !== 'All') ?? [],
+    distance: f.distance || 'All',
     state: !f.state || f.state === 'All' ? undefined : f.state,
+    companyTypes: f.companyTypes && f.companyTypes.length > 0 ? f.companyTypes : undefined,
     companySize: !f.companySize || f.companySize === 'All' ? undefined : f.companySize,
+    certifications: f.certifications && f.certifications.length > 0 ? f.certifications : undefined,
+    ownershipType: f.ownershipType && f.ownershipType.length > 0 ? f.ownershipType : undefined,
+    socialEnterprise: f.socialEnterprise || undefined,
+    australianDisability: f.australianDisability || undefined,
+    revenue: f.revenue,
+    employeeCount: f.employeeCount,
+    localContentPercentage: f.localContentPercentage,
   });
 
   // Apply filters
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
-    setFilters(normaliseFilters(newFilters));
+    const normalized = normaliseFilters(newFilters);
+    console.log('[CompaniesScreen] Applying filters:', normalized);
+    setFilters(normalized);
     setFilterModalVisible(false);
     
-    // Don't apply to ICN data here as filtering is done in the useMemo
-    // Remove or comment out the applyICNFilters call
+    // Note: Filtering is done in the useMemo, not through ICN data service
   };
 
   // Clear filters
   const clearFilters = () => {
-    setFilters({
-      capabilities: [],
-      sectors: [],
-      distance: 'All',
-    });
+    clearGlobalFilters();
     applyICNFilters({});
   };
 
@@ -534,13 +506,20 @@ export default function CompaniesScreen() {
             )
         )).sort();
 
+    const itemNames = icnFilterOptions?.itemNames?.length
+      ? icnFilterOptions.itemNames
+      : Array.from(new Set(
+          allCompanies.flatMap(c => c.icnCapabilities?.map(ic => ic.itemName) || [])
+        )).filter(name => name && name !== 'Unknown Item').sort();
+
     return { 
       ...(icnFilterOptions ?? {}), 
       sectors, 
       states, 
       capabilities, 
       capabilityTypes,
-      cities
+      cities,
+      itemNames
     };
   }, [icnFilterOptions, allCompanies]);
 
@@ -779,10 +758,10 @@ export default function CompaniesScreen() {
         </Text>
         <TouchableOpacity 
           style={styles.gridBookmark}
-          onPress={() => toggleBookmark(item.id)}
+          onPress={() => handleToggleBookmark(item.id)}
         >
           <Ionicons 
-            name={bookmarkedIds.includes(item.id) ? 'bookmark' : 'bookmark-outline'} 
+            name={isBookmarked(item.id) ? 'bookmark' : 'bookmark-outline'} 
             size={16} 
             color={Colors.black50}
           />
@@ -832,8 +811,8 @@ export default function CompaniesScreen() {
             <CompanyCard
               company={item}
               onPress={() => handleCompanyPress(item)}
-              onBookmark={() => toggleBookmark(item.id)}
-              isBookmarked={bookmarkedIds.includes(item.id)}
+              onBookmark={() => handleToggleBookmark(item.id)}
+              isBookmarked={isBookmarked(item.id)}
             />
           ) : 
           renderGridItem

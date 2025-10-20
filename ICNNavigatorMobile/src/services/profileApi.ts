@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = 'https://api.icnvictoria.com'; // Replace with your actual API URL
+import { ExtendedProfileFields, LocalProfileStore } from './LocalProfileStore';
+import { getApiBaseUrl, fetchWithTimeout } from './apiConfig';
 
 // Complete ProfileData interface matching the User interface
 interface ProfileData {
@@ -36,6 +36,7 @@ class ProfileApiService {
     body?: any
   ) {
     const token = await this.getAuthToken();
+    const API_BASE_URL = getApiBaseUrl();
     
     const headers: HeadersInit = {
       'Authorization': `Bearer ${token}`,
@@ -45,7 +46,7 @@ class ProfileApiService {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetchWithTimeout(fullUrl, {
       method,
       headers,
       body: body instanceof FormData ? body : JSON.stringify(body),

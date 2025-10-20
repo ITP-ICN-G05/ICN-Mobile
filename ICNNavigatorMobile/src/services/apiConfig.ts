@@ -8,7 +8,7 @@ export const API_CONFIG = {
     // For Android emulator, use 10.0.2.2 to access your computer's localhost
     // For iOS simulator, use localhost
     // If using physical device, replace with your computer's IP address (e.g., 'http://192.168.1.100:8082/api')
-    BASE_URL: 'http://10.0.2.2:8082/api',
+    BASE_URL: 'http://192.168.5.74:8082/api',
     TIMEOUT: 10000,
   },
   // Production Environment
@@ -21,6 +21,56 @@ export const API_CONFIG = {
 // Get current environment configuration
 const getCurrentConfig = () => {
   return __DEV__ ? API_CONFIG.DEV : API_CONFIG.PROD;
+};
+
+/**
+ * Get API base URL without /api suffix
+ * Useful for services that need direct backend access (e.g., bookmarkService, profileApi)
+ * @returns Base URL (e.g., 'http://10.0.2.2:8082' or 'https://api.icnvictoria.com')
+ */
+export const getApiBaseUrl = (): string => {
+  const config = getCurrentConfig();
+  // Remove '/api' suffix if present
+  return config.BASE_URL.replace(/\/api$/, '');
+};
+
+/**
+ * Get API timeout configuration
+ * @returns Timeout in milliseconds (10000 for dev, 15000 for prod)
+ */
+export const getApiTimeout = (): number => {
+  return getCurrentConfig().TIMEOUT;
+};
+
+/**
+ * Fetch with automatic timeout handling
+ * Wraps native fetch with AbortController for timeout support
+ * @param url Request URL
+ * @param options Fetch options
+ * @param timeout Custom timeout (optional, uses config default if not provided)
+ * @returns Promise resolving to Response
+ * @throws TypeError on timeout or network error
+ */
+export const fetchWithTimeout = async (
+  url: string,
+  options: RequestInit = {},
+  timeout?: number
+): Promise<Response> => {
+  const timeoutMs = timeout || getApiTimeout();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 };
 
 // HTTP request method enumeration
@@ -86,12 +136,33 @@ export class BaseApiService {
         success: true
       };
     } else {
-      const errorText = isJson ? 
-        (await response.json()).message || 'Request failed' :
-        await response.text() || 'Request failed';
+      // Try to get detailed error message from X-Error header first
+      const xError = response.headers.get('X-Error');
+      let errorMessage = 'Request failed';
+      
+      // Use X-Error header if available
+      if (xError) {
+        errorMessage = xError;
+      } else {
+        // Otherwise try to parse response body
+        try {
+          if (isJson) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            const errorText = await response.text();
+            if (errorText && errorText.trim().length > 0) {
+              errorMessage = errorText;
+            }
+          }
+        } catch (e) {
+          // If parsing fails, keep the default error message
+          console.warn('Failed to parse error response:', e);
+        }
+      }
       
       return {
-        error: errorText,
+        error: errorMessage,
         status: response.status,
         success: false
       };

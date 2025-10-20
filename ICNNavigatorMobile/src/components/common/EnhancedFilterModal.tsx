@@ -57,6 +57,7 @@ interface FilterOptionsFromICN {
   cities: string[];
   capabilities: string[];
   capabilityTypes?: string[];
+  itemNames?: string[];
 }
 
 // Utility function to validate data
@@ -122,35 +123,17 @@ export default function EnhancedFilterModal({
 }) {
   const { currentTier, features } = useUserTier();
   
-  // Updated CAPABILITY_OPTIONS to include all actual capability types from the data
+  // Updated CAPABILITY_OPTIONS to use itemNames for items/services filter
   const CAPABILITY_OPTIONS = useMemo(() => {
-    if (filterOptions?.capabilityTypes && filterOptions.capabilityTypes.length > 0) {
-      // Use actual capability types from the data if available
-      return filterOptions.capabilityTypes
-        .filter(cap => isValidData(cap))
-        .sort();
-    } else if (filterOptions?.capabilities) {
-      // Fall back to capabilities list
-      return filterOptions.capabilities
-        .filter(cap => isValidData(cap))
-        .slice(0, 50)
+    if (filterOptions?.itemNames && filterOptions.itemNames.length > 0) {
+      // Use actual itemNames from the data if available
+      return filterOptions.itemNames
+        .filter(item => isValidData(item))
         .sort();
     }
-    // Default capability types based on Excel data analysis
-    return [
-      'Service Provider',
-      'Manufacturer',
-      'Item Supplier',
-      'Supplier',
-      'Designer',
-      'Parts Supplier',
-      'Assembler',
-      'Retailer',
-      'Wholesaler',
-      'Project Management',
-      'Manufacturer (Parts)'
-    ];
-  }, [filterOptions?.capabilities, filterOptions?.capabilityTypes]);
+    // Fallback to empty array if no itemNames available
+    return [];
+  }, [filterOptions?.itemNames]);
 
   const SECTOR_OPTIONS = useMemo(() => {
     if (filterOptions?.sectors) {
@@ -188,23 +171,28 @@ export default function EnhancedFilterModal({
     return STANDARD_STATES_TERRITORIES;
   }, [filterOptions?.states]);
 
-  // Updated COMPANY_TYPE_OPTIONS to reflect actual data structure
-  const COMPANY_TYPE_OPTIONS = [
-    'Supplier (All)',
-    'Manufacturer (All)',
-    'Service Provider',
-    'Both (Supplier & Manufacturer)',
-    'Supplier',
-    'Item Supplier',
-    'Parts Supplier',
-    'Manufacturer',
-    'Manufacturer (Parts)',
-    'Assembler',
-    'Designer',
-    'Project Management',
-    'Retailer',
-    'Wholesaler'
-  ];
+  // Updated COMPANY_TYPE_OPTIONS to use capabilityTypes directly, remove grouped options
+  const COMPANY_TYPE_OPTIONS = useMemo(() => {
+    if (filterOptions?.capabilityTypes && filterOptions.capabilityTypes.length > 0) {
+      return filterOptions.capabilityTypes
+        .filter(type => isValidData(type))
+        .sort();
+    }
+    // Fallback default
+    return [
+      'Service Provider',
+      'Manufacturer',
+      'Item Supplier',
+      'Supplier',
+      'Designer',
+      'Parts Supplier',
+      'Assembler',
+      'Retailer',
+      'Wholesaler',
+      'Project Management',
+      'Manufacturer (Parts)'
+    ];
+  }, [filterOptions?.capabilityTypes]);
 
   const SIZE_OPTIONS = [
     'SME (1-50)',
@@ -276,9 +264,23 @@ export default function EnhancedFilterModal({
   );
 
   const handleApplyAll = () => {
+    console.log('[Modal] handleApplyAll - Local state before filtering:');
+    console.log('  capabilities:', capabilities);
+    console.log('  sectors:', sectors);
+    console.log('  companyTypes:', companyTypes);
+    console.log('  state:', state);
+    console.log('  distance:', distance);
+    
+    const validCapabilities = capabilities.filter(cap => isValidData(cap));
+    const validSectors = sectors.filter(sec => isValidData(sec));
+
+    console.log('[Modal] After isValidData filtering:');
+    console.log('  validCapabilities:', validCapabilities);
+    console.log('  validSectors:', validSectors);
+
     const filters: EnhancedFilterOptions = {
-      capabilities: capabilities.filter(cap => isValidData(cap)),
-      sectors: sectors.filter(sec => isValidData(sec)),
+      capabilities: validCapabilities,
+      sectors: validSectors,
       distance,
       state: (state && state !== 'All' && STANDARD_STATES_TERRITORIES.includes(state)) ? state : undefined,
     };
@@ -309,6 +311,8 @@ export default function EnhancedFilterModal({
     const uniqueCompanyTypes = Array.from(new Set(mappedCompanyTypes));
     filters.companyTypes = uniqueCompanyTypes.length > 0 ? uniqueCompanyTypes : undefined;
 
+    console.log('[Modal] Mapped company types:', uniqueCompanyTypes);
+
     // Validate state selection
     if (filters.state && !STANDARD_STATES_TERRITORIES.includes(filters.state)) {
       Alert.alert(
@@ -322,11 +326,13 @@ export default function EnhancedFilterModal({
     // Add tier-based filters with validation
     if (features.canFilterBySize) {
       filters.companySize = (companySize && companySize !== 'All') ? companySize : undefined;
-      filters.certifications = certifications.filter(cert => isValidData(cert));
+      const validCerts = certifications.filter(cert => isValidData(cert));
+      filters.certifications = validCerts.length > 0 ? validCerts : undefined;
     }
     
     if (features.canFilterByDiversity) {
-      filters.ownershipType = ownershipType.filter(owner => isValidData(owner));
+      const validOwnership = ownershipType.filter(owner => isValidData(owner));
+      filters.ownershipType = validOwnership.length > 0 ? validOwnership : undefined;
       filters.socialEnterprise = socialEnterprise || undefined;
       filters.australianDisability = australianDisability || undefined;
     }
@@ -348,6 +354,8 @@ export default function EnhancedFilterModal({
         ? localContentPercentage 
         : undefined;
     }
+
+    console.log('[Modal] Final filters object:', filters);
 
     onApply(filters);
     onClose();
@@ -390,35 +398,51 @@ export default function EnhancedFilterModal({
 
   // Handler functions for filters
   const handleCapabilitiesChange = (selected: string | string[]) => {
-    setCapabilities(Array.isArray(selected) ? selected : [selected]);
+    const newValue = Array.isArray(selected) ? selected : [selected];
+    console.log('[Modal] Capabilities changed:', newValue);
+    setCapabilities(newValue);
   };
 
   const handleSectorsChange = (selected: string | string[]) => {
-    setSectors(Array.isArray(selected) ? selected : [selected]);
+    const newValue = Array.isArray(selected) ? selected : [selected];
+    console.log('[Modal] Sectors changed:', newValue);
+    setSectors(newValue);
   };
 
   const handleDistanceChange = (selected: string | string[]) => {
-    setDistance(typeof selected === 'string' ? selected : selected[0] || 'All');
+    const newValue = typeof selected === 'string' ? selected : selected[0] || 'All';
+    console.log('[Modal] Distance changed:', newValue);
+    setDistance(newValue);
   };
 
   const handleStateChange = (selected: string | string[]) => {
-    setState(typeof selected === 'string' ? selected : selected[0] || 'All');
+    const newValue = typeof selected === 'string' ? selected : selected[0] || 'All';
+    console.log('[Modal] State changed:', newValue);
+    setState(newValue);
   };
 
   const handleCompanyTypesChange = (selected: string | string[]) => {
-    setCompanyTypes(Array.isArray(selected) ? selected : [selected]);
+    const newValue = Array.isArray(selected) ? selected : [selected];
+    console.log('[Modal] Company types changed:', newValue);
+    setCompanyTypes(newValue);
   };
 
   const handleCompanySizeChange = (selected: string | string[]) => {
-    setCompanySize(typeof selected === 'string' ? selected : selected[0] || 'All');
+    const newValue = typeof selected === 'string' ? selected : selected[0] || 'All';
+    console.log('[Modal] Company size changed:', newValue);
+    setCompanySize(newValue);
   };
 
   const handleCertificationsChange = (selected: string | string[]) => {
-    setCertifications(Array.isArray(selected) ? selected : [selected]);
+    const newValue = Array.isArray(selected) ? selected : [selected];
+    console.log('[Modal] Certifications changed:', newValue);
+    setCertifications(newValue);
   };
 
   const handleOwnershipTypeChange = (selected: string | string[]) => {
-    setOwnershipType(Array.isArray(selected) ? selected : [selected]);
+    const newValue = Array.isArray(selected) ? selected : [selected];
+    console.log('[Modal] Ownership type changed:', newValue);
+    setOwnershipType(newValue);
   };
 
   // Count active filters

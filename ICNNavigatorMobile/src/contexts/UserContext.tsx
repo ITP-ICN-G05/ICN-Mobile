@@ -18,11 +18,13 @@ interface UserContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  showOnboarding: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserData>) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearUser: () => void;
+  setShowOnboarding: (show: boolean) => void;
 }
 
 const MOCK_USER_DATA: UserData = {
@@ -44,6 +46,7 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   
   // Derived authentication state
   const isAuthenticated = !!user;
@@ -76,6 +79,9 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       
       if (token && cachedUser) {
         setUser(JSON.parse(cachedUser));
+        
+        // Don't show onboarding on app restart - only on fresh login
+        // The onboarding flag will be checked only in the login() function
         
         // Optionally validate token with backend
         if (USE_BACKEND) {
@@ -149,6 +155,19 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         // Store and set user data
         setUser(convertedUser);
         await AsyncStorage.setItem('@user_data', JSON.stringify(convertedUser));
+        
+        // Check if user has seen onboarding
+        const onboardingCompleted = await AsyncStorage.getItem('@onboarding_completed');
+        console.log('Onboarding check - completed status:', onboardingCompleted);
+        if (!onboardingCompleted) {
+          console.log('Setting showOnboarding to true');
+          setShowOnboarding(true);
+        } else {
+          console.log('Onboarding already completed, not showing modal');
+        }
+        
+        // Check for pending draft and auto-apply
+        await applyPendingDraft();
       } else {
         // Mock authentication for development
         if (email && password) {
@@ -156,6 +175,12 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
           setUser(mockUser);
           await AsyncStorage.setItem('@auth_token', 'mock_token_123');
           await AsyncStorage.setItem('@user_data', JSON.stringify(mockUser));
+          
+          // Check if user has seen onboarding
+          const onboardingCompleted = await AsyncStorage.getItem('@onboarding_completed');
+          if (!onboardingCompleted) {
+            setShowOnboarding(true);
+          }
         } else {
           throw new Error('Invalid credentials');
         }
@@ -293,11 +318,13 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       isAuthenticated,
       isLoading, 
       error,
+      showOnboarding,
       login,
       logout,
       updateUser, 
       refreshUser,
-      clearUser 
+      clearUser,
+      setShowOnboarding,
     }}>
       {children}
     </UserContext.Provider>
