@@ -165,11 +165,6 @@ export default function SearchBarWithDropdown({
             </View>
           )}
         </View>
-        {onFilter && (
-          <TouchableOpacity style={styles.filterButton} onPress={onFilter}>
-            <Ionicons name="filter" size={24} color={Colors.white} />
-          </TouchableOpacity>
-        )}
       </View>
 
       {showDropdown && (
