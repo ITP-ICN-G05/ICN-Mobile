@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { styles } from '../styles';
 import { Colors } from '@/constants/colors';
+import { styles } from '../styles';
 
 interface CompanyHeaderProps {
   company: any;

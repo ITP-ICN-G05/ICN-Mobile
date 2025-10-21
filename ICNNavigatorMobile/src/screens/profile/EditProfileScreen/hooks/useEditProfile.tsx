@@ -1,47 +1,28 @@
-import { useState, useLayoutEffect, useEffect } from 'react';
-import { ActivityIndicator, Alert, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useState, useEffect, useCallback } from 'react';
+import { Alert } from 'react-native';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useUser } from '@/contexts/UserContext';
 import { ProfileFormData } from '../types';
-import { styles } from '../../ChangePassword/styles';
-import { TouchableOpacity } from 'react-native';
-import { Colors } from '@/constants/colors';
 
 export const useEditProfile = () => {
-  const navigation = useNavigation();
   const { profile, updateProfile } = useProfile();
   const { user, updateUser } = useUser();
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState<ProfileFormData>({
-    firstName: 'John',
-    lastName: 'Smith',
-    email: 'john.smith@example.com',
-    phone: '+61 400 123 456',
-    company: 'ABC Construction',
-    role: 'Project Manager',
-    bio: 'Experienced project manager with over 10 years in the construction industry.',
-    linkedIn: 'linkedin.com/in/johnsmith',
-    website: 'johnsmith.com',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    company: '',
+    role: '',
+    bio: '',
+    linkedIn: '',
+    website: '',
     avatar: null,
   });
 
   const [errors, setErrors] = useState<Partial<ProfileFormData>>({});
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity onPress={handleSave} disabled={saving}>
-          {saving ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
-          ) : (
-            <Text style={styles.saveButtom}>Save</Text>
-          )}
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, saving]);
 
   useEffect(() => {
     if (profile) {
@@ -66,9 +47,9 @@ export const useEditProfile = () => {
         role: user.role || '',
       }));
     }
-  }, []);
+  }, [profile, user]);
 
-  const validateForm = (): boolean => {
+  const validateForm = useCallback((): boolean => {
     const newErrors: Partial<ProfileFormData> = {};
 
     if (!formData.firstName.trim()) {
@@ -101,9 +82,9 @@ export const useEditProfile = () => {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!validateForm()) {
       Alert.alert('Validation Error', 'Please check the form and fix any errors.');
       return;
@@ -135,24 +116,21 @@ export const useEditProfile = () => {
         });
       }
       
-      Alert.alert(
-        'Success',
-        'Your profile has been updated successfully.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      return true;
     } catch (error) {
       Alert.alert('Error', 'Failed to update profile. Please try again.');
+      return false;
     } finally {
       setSaving(false);
     }
-  };
+  }, [formData, validateForm, updateProfile, user, updateUser]);
 
-  const updateField = (field: keyof ProfileFormData, value: string) => {
+  const updateField = useCallback((field: keyof ProfileFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
-  };
+  }, [errors]);
 
   return {
     formData,

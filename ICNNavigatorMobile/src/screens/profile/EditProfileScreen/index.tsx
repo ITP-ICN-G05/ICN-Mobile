@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -9,10 +9,11 @@ import {
   Text,
   Alert,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator } from 'react-native';
 
 import { Colors } from '@/constants/colors';
 import { useEditProfile } from './hooks/useEditProfile';
@@ -23,6 +24,8 @@ import { ProfessionalInfoSection } from './components/ProfessionalInfoSection';
 import { SocialLinksSection } from './components/SocialLinksSection';
 
 export default function EditProfileScreen() {
+  const navigation = useNavigation(); // 添加这行
+
   const {
     formData,
     errors,
@@ -39,6 +42,29 @@ export default function EditProfileScreen() {
     uploadAvatar,
   } = useImagePicker();
 
+  //header
+  useLayoutEffect(() => {
+  navigation.setOptions({
+    headerRight: () => (
+      <TouchableOpacity 
+        onPress={async () => {
+          const success = await handleSave();
+          if (success) {
+            navigation.goBack();
+          }
+        }} 
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator size="small" color={Colors.primary} />
+        ) : (
+          <Text style={styles.saveButton}>Save</Text>
+        )}
+      </TouchableOpacity>
+    ),
+  });
+}, [navigation, saving, handleSave]);
+
   const showAvatarOptions = () => {
     Alert.alert(
       'Change Profile Picture',
@@ -46,7 +72,11 @@ export default function EditProfileScreen() {
       [
         { text: 'Take Photo', onPress: handleTakePhoto },
         { text: 'Choose from Gallery', onPress: handlePickImage },
-        { text: 'Remove Photo', onPress: () => setFormData((prev: any) => ({ ...prev, avatar: null })), style: 'destructive' },
+        { 
+          text: 'Remove Photo', 
+          onPress: () => setFormData(prev => ({ ...prev, avatar: null })), 
+          style: 'destructive' 
+        },
         { text: 'Cancel', style: 'cancel' },
       ],
       { cancelable: true }
@@ -56,7 +86,7 @@ export default function EditProfileScreen() {
   const handlePickImage = async () => {
     const uri = await pickImageFromGallery();
     if (uri) {
-      setFormData((prev: any) => ({ ...prev, avatar: uri }));
+      setFormData(prev => ({ ...prev, avatar: uri }));
       uploadAvatar(uri);
     }
   };
@@ -64,7 +94,7 @@ export default function EditProfileScreen() {
   const handleTakePhoto = async () => {
     const uri = await takePhoto();
     if (uri) {
-      setFormData((prev: any) => ({ ...prev, avatar: uri }));
+      setFormData(prev => ({ ...prev, avatar: uri }));
       uploadAvatar(uri);
     }
   };
@@ -72,7 +102,7 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Image 
-        src='./assets/ICN Logo Source/ICN-logo-little.png'
+        src='./assets/ICN Logo Source/ICN-logo-little.png' 
         style={styles.backgroundLogo}
         resizeMode="cover"
       />
@@ -90,9 +120,9 @@ export default function EditProfileScreen() {
             firstName={formData.firstName}
             lastName={formData.lastName}
             avatarLoading={avatarLoading}
-            onAvatarChange={(uri) => setFormData((prev: any) => ({ ...prev, avatar: uri }))}
-            onShowAvatarOptions={showAvatarOptions}
-          />
+            onShowAvatarOptions={showAvatarOptions} onAvatarChange={function (uri: string | null): void {
+              throw new Error('Function not implemented.');
+            } }          />
 
           <PersonalInfoSection
             formData={formData}
