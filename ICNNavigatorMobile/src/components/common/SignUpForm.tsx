@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -90,10 +90,11 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       return;
     }
 
-    if (verificationCode.length !== 6) {
+    //disabled cause the code is noly 4 digits long???
+    /*if (verificationCode.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit verification code');
       return;
-    }
+    }*/
 
     setSubmitting(true);
     try {
@@ -102,7 +103,6 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         email,
         name: userName,
         password,
-        phone: '', // Empty phone for now, can be added later in profile
         code: verificationCode
       });
 

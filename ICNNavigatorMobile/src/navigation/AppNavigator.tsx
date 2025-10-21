@@ -5,7 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthNavigator from './AuthNavigator';
 import MainNavigator from './MainNavigator';
 import OnboardingModal from '../components/common/OnboardingModal';
-import { useUser } from '../contexts/UserContext';
+import { useUser } from '@/contexts/UserContext';
+
 
 const Stack = createNativeStackNavigator();
 

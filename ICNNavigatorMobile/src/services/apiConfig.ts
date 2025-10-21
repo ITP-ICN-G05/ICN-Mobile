@@ -8,7 +8,7 @@ export const API_CONFIG = {
     // For Android emulator, use 10.0.2.2 to access your computer's localhost
     // For iOS simulator, use localhost
     // If using physical device, replace with your computer's IP address (e.g., 'http://192.168.1.100:8082/api')
-    BASE_URL: 'http://192.168.5.74:8082/api',
+    BASE_URL: 'http://192.168.31.110:8082/api',
     TIMEOUT: 10000,
   },
   // Production Environment

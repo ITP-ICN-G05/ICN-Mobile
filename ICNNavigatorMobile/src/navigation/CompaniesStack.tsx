@@ -1,7 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import CompaniesScreen from '../screens/main/CompaniesScreen';
-import CompanyDetailScreen from '../screens/main/CompanyDetailScreen';
+import CompaniesScreen from '../screens/company/CompaniesScreen';
+import CompanyDetailScreen from '../screens/company/CompanyDetail';
 
 export type CompaniesStackParamList = {
   CompaniesList: undefined;

@@ -30,7 +30,6 @@ export interface InitialUser {
   email: string;
   name: string;
   password: string;
-  phone: string;
   code: string;
 }
 
@@ -53,16 +52,15 @@ export interface UserPayment {
 export class UserApiService extends BaseApiService {
   
   /**
-   * User login - secure POST endpoint
-   * POST /api/user/login
+   * User login - secure GET endpoint
+   * GET /api/user/
    * 
    * @param email User email
    * @param password User password
    * @returns Promise<ApiResponse<UserFull>>
    */
   async login(email: string, password: string): Promise<ApiResponse<UserFull>> {
-    // Changed from GET to POST for security
-    const response = await this.post<UserFull>('/user/login', { 
+    const response = await this.get<UserFull>('/user', { 
       email, 
       password 
     });
