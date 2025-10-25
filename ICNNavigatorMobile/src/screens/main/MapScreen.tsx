@@ -41,17 +41,30 @@ export default function MapScreen() {
   const tabBarHeight = useBottomTabBarHeight(); // NEW: use tab bar height for watermark spacing
 
   // Use global filter context for synchronization with CompaniesScreen
-  const { filters, setFilters, clearFilters: clearGlobalFilters } = useFilter();
+  const { filters, setFilters, clearFilters: clearGlobalFilters, hasActiveFilters } = useFilter();
 
   const mapRef = useRef<MapView>(null);
   const markerRefs = useRef<Record<string, any>>({});
   const [searchText, setSearchText] = useState('');
+  const [committedSearchText, setCommittedSearchText] = useState('');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const slideAnimation = useRef(new Animated.Value(300)).current;
   const [region, setRegion] = useState<Region>(MELBOURNE_REGION);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [isFromDropdownSelection, setIsFromDropdownSelection] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false); // Control dropdown visibility
+  
+  // New state variables for pin rendering control
+  const [mapPinMode, setMapPinMode] = useState<'none' | 'selected' | 'area'>('none');
+  const [showSearchAreaButton, setShowSearchAreaButton] = useState(false);
+  const [currentMapRegion, setCurrentMapRegion] = useState<Region>(MELBOURNE_REGION);
+  const [userMovedMap, setUserMovedMap] = useState(false);
+  const userIsGesturingRef = useRef(false); // Track touch events
+  // Only show the button if user explicitly tapped My Location (recenter)
+  const searchAreaArmedRef = useRef(false);
+  // Optional: centralize the zoom threshold so you can tweak easily
+  const SEARCH_AREA_ZOOM_DELTA = 0.15; // ~zoom >= 12
 
   // ===== Auto-zoom debouncer with selection/camera lock (prevents zoom-out after selecting) =====
   const zoomTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,6 +111,22 @@ export default function MapScreen() {
 
   useEffect(() => () => cancelZoomTimeout(), []);
 
+  // Helper function to filter companies within current map bounds
+  const getCompaniesInMapBounds = (companies: Company[], region: Region): Company[] => {
+    const latMin = region.latitude - region.latitudeDelta / 2;
+    const latMax = region.latitude + region.latitudeDelta / 2;
+    const lonMin = region.longitude - region.longitudeDelta / 2;
+    const lonMax = region.longitude + region.longitudeDelta / 2;
+    
+    return companies.filter(company => {
+      const coord = normaliseLatLng(company);
+      if (!coord) return false;
+      
+      return coord.latitude >= latMin && coord.latitude <= latMax &&
+             coord.longitude >= lonMin && coord.longitude <= lonMax;
+    });
+  };
+
   // Load ICN data
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -125,7 +154,7 @@ export default function MapScreen() {
         
         if (loadedCompanies.length > 0) setTimeout(() => zoomToAllCompanies(loadedCompanies), 400);
       } catch (e) {
-        console.error('Error loading ICN data:', e);
+        // console.error('Error loading ICN data:', e);
       } finally {
         setIsLoading(false);
       }
@@ -145,12 +174,32 @@ export default function MapScreen() {
     });
   };
 
+  // Local search fallback when service returns empty
+  const localSearchFallback = (list: Company[], query: string): Company[] => {
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    const pick = (v: any) => (typeof v === 'string' ? v.toLowerCase().includes(q) : false);
+    return list.filter(c => {
+      const caps = c.icnCapabilities?.map(x => x.itemName) ?? [];
+      const sectors = c.keySectors ?? [];
+      const city = c.billingAddress?.city ?? '';
+      const state = c.billingAddress?.state ?? '';
+      return (
+        pick(c.name) || pick(c.address) || pick(city) || pick(state) ||
+        sectors.some(pick) || caps.some(pick)
+      );
+    });
+  };
+
   // Derived list
   const filteredCompanies = useMemo(() => {
     let filtered = [...companies];
 
-    // Search
-    if (searchText) filtered = hybridDataService.searchCompaniesSync(searchText);
+    // Search — resilient: try service, then fallback locally
+    if (searchText) {
+      const svc = hybridDataService.searchCompaniesSync?.(searchText) ?? [];
+      filtered = svc.length ? svc : localSearchFallback(companies, searchText);
+    }
 
     // Capabilities (now checks itemName)
     if (filters.capabilities.length > 0) {
@@ -250,17 +299,39 @@ export default function MapScreen() {
       filtered = filtered.filter(company => company.localContentPercentage !== undefined && company.localContentPercentage >= (filters.localContentPercentage as number));
     }
 
-    return filtered.filter(hasValidCoords);
+    const result = filtered.filter(hasValidCoords);
+    console.log('[MapScreen] Filtered companies:', {
+      total: companies.length,
+      filtered: result.length,
+      hasSearch: !!searchText,
+      hasFilters: Object.keys(filters).some(key => {
+        const value = filters[key as keyof typeof filters];
+        return Array.isArray(value) ? value.length > 0 : !!value;
+      })
+    });
+    return result;
   }, [searchText, filters, region, features, companies]);
 
-  // Auto-zoom on dataset changes — but NEVER while a selection/card is open or camera is animating
-  useEffect(() => {
-    if (isLoading) return;
-    if (selectedCompany) return; // keep focused on the selected company
-    if (cameraBusyRef.current) return; // don't fight the camera while it's animating
-    if (!isFromDropdownSelection) scheduleZoom(250); // will be skipped if user recently pinched/dragged
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredCompanies, isLoading, selectedCompany]);
+  // Determine which markers to render based on mapPinMode
+  const markersToRender = useMemo(() => {
+    if (mapPinMode === 'none') return [];
+    if (mapPinMode === 'selected' && selectedCompany) return [selectedCompany];
+    if (mapPinMode === 'area') {
+      // Show markers in current viewport matching filters
+      return getCompaniesInMapBounds(filteredCompanies, currentMapRegion);
+    }
+    return [];
+  }, [mapPinMode, selectedCompany, filteredCompanies, currentMapRegion]);
+
+  // Auto-zoom disabled - users control map viewport manually
+  // useEffect(() => {
+  //   if (isLoading) return;
+  //   if (selectedCompany) return; // keep focused on the selected company
+  //   if (cameraBusyRef.current) return; // don't fight the camera while it's animating
+  //   if (isFromDropdownSelection) return; // don't auto-zoom during dropdown selection
+  //   scheduleZoom(250); // will be skipped if user recently pinched/dragged
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [filteredCompanies, isLoading, selectedCompany, isFromDropdownSelection]);
 
   const zoomToFilteredResults = () => {
     const coords = extractValidCoordinates(filteredCompanies);
@@ -295,8 +366,11 @@ export default function MapScreen() {
       setSelectedCompany(null);
       cameraBusyRef.current = false;
       selectionLockUntil.current = 0;
+      setIsFromDropdownSelection(false); // Clear dropdown flag when card closes
+      setUserMovedMap(false); // Reset user moved map flag to prevent "Search this area" button from showing after auto-zoom
+      setMapPinMode('none'); // Hide all map pins when closing company card
       // after closing, allow auto-fit again (e.g., show all results) — still respects manual lock
-      scheduleZoom(250);
+      scheduleZoom(400); // Slight delay to ensure state updates complete
     };
 
     if (animate) {
@@ -311,6 +385,9 @@ export default function MapScreen() {
   };
 
   const animateToCompany = (company: Company) => {
+    // Cancel any pending zoom operations
+    cancelZoomTimeout();
+    
     startSelectionLock(1500);
     setSelectedCompany(company);
 
@@ -323,13 +400,31 @@ export default function MapScreen() {
       mapRef.current?.animateCamera({ center, zoom: 15, heading: 0, pitch: 0 }, { duration: 500 });
     }
 
-    // Release the lock slightly after the camera settles
-    releaseSelectionLockSoon(1000);
+    // Show callout after camera animation completes
+    setTimeout(() => {
+      const marker = markerRefs.current[company.id];
+      if (marker && marker.showCallout) {
+        // Small delay to ensure marker is ready
+        setTimeout(() => {
+          if (marker.showCallout) {
+            marker.showCallout();
+            console.log('[MapScreen] Showing marker callout after animation for:', company.name);
+          }
+        }, 200); // Increased delay to ensure marker is fully rendered
+      } else {
+        // console.warn('[MapScreen] Marker ref not found or showCallout unavailable for:', company.id);
+      }
+      releaseSelectionLockSoon(400);
+    }, 800); // Increased wait time for camera animation to complete
   };
 
   const handleMarkerPress = (company: Company) => {
+    console.log('[MapScreen] Marker pressed:', company.name, company.id);
+    cancelZoomTimeout(); // Cancel any pending zoom
     setIsFromDropdownSelection(false);
     animateToCompany(company);
+    // Also open immediately for tap feedback
+    setTimeout(() => markerRefs.current[company.id]?.showCallout?.(), 50);
   };
 
   const navigateToDetail = (company: Company) => navigation.navigate('CompanyDetail', { company });
@@ -338,6 +433,16 @@ export default function MapScreen() {
   // Selecting from search: zoom camera first, then reveal card & callout
   const handleCompanySelection = (company: Company) => {
     console.log('[MapScreen] Company selected from search dropdown:', company.name, company.id);
+    
+    // Set to show only selected marker mode
+    setMapPinMode('selected');
+    setUserMovedMap(false);
+    setShowSearchAreaButton(false);
+    searchAreaArmedRef.current = false;
+    setShowDropdown(false); // Hide dropdown after company selection
+    
+    // CRITICAL: Cancel any pending zoom operations before selecting new company
+    cancelZoomTimeout();
     
     // Close any existing card first (without animation to avoid conflicts)
     if (selectedCompany) {
@@ -348,9 +453,9 @@ export default function MapScreen() {
     // DON'T update searchText yet - wait until after camera animation to prevent filteredCompanies recalculation
 
     // Lock auto-fit during programmatic camera movement
-    startSelectionLock(CAMERA_ANIM_MS + 1000);
+    startSelectionLock(CAMERA_ANIM_MS + 1500); // Increased lock time
     cameraBusyRef.current = true;
-    bumpManualLock(CAMERA_ANIM_MS + 1000); // Also bump manual lock to prevent auto-zoom interference
+    bumpManualLock(CAMERA_ANIM_MS + 1500); // Also bump manual lock to prevent auto-zoom interference
 
     // Step 1: Zoom camera first
     const center = normaliseLatLng(company);
@@ -372,21 +477,23 @@ export default function MapScreen() {
         { duration: CAMERA_ANIM_MS }
       );
     } else {
-      console.error('[MapScreen] Cannot zoom - Invalid coordinates or missing mapRef:', {
-        company: company.name,
-        hasCoordinates: !!center,
-        hasMapRef: !!mapRef.current,
-        rawCoords: { lat: company.latitude, lng: company.longitude }
-      });
+      // console.error('[MapScreen] Cannot zoom - Invalid coordinates or missing mapRef:', {
+      //   company: company.name,
+      //   hasCoordinates: !!center,
+      //   hasMapRef: !!mapRef.current,
+      //   rawCoords: { lat: company.latitude, lng: company.longitude }
+      // });
       
       // Even if zoom fails, still show the company card
     }
 
     // Step 2: After camera finishes, show card and callout
     setTimeout(() => {
-      // NOW update the search text after camera animation
-      setSearchText(company.name);
+      // FIRST: Set selectedCompany to prevent pin highlighting
       setSelectedCompany(company);
+      
+      // THEN: Update search text (this won't trigger dropdown because selectedCompany is now set)
+      setSearchText(company.name);
 
       // Slide up the detail card
       Animated.timing(slideAnimation, { toValue: 0, duration: 300, useNativeDriver: true }).start();
@@ -394,31 +501,51 @@ export default function MapScreen() {
       // Optionally show the map callout too
       const marker = markerRefs.current[company.id];
       if (marker && marker.showCallout) {
-        marker.showCallout();
-        console.log('[MapScreen] Showing marker callout for:', company.name);
+        // Small delay to ensure marker is ready
+        setTimeout(() => {
+          if (marker.showCallout) {
+            marker.showCallout();
+            console.log('[MapScreen] Showing marker callout for:', company.name);
+          }
+        }, 100);
       } else {
-        console.warn('[MapScreen] Marker ref not found or showCallout unavailable for:', company.id);
+        // console.warn('[MapScreen] Marker ref not found or showCallout unavailable for:', company.id);
       }
 
       cameraBusyRef.current = false;
-      releaseSelectionLockSoon(400);
-      setIsFromDropdownSelection(false);
+      releaseSelectionLockSoon(600);
       
-      console.log('[MapScreen] Company selection complete:', company.name);
+      // Clear dropdown selection flag after small delay to ensure all re-renders complete
+      setTimeout(() => {
+        setIsFromDropdownSelection(false);
+        console.log('[MapScreen] Company selection complete:', company.name);
+      }, 200);
     }, CAMERA_ANIM_MS);
   };
 
   // NOTE: details?.isGesture is supported in recent react-native-maps. We also hook onPanDrag as a fallback.
   const handleRegionChangeComplete = (newRegion: Region, details?: { isGesture?: boolean }) => {
     setRegion(newRegion);
-    if (details?.isGesture) bumpManualLock(4000); // user pinched or dragged — keep their zoom for a bit
+    setCurrentMapRegion(newRegion);
+    
+    // Show button only after user manually moves the map
+    if (userMovedMap) {
+      const isZoomedIn = newRegion.latitudeDelta < SEARCH_AREA_ZOOM_DELTA;
+      // Show button regardless of filters - both with and without filters
+      const shouldShow = isZoomedIn && !selectedCompany;
+      setShowSearchAreaButton(shouldShow);
+    } else {
+      if (showSearchAreaButton) setShowSearchAreaButton(false);
+    }
   };
 
   const handleApplyFilters = (newFilters: EnhancedFilterOptions) => {
     console.log('[MapScreen] Applying filters:', newFilters);
     setFilters(newFilters);
+    // Let users immediately see that new results are available in their viewport
+    setMapPinMode('area'); // show pins right away
+    setUserMovedMap(false);
     setFilterModalVisible(false);
-    scheduleZoom(250, true); // force auto-fit on explicit filter changes
   };
 
   const handleSearchChange = (text: string) => {
@@ -429,20 +556,50 @@ export default function MapScreen() {
     // When the search bar is cleared by tapping the "X" AND the card is open, close the card too.
     if (text === '' && wasCardOpen) {
       closeCompanyCard({ clearSearch: false, animate: true });
+      setShowDropdown(false); // Hide dropdown when clearing search
       return; // let the close handler trigger auto-zoom (still respects manual lock)
     }
 
-    if (text === '' || text.length > 2) scheduleZoom(250, true); // search is an explicit intent — bypass manual lock
+    // Hide dropdown when search is cleared
+    if (text === '') {
+      setShowDropdown(false);
+    }
+
+    // Remove automatic search trigger - only search on button press
+    // if (text === '' || text.length > 2) scheduleZoom(250, true); // search is an explicit intent — bypass manual lock
+  };
+
+  const handleSearchSubmit = (text: string) => {
+    const q = text.trim();
+    setSearchText(q);
+    setCommittedSearchText(q);
+    setMapPinMode('area'); // SHOW markers immediately
+    setUserMovedMap(false);
+    setShowSearchAreaButton(false); // Only show on recenter
+    setIsFromDropdownSelection(false);
+    setShowDropdown(true); // Show dropdown after search submit
+    
+    // Fit camera to results
+    setTimeout(() => {
+      zoomToFilteredResults();
+    }, 100);
   };
 
   const getMarkerColor = (company: Company) => {
     const baseColor = company.verificationStatus === 'verified' ? Colors.success : Colors.primary;
     
-    // Keep default color when card is open or selection from dropdown
-    if (selectedCompany || isFromDropdownSelection) return baseColor;
+    // Priority 1: If THIS specific company is selected, always use base color
+    if (selectedCompany && selectedCompany.id === company.id) {
+      return baseColor;
+    }
     
-    // Only highlight during active typing search (not after selection)
-    if (searchText && company.name.toLowerCase().includes(searchText.toLowerCase())) {
+    // Priority 2: If dropdown selection in progress, use base color for all
+    if (isFromDropdownSelection) {
+      return baseColor;
+    }
+    
+    // Priority 3: Only highlight during active typing search (not after selection)
+    if (searchText && !selectedCompany && company.name.toLowerCase().includes(searchText.toLowerCase())) {
       return Colors.warning;
     }
     
@@ -483,7 +640,7 @@ export default function MapScreen() {
         { duration: 500 }
       );
     } catch (error) {
-      console.error('Error getting user location:', error);
+      // console.error('Error getting user location:', error);
       Alert.alert(
         'Location Unavailable',
         'Unable to get your current location. Please ensure location services are enabled and try again.',
@@ -503,6 +660,9 @@ export default function MapScreen() {
                 },
                 { duration: 400 }
               );
+              // Not armed in error fallback
+              searchAreaArmedRef.current = false;
+              setShowSearchAreaButton(false);
             }
           },
           { text: 'Cancel', style: 'cancel' }
@@ -511,18 +671,43 @@ export default function MapScreen() {
     } finally {
       setIsLocating(false);
     }
+    
+    // After zooming to user location, arm the button
+    setTimeout(() => {
+      // Arm button only after explicit recenter
+      searchAreaArmedRef.current = true;
+      
+      setMapPinMode('none'); // keep pins hidden until user presses button
+      setUserMovedMap(false);
+      setShowSearchAreaButton(true); // Show button regardless of filters
+    }, 600);
+  };
+
+  const handleSearchThisArea = () => {
+    setMapPinMode('area');
+    setShowSearchAreaButton(false);
+    // Don't reset userMovedMap so user can continue moving map and see button again
+    // We used the armed action, so disarm until next recenter
+    searchAreaArmedRef.current = false;
+    
+    // Don't adjust map position, only show markers in current viewport
   };
 
   const clearFilters = () => {
     clearGlobalFilters();
-    setSearchText('');  // Clear search text
-    setIsFromDropdownSelection(false);
+    setSearchText('');
+    setCommittedSearchText('');
+    setMapPinMode('none'); // Hide all markers
     setSelectedCompany(null);
-    // Zoom out to show entire Australia view
+    setUserMovedMap(false);
+    setShowSearchAreaButton(false);
+    searchAreaArmedRef.current = false;
+    
+    // Zoom back to Australia overview
     bumpManualLock(1500);
     mapRef.current?.animateCamera({ 
       center: { latitude: AUSTRALIA_REGION.latitude, longitude: AUSTRALIA_REGION.longitude }, 
-      zoom: 5  // Show entire Australia
+      zoom: 5 
     }, { duration: 500 });
   };
 
@@ -574,19 +759,25 @@ export default function MapScreen() {
         provider={PROVIDER_GOOGLE}
         initialRegion={MELBOURNE_REGION}
         onRegionChangeComplete={(r, details) => handleRegionChangeComplete(r, details as any)}
-        onPanDrag={() => bumpManualLock(4000)} // fallback for older Android where details?.isGesture is unreliable
+        onPanDrag={() => { setUserMovedMap(true); bumpManualLock(4000); }}
+        onTouchStart={() => { userIsGesturingRef.current = true; }}
+        onTouchEnd={() => { userIsGesturingRef.current = false; }}
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
       >
-        {filteredCompanies.map(company => {
+        {markersToRender.map(company => {
           const coord = normaliseLatLng(company);
           if (!coord) return null; // Skip invalid/out-of-range coordinates
+          
+          // Use stable key to preserve refs and callouts
+          const markerKey = company.id;
           
           return (
             <Marker
               ref={(ref) => { markerRefs.current[company.id] = ref; }}
-              key={company.id}
+              key={markerKey}
+              identifier={company.id}
               coordinate={coord}
               onPress={() => handleMarkerPress(company)}
               onCalloutPress={() => handleCalloutPress(company)}
@@ -625,10 +816,12 @@ export default function MapScreen() {
         <SearchBarWithDropdown
           value={searchText}
           onChangeText={handleSearchChange}
+          onSubmit={handleSearchSubmit}
           onSelectCompany={handleCompanySelection}
           onFilter={undefined}
           companies={companies}
           placeholder="Search companies, locations..."
+          showDropdownOnSearch={showDropdown}
         />
       </View>
 
@@ -717,6 +910,17 @@ export default function MapScreen() {
         </Animated.View>
       )}
 
+      {/* Search this area button */}
+      {showSearchAreaButton && (
+        <TouchableOpacity 
+          style={[styles.searchAreaButton, { bottom: selectedCompany ? CARD_RAISE + 16 : tabBarHeight + 16 }]}
+          onPress={handleSearchThisArea}
+        >
+          <Ionicons name="search" size={18} color={Colors.primary} />
+          <Text style={styles.searchAreaButtonText}>Search this area</Text>
+        </TouchableOpacity>
+      )}
+
       <EnhancedFilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
@@ -770,6 +974,31 @@ const styles = StyleSheet.create({
   verifiedBadge: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   viewDetailsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5DAB2', borderWidth: 1.5, borderColor: Colors.primary, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, gap: 10, marginTop: 16, shadowColor: '#EF8059', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4 },
   viewDetailsButtonText: { fontSize: 17, fontWeight: '700', color: '#D67635', letterSpacing: 0.5 },
+  // Search this area button
+  searchAreaButton: { 
+    position: 'absolute', 
+    alignSelf: 'center', 
+    backgroundColor: Colors.white, 
+    paddingHorizontal: 20, 
+    paddingVertical: 12, 
+    borderRadius: 24, 
+    borderWidth: 1.5, 
+    borderColor: Colors.primary, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 4, 
+    elevation: 5, 
+    zIndex: 1001 
+  },
+  searchAreaButtonText: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: Colors.primary 
+  },
   // Watermark stays above the map; non-interactive
   logoWatermark: { position: 'absolute', left: 16, opacity: 0.9, zIndex: 100, elevation: 10 },
   watermarkLogo: { width: 96, height: 40 },

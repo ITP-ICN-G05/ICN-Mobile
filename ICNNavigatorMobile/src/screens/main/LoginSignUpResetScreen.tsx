@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Image, ScrollView } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AuthContainer from '../../components/common/AuthContainer';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -22,6 +22,7 @@ export default function LoginSignUpResetScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
+      {/* Keep background image - it adds visual appeal */}
       <Image
         source={require('../../../assets/ICN Logo Source/ICN-logo-little.png')}
         style={styles.backgroundImage}
@@ -29,6 +30,7 @@ export default function LoginSignUpResetScreen() {
         onError={(error) => console.log('Background image load error:', error)}
       />
 
+      {/* Keep top logo - branding element */}
       <Image
         source={require('../../../assets/ICN Logo Source/ICN-logo-full2.png')}
         style={styles.topLogo}
@@ -36,16 +38,24 @@ export default function LoginSignUpResetScreen() {
         onError={(error) => console.log('Top logo load error:', error)}
       />
 
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      {/* KeyboardAvoidingView ensures input fields are visible when keyboard appears */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.authWrapper}>
-          {/* Force remount when mode changes and support either prop name */}
-          <AuthContainerCompat key={mode} initialMode={mode} mode={mode} />
-        </View>
-      </ScrollView>
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.authWrapper}>
+            {/* Force remount when mode changes and support either prop name */}
+            <AuthContainerCompat key={mode} initialMode={mode} mode={mode} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -71,7 +81,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
     opacity: 0.8,
   },
-  scrollContainer: { flex: 1, marginTop: 120 },
+  keyboardAvoidingView: { flex: 1, marginTop: 120 },
+  scrollContainer: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 50 },
   authWrapper: { flex: 1, justifyContent: 'center', minHeight: 500 },
 });

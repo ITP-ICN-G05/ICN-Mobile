@@ -100,10 +100,15 @@ export default function CompaniesScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<'name' | 'verified' | 'recent'>('name');
   const [showSortOptions, setShowSortOptions] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const backToTopAnim = useRef(new Animated.Value(0)).current;
+  
+  // Ref for FlatList
+  const flatListRef = useRef<FlatList>(null);
 
   // Use ICN search when text changes
   useEffect(() => {
@@ -464,6 +469,26 @@ export default function CompaniesScreen() {
     setShowSortOptions(!showSortOptions);
   };
 
+  // Handle scroll event to show/hide back to top button
+  const handleScroll = (event: any) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const shouldShow = offsetY > 300; // Show after scrolling 300px
+    
+    if (shouldShow !== showBackToTop) {
+      setShowBackToTop(shouldShow);
+      Animated.timing(backToTopAnim, {
+        toValue: shouldShow ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // Scroll to top function
+  const scrollToTop = () => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
   // Navigate to payment
   const handleNavigateToPayment = () => {
     navigation.navigate('Payment');
@@ -804,6 +829,7 @@ export default function CompaniesScreen() {
       />
       
       <FlatList
+        ref={flatListRef}
         data={filteredAndSortedCompanies}
         keyExtractor={(item) => item.id}
         renderItem={viewMode === 'list' ? 
@@ -833,6 +859,8 @@ export default function CompaniesScreen() {
             tintColor={Colors.primary}
           />
         }
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       />
       
@@ -844,6 +872,34 @@ export default function CompaniesScreen() {
         onNavigateToPayment={handleNavigateToPayment}
         filterOptions={modalFilterOptions} // Pass robust filter options with fallback
       />
+
+      {/* Back to Top Button */}
+      {showBackToTop && (
+        <Animated.View
+          style={[
+            styles.backToTopButton,
+            {
+              opacity: backToTopAnim,
+              transform: [
+                {
+                  translateY: backToTopAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [100, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.backToTopTouchable}
+            onPress={scrollToTop}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-up" size={24} color={Colors.white} />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -1168,5 +1224,24 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
     padding: 4,
+  },
+  backToTopButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 90,  // Above bottom navigation bar (nav bar is ~60-80px tall)
+    zIndex: 999,
+  },
+  backToTopTouchable: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

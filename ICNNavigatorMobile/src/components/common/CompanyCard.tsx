@@ -54,24 +54,36 @@ export default function CompanyCard({
     ? `Company ${company.id.slice(-4)}` 
     : company.name;
 
-  // Get company type badge color
-  const getCompanyTypeBadge = () => {
-    if (!company.companyType) return null;
+  // Extract all unique capabilityTypes from icnCapabilities and display them
+  const getCompanyTypeBadges = () => {
+    if (!company.icnCapabilities || company.icnCapabilities.length === 0) {
+      return null;
+    }
+    
+    // Extract all unique capabilityType values
+    const uniqueTypes = Array.from(
+      new Set(company.icnCapabilities.map(cap => cap.capabilityType))
+    );
     
     const typeColors = {
-      supplier: Colors.supplier,
-      manufacturer: Colors.manufacturer,
-      service: Colors.orange300,
-      consultant: Colors.orange400,
+      'Supplier': Colors.supplier,
+      'Item Supplier': Colors.supplier,
+      'Parts Supplier': Colors.supplier,
+      'Manufacturer': Colors.manufacturer,
+      'Manufacturer (Parts)': Colors.manufacturer,
+      'Service Provider': Colors.orange300,
+      'Project Management': Colors.orange300,
+      'Designer': Colors.orange400,
+      'Assembler': Colors.orange400,
+      'Retailer': Colors.orange400,
+      'Wholesaler': Colors.orange400,
     };
-
-    return (
-      <View style={[styles.typeBadge, { backgroundColor: typeColors[company.companyType] || Colors.orange400 }]}>
-        <Text style={styles.typeBadgeText}>
-          {company.companyType.charAt(0).toUpperCase() + company.companyType.slice(1)}
-        </Text>
+    
+    return uniqueTypes.map((type, index) => (
+      <View key={index} style={[styles.typeBadge, { backgroundColor: typeColors[type] || Colors.orange400 }]}>
+        <Text style={styles.typeBadgeText}>{type}</Text>
       </View>
-    );
+    ));
   };
 
   // Get location display (city and state from billing address if available)
@@ -127,7 +139,7 @@ export default function CompanyCard({
             </View>
           )}
           
-          {getCompanyTypeBadge()}
+          {getCompanyTypeBadges()}
         </View>
         
         {/* Show capabilities if from ICN data */}
@@ -150,7 +162,7 @@ export default function CompanyCard({
               ))}
               {company.icnCapabilities.length > 2 && (
                 <View style={styles.moreChip}>
-                  <Text style={styles.moreText}>+{company.icnCapabilities.length - 2} items total</Text>
+                  <Text style={styles.moreText}>+{company.icnCapabilities.length - Math.min(uniqueCapabilities.length, 2)} items total</Text>
                 </View>
               )}
             </View>

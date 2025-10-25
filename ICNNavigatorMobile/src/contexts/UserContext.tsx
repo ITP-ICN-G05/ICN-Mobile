@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthService from '../services/authService';
+import { userApiService } from '../services/userApiService';
+import { PasswordHasher } from '../utils/passwordHasher';
 
 interface UserData {
   id: string;
@@ -21,7 +23,7 @@ interface UserContextType {
   showOnboarding: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateUser: (updates: Partial<UserData>) => Promise<void>;
+  updateUser: (updates: Partial<UserData>, currentPassword?: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearUser: () => void;
   setShowOnboarding: (show: boolean) => void;
@@ -34,7 +36,7 @@ const MOCK_USER_DATA: UserData = {
   phone: '+61 400 123 456',
   company: 'ABC Construction',
   role: 'Project Manager',
-  memberSince: '2024',
+  memberSince: '2025',
   avatar: null,
 };
 
@@ -149,14 +151,15 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         }
         
         // Convert UserFull to UserData format
+        // IMPORTANT: Use login email as fallback if backend doesn't return it
         const convertedUser: UserData = {
           id: userFull.id,
           name: userFull.name,
-          email: userFull.email,
+          email: userFull.email || email, // Use login email as fallback
           phone: userFull.phone || '',
           company: userFull.company || '',
           role: userFull.role || 'User',
-          memberSince: userFull.createdAt ? new Date(userFull.createdAt).getFullYear().toString() : '2024',
+          memberSince: userFull.createdAt ? new Date(userFull.createdAt).getFullYear().toString() : '2025',
           avatar: userFull.avatar || null,
         };
         
@@ -167,7 +170,7 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         // Check if user has seen onboarding
         const onboardingCompleted = await AsyncStorage.getItem('@onboarding_completed');
         console.log('Onboarding check - completed status:', onboardingCompleted);
-        if (!onboardingCompleted) {
+        if (onboardingCompleted !== 'true') {
           console.log('Setting showOnboarding to true');
           setShowOnboarding(true);
         } else {
@@ -186,7 +189,7 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
           
           // Check if user has seen onboarding
           const onboardingCompleted = await AsyncStorage.getItem('@onboarding_completed');
-          if (!onboardingCompleted) {
+          if (onboardingCompleted !== 'true') {
             setShowOnboarding(true);
           }
         } else {
@@ -238,32 +241,54 @@ const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const updateUser = async (updates: Partial<UserData>) => {
+  const updateUser = async (updates: Partial<UserData>, currentPassword?: string) => {
     if (!user) return;
 
     try {
+      // 1. Prepare backend sync data (only name and email)
+      const backendData: any = {
+        id: user.id
+      };
+      
+      if (updates.name !== undefined) backendData.name = updates.name;
+      if (updates.email !== undefined) backendData.email = updates.email;
+      // Hash the password before sending to backend
+      if (currentPassword) {
+        backendData.password = await PasswordHasher.hash(currentPassword);
+      }
+      
+      // 2. Sync to backend (if there are updates and password is provided)
+      const hasBackendFields = updates.name !== undefined || updates.email !== undefined;
+      if (hasBackendFields && currentPassword) {
+        try {
+          const response = await userApiService.updateUser(backendData);
+          if (!response.success) {
+            console.warn('Backend sync failed, saving locally only:', response.error);
+            // Continue with local update, don't block user operation
+          } else {
+            console.log('User data synced to backend successfully');
+          }
+        } catch (backendError) {
+          console.warn('Backend sync error, saving locally only:', backendError);
+          // Continue with local update, don't block user operation
+        }
+      } else if (hasBackendFields && !currentPassword) {
+        console.log('Backend sync skipped - password required for name/email updates');
+        // Continue with local update only
+      }
+      
+      // 3. Update local data (all fields)
       const updatedUser = { ...user, ...updates };
       setUser(updatedUser);
       await AsyncStorage.setItem('@user_data', JSON.stringify(updatedUser));
-
-      if (USE_BACKEND) {
-        const token = await AsyncStorage.getItem('@auth_token');
-        if (!token) throw new Error('No auth token');
-
-        try {
-          await fetchWithTimeout('https://api.icnvictoria.com/user/profile', {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(updates),
-          });
-        } catch (backendError) {
-          console.warn('Failed to sync with backend, changes saved locally');
-        }
-      }
+      console.log('User data updated (backend + local)');
+      
     } catch (err) {
+      console.error('Failed to update user:', err);
+      // Even if backend fails, update locally
+      const updatedUser = { ...user, ...updates };
+      setUser(updatedUser);
+      await AsyncStorage.setItem('@user_data', JSON.stringify(updatedUser));
       setError(err instanceof Error ? err.message : 'Failed to update user');
       throw err;
     }

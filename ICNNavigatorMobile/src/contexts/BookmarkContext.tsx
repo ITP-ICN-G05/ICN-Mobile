@@ -76,7 +76,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
         console.log('[BookmarkContext] Loaded pending operations:', parsed.length);
       }
     } catch (error) {
-      console.error('[BookmarkContext] Failed to load bookmarks:', error);
+      // console.error('[BookmarkContext] Failed to load bookmarks:', error);
     }
   };
 
@@ -88,7 +88,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarks));
       console.log('[BookmarkContext] Saved bookmarks to storage:', bookmarks.length);
     } catch (error) {
-      console.error('[BookmarkContext] Failed to save bookmarks:', error);
+      // console.error('[BookmarkContext] Failed to save bookmarks:', error);
     }
   };
 
@@ -100,7 +100,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
       await AsyncStorage.setItem(PENDING_OPS_KEY, JSON.stringify(operations));
       console.log('[BookmarkContext] Saved pending operations:', operations.length);
     } catch (error) {
-      console.error('[BookmarkContext] Failed to save pending operations:', error);
+      // console.error('[BookmarkContext] Failed to save pending operations:', error);
     }
   };
 
@@ -127,7 +127,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
    */
   const addBookmark = async (companyId: string) => {
     if (!companyId) {
-      console.warn('[BookmarkContext] Invalid company ID');
+      // console.warn('[BookmarkContext] Invalid company ID');
       return;
     }
 
@@ -158,7 +158,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
           await addPendingOperation('add', companyId);
         }
       } catch (error) {
-        console.error('[BookmarkContext] Failed to add bookmark to backend:', error);
+        // console.error('[BookmarkContext] Failed to add bookmark to backend:', error);
         // Add to pending operations for later sync
         await addPendingOperation('add', companyId);
       }
@@ -173,7 +173,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
    */
   const removeBookmark = async (companyId: string) => {
     if (!companyId) {
-      console.warn('[BookmarkContext] Invalid company ID');
+      // console.warn('[BookmarkContext] Invalid company ID');
       return;
     }
 
@@ -193,7 +193,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
           await addPendingOperation('remove', companyId);
         }
       } catch (error) {
-        console.error('[BookmarkContext] Failed to remove bookmark from backend:', error);
+        // console.error('[BookmarkContext] Failed to remove bookmark from backend:', error);
         // Add to pending operations for later sync
         await addPendingOperation('remove', companyId);
       }
@@ -257,7 +257,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
 
       // If backend fetch failed (returns empty array), keep local bookmarks and retry later
       if (backendBookmarks.length === 0 && bookmarkedIds.length > 0) {
-        console.warn('[BookmarkContext] Backend returned no bookmarks, preserving local bookmarks');
+        // console.warn('[BookmarkContext] Backend returned no bookmarks, preserving local bookmarks');
         // Try to push local bookmarks to backend
         const pushSuccess = await bookmarkService.syncBookmarks(user.id, bookmarkedIds);
         if (pushSuccess) {
@@ -266,7 +266,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
           setPendingOperations([]);
           await savePendingOperations([]);
         } else {
-          console.warn('[BookmarkContext] Failed to push local bookmarks, will retry later');
+          // console.warn('[BookmarkContext] Failed to push local bookmarks, will retry later');
           setError('Backend sync failed, bookmarks saved locally');
         }
         setIsLoading(false);
@@ -305,12 +305,12 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
       } else {
         // Don't update local state if backend sync failed
         setError('Failed to sync bookmarks with backend, kept local bookmarks');
-        console.error('[BookmarkContext] Sync failed, preserving local bookmarks');
+        // console.error('[BookmarkContext] Sync failed, preserving local bookmarks');
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       setError(errorMsg);
-      console.error('[BookmarkContext] Sync error:', errorMsg);
+      // console.error('[BookmarkContext] Sync error:', errorMsg);
       // Don't clear local bookmarks on error
     } finally {
       setIsLoading(false);

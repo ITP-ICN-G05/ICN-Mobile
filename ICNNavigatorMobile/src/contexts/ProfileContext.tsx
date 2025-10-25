@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { profileApi, ProfileData } from '../services/profileApi';
+import { userApiService } from '../services/userApiService';
 import { useUser } from './UserContext';
 
 interface UserProfile {
@@ -28,7 +29,7 @@ interface ProfileContextType {
   profile: UserProfile | null;
   settings: UserSettings;
   loading: boolean;
-  updateProfile: (data: Partial<UserProfile>) => Promise<void>;
+  updateProfile: (data: Partial<UserProfile>, currentPassword?: string) => Promise<void>;
   updateSettings: (settings: Partial<UserSettings>) => Promise<void>;
   uploadAvatar: (uri: string) => Promise<void>;
   deleteAvatar: () => Promise<void>;
@@ -76,14 +77,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setProfile(JSON.parse(cachedProfile));
       }
       
-      // Check for auth token
-      const token = await AsyncStorage.getItem('@auth_token');
-      if (!token) {
-        console.warn('No auth token available');
-        return;
-      }
-      
-      // Then fetch from API - this now combines backend data with locally stored extended fields
+      // No auth token needed - we use local storage only
+      // Fetch profile data from local storage
       try {
         const profileData = await profileApi.getProfile();
         
@@ -140,9 +135,40 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateProfile = async (data: Partial<UserProfile>) => {
+  const updateProfile = async (data: Partial<UserProfile>, currentPassword?: string) => {
     try {
-      // Ensure email is included for user identification and handle avatar type correctly
+      const email = data.email || profile?.email || user?.email || '';
+      
+      // 1. Prepare backend sync data (only name, email, password)
+      const backendData: any = {};
+      if (data.displayName !== undefined) backendData.name = data.displayName;
+      if (data.email !== undefined) backendData.email = data.email;
+      
+      // Need user.id and password for backend verification
+      if (user?.id) backendData.id = user.id;
+      if (currentPassword) backendData.password = currentPassword;
+      
+      // 2. Sync to backend (if there are fields to sync and password is provided)
+      const hasBackendFields = data.displayName !== undefined || data.email !== undefined;
+      if (hasBackendFields && currentPassword) {
+        try {
+          const response = await userApiService.updateUser(backendData);
+          if (!response.success) {
+            console.warn('Backend sync failed, saving locally only:', response.error);
+            // Continue with local save, don't block user operation
+          } else {
+            console.log('Profile synced to backend successfully');
+          }
+        } catch (backendError) {
+          console.warn('Backend sync error, saving locally only:', backendError);
+          // Continue with local save, don't block user operation
+        }
+      } else if (hasBackendFields && !currentPassword) {
+        console.log('Backend sync skipped - password required for name/email updates');
+        // Continue with local save only
+      }
+      
+      // 3. Update local state (all fields)
       const updateData: Partial<{
         displayName?: string;
         email: string;
@@ -156,7 +182,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         memberSince?: string;
       }> = {
         ...data,
-        email: data.email || profile?.email || user?.email || '', // Required for identification
+        email: email, // Required for identification
         avatar: data.avatar || undefined, // Convert null to undefined for type compatibility
       };
       

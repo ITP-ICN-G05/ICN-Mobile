@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExtendedProfileFields, LocalProfileStore } from './LocalProfileStore';
 import { getApiBaseUrl, fetchWithTimeout } from './apiConfig';
+import { PasswordHasher } from '../utils/passwordHasher';
 
 // Backend-compatible fields only - matches the Java User class
 interface BackendProfileData {
@@ -37,12 +38,8 @@ interface PasswordChangeData {
 }
 
 class ProfileApiService {
-  private async getAuthToken(): Promise<string> {
+  private async getAuthToken(): Promise<string | null> {
     const token = await AsyncStorage.getItem('@auth_token');
-    if (!token) {
-      // Provide more detailed error message for debugging
-      throw new Error('No auth token found. Please login again.');
-    }
     return token;
   }
 
@@ -52,6 +49,12 @@ class ProfileApiService {
     body?: any
   ) {
     const token = await this.getAuthToken();
+    
+    // If no token, throw a specific error that can be handled by callers
+    if (!token) {
+      throw new Error('No auth token found. Please login again.');
+    }
+    
     const API_BASE_URL = getApiBaseUrl();
     
     // Add debug logging
@@ -159,86 +162,53 @@ class ProfileApiService {
   }
 
   async updateProfile(data: Partial<ProfileData>): Promise<ProfileData> {
+    // Always save profile data locally - no server sync needed
+    console.log('Saving profile data locally');
+    return this.updateProfileLocally(data);
+  }
+
+  // Method to update profile data locally
+  private async updateProfileLocally(data: Partial<ProfileData>): Promise<ProfileData> {
+    console.log('Updating profile data locally');
+    
     try {
-      // Extract backend-compatible fields only
-      const backendData: BackendProfileData = {
-        email: data.email || '', // Email is required
-      };
-      
-      // Try to get cached user data from AsyncStorage as fallback for ID
-      try {
-        const cachedUserData = await AsyncStorage.getItem('@user_data');
-        const cachedProfile = cachedUserData ? JSON.parse(cachedUserData) : null;
+      // Update cached user data with new values
+      const cachedUserData = await AsyncStorage.getItem('@user_data');
+      if (cachedUserData) {
+        const userData = JSON.parse(cachedUserData);
         
-        // Use user ID from cached data if available
-        if (cachedProfile && cachedProfile.id) {
-          backendData.id = cachedProfile.id;
-        }
-      } catch (cacheError) {
-        console.warn('Could not retrieve cached user data:', cacheError);
+        // Update with new values
+        if (data.displayName !== undefined) userData.name = data.displayName;
+        if (data.email !== undefined) userData.email = data.email;
+        if (data.phone !== undefined) userData.phone = data.phone;
+        if (data.company !== undefined) userData.company = data.company;
+        if (data.role !== undefined) userData.role = data.role;
+        if (data.avatar !== undefined) userData.avatar = data.avatar;
+        
+        await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+        console.log('Updated local user data:', userData);
       }
       
-      // Map displayName to name for backend - ensure it's valid
-      // Only include if it's provided and not empty
-      if (data.displayName !== undefined && data.displayName.trim()) {
-        // Make sure name isn't too long and matches backend's pattern
-        backendData.name = data.displayName.substring(0, 50).trim();
-      }
-      
-      // Include other backend-compatible fields - ONLY if they are non-empty
-      // Backend validation might fail on empty strings
-      if (data.phone !== undefined && data.phone.trim()) {
-        backendData.phone = data.phone.trim();
-      }
-      if (data.company !== undefined && data.company.trim()) {
-        backendData.company = data.company.trim();
-      }
-      if (data.role !== undefined && data.role.trim()) {
-        backendData.role = data.role.trim();
-      }
-      if (data.avatar !== undefined) {
-        backendData.avatar = data.avatar;
-      }
-      
-      // Extract frontend-only fields
+      // Save extended fields to local storage
       const extendedData: ExtendedProfileFields = {};
       if (data.bio !== undefined) extendedData.bio = data.bio;
       if (data.linkedIn !== undefined) extendedData.linkedIn = data.linkedIn;
       if (data.website !== undefined) extendedData.website = data.website;
       if (data.memberSince !== undefined) extendedData.memberSince = data.memberSince;
       
-      console.log('Sending profile update:', JSON.stringify(backendData));
-      
-      // Send backend data to API
-      const response = await this.makeRequest('/api/user', 'PUT', backendData);
-      
-      // Update cached user data with new values
-      try {
+      if (Object.keys(extendedData).length > 0) {
         const cachedUserData = await AsyncStorage.getItem('@user_data');
-        if (cachedUserData) {
-          const userData = JSON.parse(cachedUserData);
-          // Update with new values
-          if (backendData.name) userData.name = backendData.name;
-          if (backendData.phone) userData.phone = backendData.phone;
-          if (backendData.company) userData.company = backendData.company;
-          if (backendData.role) userData.role = backendData.role;
-          if (backendData.avatar !== undefined) userData.avatar = backendData.avatar;
-          await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+        const userData = cachedUserData ? JSON.parse(cachedUserData) : null;
+        if (userData && userData.id) {
+          await LocalProfileStore.saveExtendedFields(userData.id, extendedData);
         }
-      } catch (cacheError) {
-        console.warn('Could not update cached user data:', cacheError);
       }
       
-      // Save extended fields to local storage
-      if (Object.keys(extendedData).length > 0 && backendData.id) {
-        await LocalProfileStore.saveExtendedFields(backendData.id, extendedData);
-      }
-      
-      // Get complete profile data to return (includes both backend and frontend fields)
+      // Return the updated profile data
       return this.getProfile();
     } catch (error) {
-      console.error('Error updating profile:', error);
-      throw error;
+      console.error('Error updating profile locally:', error);
+      throw new Error('Failed to save profile data locally. Please try again.');
     }
   }
 
@@ -252,7 +222,12 @@ class ProfileApiService {
 
   // Password Management
   async changePassword(data: PasswordChangeData): Promise<void> {
-    return this.makeRequest('/api/user/password', 'PUT', data);
+    // Hash both current and new passwords before sending
+    const hashedData = {
+      currentPassword: await PasswordHasher.hash(data.currentPassword),
+      newPassword: await PasswordHasher.hash(data.newPassword)
+    };
+    return this.makeRequest('/api/user/password', 'PUT', hashedData);
   }
 
   async requestPasswordReset(email: string): Promise<void> {
@@ -260,17 +235,22 @@ class ProfileApiService {
   }
 
   async validateCurrentPassword(password: string): Promise<boolean> {
-    const response = await this.makeRequest('/api/user/validate-password', 'POST', { password });
+    // Hash the password before sending for validation
+    const hashedPassword = await PasswordHasher.hash(password);
+    const response = await this.makeRequest('/api/user/validate-password', 'POST', { password: hashedPassword });
     return response.valid;
   }
 
   // Account Management
   async deleteAccount(password: string): Promise<void> {
-    return this.makeRequest('/api/user/account', 'DELETE', { password });
+    // Hash the password before sending for account deletion
+    const hashedPassword = await PasswordHasher.hash(password);
+    return this.makeRequest('/api/user/account', 'DELETE', { password: hashedPassword });
   }
 
   async exportUserData(): Promise<Blob> {
     const token = await this.getAuthToken();
+    const API_BASE_URL = getApiBaseUrl();
     
     const response = await fetch(`${API_BASE_URL}/api/user/export`, {
       headers: {

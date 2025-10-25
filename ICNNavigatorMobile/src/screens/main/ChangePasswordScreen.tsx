@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors } from '../../constants/colors';
+import { PasswordHasher } from '../../utils/passwordHasher';
 
 interface PasswordFormData {
   currentPassword: string;
@@ -110,11 +111,11 @@ export default function ChangePasswordScreen() {
       newErrors.currentPassword = 'Current password is required';
     }
 
-    // New password validation
+    // New password format validation (must match backend requirements)
     if (!formData.newPassword) {
       newErrors.newPassword = 'New password is required';
-    } else if (formData.newPassword.length < 8) {
-      newErrors.newPassword = 'Password must be at least 8 characters';
+    } else if (!PasswordHasher.validatePassword(formData.newPassword)) {
+      newErrors.newPassword = 'Password must be 6-20 characters long and contain only letters, numbers, and underscores (_)';
     } else if (formData.newPassword === formData.currentPassword) {
       newErrors.newPassword = 'New password must be different from current password';
     }

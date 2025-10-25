@@ -1,5 +1,23 @@
 // services/organisationApiService.ts - Organisation Service Based on Backend API Guide
 import BaseApiService, { ApiResponse } from './apiConfig';
+import { clampQueryBox, DEFAULT_QUERY_BOX } from '../utils/geoQuery';
+
+/**
+ * Validate if coordinates are within valid geographic bounds
+ */
+function isValidLatitude(lat: number): boolean {
+  return lat >= -90 && lat <= 90;
+}
+
+function isValidLongitude(lon: number): boolean {
+  return lon >= -180 && lon <= 180;
+}
+
+function isValidDelta(delta: number): boolean {
+  return delta > 0 && delta <= 360;  // Allow up to 360 for global coverage
+}
+
+// Removed getGlobalDefaults() - no more world-extent queries
 
 // Backend Item interface (matches backend Item.java)
 export interface BackendItem {
@@ -42,6 +60,7 @@ export interface Organisation {
 
 export interface OrganisationCard {
   // Organisation card data structure based on backend API
+  id?: string;
   _id?: string;
   name: string;
   items?: BackendItem[];  // ← Explicit type
@@ -50,19 +69,21 @@ export interface OrganisationCard {
   state?: string;
   zip?: string;
   sectorName?: string;
+  lontitude?: number;  // Match backend typo (line 76 in Organisation.java)
+  latitude?: number;   // Direct latitude field from backend
   coord?: {
     type: string;
-    coordinates: [number, number]; // [longitude, latitude] from backend
+    coordinates: [number, number]; // [longitude, latitude] from backend (legacy support)
   };
   // Additional fields from backend response
   [key: string]: any;
 }
 
 export interface OrganisationSearchParams {
-  locationX?: number;
-  locationY?: number;
-  lenX?: number;
-  lenY?: number;
+  locationX?: number;  // Optional, will use global default if invalid
+  locationY?: number;  // Optional, will use global default if invalid
+  lenX?: number;       // Optional, will use global default if invalid
+  lenY?: number;       // Optional, will use global default if invalid
   filterParameters: Record<string, any>;
   searchString?: string;
   skip?: number;
@@ -83,12 +104,26 @@ export class OrganisationApiService extends BaseApiService {
    * @returns Promise<ApiResponse<OrganisationCard[]>>
    */
   async searchOrganisations(params: OrganisationSearchParams): Promise<ApiResponse<OrganisationCard[]>> {
-    // Build query parameters - Adjusted according to backend API guide
+    // Require coordinates - no world defaults
+    if (params.locationX === undefined || params.locationY === undefined ||
+        params.lenX === undefined || params.lenY === undefined) {
+      throw new Error('Geographic query parameters (locationX/Y, lenX/Y) are required');
+    }
+
+    // Apply range clamping to prevent 500 errors
+    const clamped = clampQueryBox({
+      locationX: params.locationX,
+      locationY: params.locationY,
+      lenX: params.lenX,
+      lenY: params.lenY
+    });
+    
+    // Build query parameters with clamped values
     const queryParams: Record<string, any> = {
-      locationX: 0, // Default value, actual coordinates need to be passed when used
-      locationY: 0, // Default value, actual coordinates need to be passed when used
-      lenX: 100,    // Search range X length
-      lenY: 100,    // Search range Y length
+      locationX: clamped.locationX,
+      locationY: clamped.locationY,
+      lenX: clamped.lenX,
+      lenY: clamped.lenY,
       filterParameters: JSON.stringify(params.filterParameters),
     };
 
@@ -99,7 +134,8 @@ export class OrganisationApiService extends BaseApiService {
       queryParams.skip = params.skip;
     }
     if (params.limit !== undefined) {
-      queryParams.limit = params.limit;
+      // Cap limit at 5000 for worldwide search
+      queryParams.limit = Math.min(params.limit, 5000);
     }
 
     return this.get<OrganisationCard[]>('/organisation/general', queryParams);
@@ -154,20 +190,28 @@ export class OrganisationApiService extends BaseApiService {
    * @returns Promise<OrganisationCard[]>
    */
   async searchOrganisationsWithErrorHandling(
-    locationX: number = 0,
-    locationY: number = 0,
-    lenX: number = 100,
-    lenY: number = 100,
+    locationX?: number,
+    locationY?: number,
+    lenX?: number,
+    lenY?: number,
     filters: Record<string, any> = {},
     searchText: string = '',
     pagination: { skip?: number; limit?: number } = {}
   ): Promise<OrganisationCard[]> {
     try {
+      // Provide safe default (worldwide region)
+      const safeBox = clampQueryBox({
+        locationX: locationX ?? DEFAULT_QUERY_BOX.locationX,
+        locationY: locationY ?? DEFAULT_QUERY_BOX.locationY,
+        lenX: lenX ?? DEFAULT_QUERY_BOX.lenX,
+        lenY: lenY ?? DEFAULT_QUERY_BOX.lenY
+      });
+
       const response = await this.searchOrganisations({
-        locationX,
-        locationY,
-        lenX,
-        lenY,
+        locationX: safeBox.locationX,
+        locationY: safeBox.locationY,
+        lenX: safeBox.lenX,
+        lenY: safeBox.lenY,
         filterParameters: filters,
         searchString: searchText,
         ...pagination
@@ -239,17 +283,71 @@ export class OrganisationApiService extends BaseApiService {
 
   /**
    * Get all organisations (for initial data load)
-   * Uses a large search area to get all companies
+   * Uses global coverage as default search area
    */
-  async getAllOrganisations(limit: number = 5000): Promise<OrganisationCard[]> {
+  async getAllOrganisations(limit: number = 1000): Promise<OrganisationCard[]> {
+    // Use worldwide region for initial load to get all companies
+    const box = clampQueryBox(DEFAULT_QUERY_BOX);
+
     return await this.searchOrganisationsWithErrorHandling(
-      -200, -200, // Starting coordinates
-      400, 400,   // Large search area covering Australia/NZ
+      box.locationX, box.locationY, box.lenX, box.lenY,
       {},         // No filters
       '',         // No search text
-      { skip: 0, limit }
+      { skip: 0, limit: Math.min(limit, 5000) }  // Cap at 5000
     );
   }
+
+  /**
+   * Search organisations within a map region
+   * @param region Map region with latitude, longitude, and deltas
+   * @param filters Filter parameters
+   * @param searchText Search string
+   * @param pagination Pagination parameters
+   */
+  async searchOrganisationsByRegion(
+    region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    },
+    filters: Record<string, any> = {},
+    searchText: string = '',
+    pagination: { skip?: number; limit?: number } = {}
+  ): Promise<OrganisationCard[]> {
+    const rawBox = {
+      locationX: region.longitude - (region.longitudeDelta / 2),
+      locationY: region.latitude - (region.latitudeDelta / 2),
+      lenX: region.longitudeDelta,
+      lenY: region.latitudeDelta
+    };
+
+    // Force range limits to prevent 500 errors
+    const clamped = clampQueryBox(rawBox);
+    
+    return await this.searchOrganisationsWithErrorHandling(
+      clamped.locationX,
+      clamped.locationY,
+      clamped.lenX,
+      clamped.lenY,
+      filters,
+      searchText,
+      pagination
+    );
+  }
+}
+
+/**
+ * Normalize OrganisationCard data
+ * Handle backend's lontitude typo for compatibility
+ */
+function normalizeOrganisationCard(card: any): OrganisationCard {
+  return {
+    ...card,
+    // If needed to use correct spelling in app, map here
+    longitude: card.lontitude || card.longitude,
+    lontitude: card.lontitude || card.longitude,
+  };
 }
 
 // Export singleton instance

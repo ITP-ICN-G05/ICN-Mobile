@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 
-// 工具函数：确保文本渲染安全
+// Utility function: Ensure safe text rendering
 const safeText = (value: any): React.ReactNode => {
   if (value === null || value === undefined) {
     return null;
@@ -31,6 +31,7 @@ import { Colors, Spacing } from '../../constants/colors';
 import { useProfile } from '../../contexts/ProfileContext';
 import { useUser } from '../../contexts/UserContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import PasswordConfirmDialog from '../../components/common/PasswordConfirmDialog';
 
 interface ProfileFormData {
   displayName: string;
@@ -52,6 +53,7 @@ export default function EditProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState<ProfileFormData>({
@@ -71,33 +73,48 @@ export default function EditProfileScreen() {
 
   // Effect 1: Load profile data (reactive to profile/user changes)
   useEffect(() => {
-    // Load profile data from context
-    if (profile) {
-      setFormData({
-        displayName: profile.displayName || user?.name || '',
-        accountName: user?.email?.split('@')[0] || '',
-        email: profile.email || user?.email || '',
-        phone: profile.phone || user?.phone || '',
-        company: profile.company || '',
-        role: profile.role || '',
-        bio: profile.bio || '',
-        linkedIn: profile.linkedIn || '',
-        website: profile.website || '',
-        avatar: profile.avatar || null,
-      });
-    } else if (user) {
-      // Fallback to user data if profile is not available
-      setFormData(prev => ({
-        ...prev,
-        displayName: user.name || '',
-        accountName: user.email?.split('@')[0] || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        company: user.company || '',
-        role: user.role || '',
-      }));
+    // Debug: Log user and profile state
+    console.log('=== EditProfileScreen - Loading data ===');
+    console.log('User data:', {
+      hasUser: !!user,
+      userName: user?.name,
+      userEmail: user?.email,
+      userPhone: user?.phone,
+    });
+    console.log('Profile data:', {
+      hasProfile: !!profile,
+      profileDisplayName: profile?.displayName,
+      profileEmail: profile?.email,
+      profilePhone: profile?.phone,
+    });
+    
+    // Get email from most reliable source: user context (core authentication data)
+    const userEmail = user?.email || profile?.email || '';
+    console.log('Derived email:', userEmail);
+    console.log('Derived accountName:', userEmail ? userEmail.split('@')[0] : '(empty)');
+    
+    // Always update form data when user or profile changes
+    if (profile || user) {
+      const newFormData = {
+        displayName: profile?.displayName || user?.name || '',
+        accountName: userEmail ? userEmail.split('@')[0] : '',
+        email: userEmail,
+        phone: profile?.phone || user?.phone || '',
+        company: profile?.company || user?.company || '',
+        role: profile?.role || user?.role || '',
+        bio: profile?.bio || '',
+        linkedIn: profile?.linkedIn || '',
+        website: profile?.website || '',
+        avatar: profile?.avatar || null,
+      };
+      
+      console.log('Setting form data:', newFormData);
+      setFormData(newFormData);
+    } else {
+      console.log('WARNING: Neither user nor profile is available!');
     }
-  }, [profile, user]); // Added dependencies to react to changes
+    console.log('=== End EditProfileScreen data loading ===');
+  }, [profile, user]); // React to changes in profile or user
 
   // Image picker functions
   const pickImageFromGallery = async () => {
@@ -189,7 +206,7 @@ export default function EditProfileScreen() {
 
     const email = formData.email.trim();
     if (!email) {
-      newErrors.email = 'Email is required';
+      newErrors.email = 'Email is required and cannot be empty';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email';
     }
@@ -211,7 +228,17 @@ export default function EditProfileScreen() {
   }, [formData]);
 
   const handleSave = useCallback(async () => {
-    // 1. Check user authentication state (keep this)
+    // 0. Extra safety check for email
+    if (!formData.email || !formData.email.trim()) {
+      Alert.alert(
+        'Email Required',
+        'Email cannot be empty. Please enter a valid email address.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // 1. Check user authentication state
     if (!user || userLoading) {
       Alert.alert(
         'Login Required',
@@ -230,10 +257,24 @@ export default function EditProfileScreen() {
       return;
     }
 
+    // 3. Check if name or email changed (needs backend sync)
+    const nameChanged = formData.displayName !== (profile?.displayName || user?.name || '');
+    const emailChanged = formData.email !== (profile?.email || user?.email || '');
+    
+    if (nameChanged || emailChanged) {
+      // Show password dialog for backend sync
+      setShowPasswordDialog(true);
+    } else {
+      // No backend sync needed, save directly
+      await saveProfileChanges();
+    }
+  }, [formData, validateForm, user, userLoading, profile, navigation]);
+
+  const saveProfileChanges = async (password?: string) => {
     setSaving(true);
 
     try {
-      // Attempt to update profile
+      // Update profile with optional password
       await updateProfile({
         displayName: formData.displayName,
         email: formData.email,
@@ -244,7 +285,7 @@ export default function EditProfileScreen() {
         linkedIn: formData.linkedIn,
         website: formData.website,
         avatar: formData.avatar,
-      });
+      }, password);
 
       // Also update user context
       if (user) {
@@ -255,7 +296,7 @@ export default function EditProfileScreen() {
           phone: formData.phone,
           company: formData.company,
           role: formData.role,
-        });
+        }, password);
       }
       
       // SUCCESS: Go back immediately
@@ -265,28 +306,21 @@ export default function EditProfileScreen() {
       console.error('Profile update error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to update profile.';
       
-      // If auth error, save draft and redirect to login
-      if (errorMessage.includes('auth') || errorMessage.includes('token') || errorMessage.includes('login')) {
-        await AsyncStorage.setItem('@profile_draft', JSON.stringify(formData));
-        Alert.alert(
-          'Login Required',
-          'Please login again to save your changes.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Login', onPress: async () => {
-              await logout();
-              navigation.navigate('Auth' as never);
-            }},
-          ]
-        );
-      } else {
-        // Other errors
-        Alert.alert('Error', errorMessage);
-      }
+      // Show error message for any issues
+      Alert.alert('Error', errorMessage);
     } finally {
       setSaving(false);
     }
-  }, [formData, validateForm, user, userLoading, updateProfile, updateUser, logout, navigation]);
+  };
+
+  const handlePasswordConfirm = async (password: string) => {
+    await saveProfileChanges(password);
+    setShowPasswordDialog(false);
+  };
+
+  const handlePasswordCancel = () => {
+    setShowPasswordDialog(false);
+  };
 
   // Effect 2: Set header (after handleSave is defined)
   useLayoutEffect(() => {
@@ -324,9 +358,16 @@ export default function EditProfileScreen() {
         ]}
         value={formData[key] as string}
         onChangeText={(text) => {
-          setFormData(prev => ({ ...prev, [key]: text })); // Functional update
+          // Update form data with new value
+          setFormData(prev => ({ 
+            ...prev, 
+            [key]: text,
+            // Auto-update accountName when email changes
+            ...(key === 'email' && { accountName: text.split('@')[0] })
+          }));
+          // Clear validation error for this field
           if (errors[key]) {
-            setErrors(prev => ({ ...prev, [key]: undefined })); // Functional update
+            setErrors(prev => ({ ...prev, [key]: undefined }));
           }
         }}
         placeholder={placeholder}
@@ -348,14 +389,21 @@ export default function EditProfileScreen() {
         resizeMode="cover"
       />
       
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardContainer}
-      >
-        <ScrollView 
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+      {/* Show loading indicator while waiting for user data */}
+      {(userLoading || (!user && !profile)) ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      ) : (
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardContainer}
         >
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
           {/* Avatar Section */}
           <View style={styles.avatarSection}>
             <TouchableOpacity 
@@ -396,7 +444,10 @@ export default function EditProfileScreen() {
                 placeholder="Account Name"
                 placeholderTextColor={Colors.black50}
               />
-              <Text style={styles.helperText}>This is your unique account identifier and cannot be changed</Text>
+              <Text style={styles.helperText}>
+                This is your unique account identifier and cannot be changed
+                {__DEV__ && ` (Debug: "${formData.accountName || 'EMPTY'}")`}
+              </Text>
             </View>
 
             {renderInput('Email *', 'email', 'email@example.com', {
@@ -460,6 +511,16 @@ export default function EditProfileScreen() {
 
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
+
+      {/* Password Confirmation Dialog */}
+      <PasswordConfirmDialog
+        visible={showPasswordDialog}
+        onConfirm={handlePasswordConfirm}
+        onCancel={handlePasswordCancel}
+        title="Confirm Password"
+        message="Your name or email has changed. Please enter your password to sync these changes to the server."
+      />
     </SafeAreaView>
   );
 }
@@ -468,6 +529,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF', // White background like ProfileScreen
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: 'rgba(27, 62, 111, 0.7)',
   },
   backgroundLogo: {
     position: 'absolute',

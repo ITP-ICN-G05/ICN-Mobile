@@ -20,6 +20,7 @@ const toNumber = (v: any): number => {
  */
 export function normaliseLatLng(c: any): LatLng | null {
   // Accept many possible shapes from different data sources
+  // Priority order: direct fields first, then nested structures
   let lat = toNumber(
     c.latitude ?? 
     c.lat ?? 
@@ -44,7 +45,9 @@ export function normaliseLatLng(c: any): LatLng | null {
 
   // Detect swap (e.g., GeoJSON into {latitude, longitude} fields)
   // If latitude looks like longitude (> 90) and longitude looks like latitude (≤ 90), swap them
+  // This is common with Australian data where coordinates get swapped during data processing
   if (Math.abs(lat) > 90 && Math.abs(lon) <= 90) {
+    console.log(`[COORDS] Detected swapped coordinates, fixing: lat=${lat} -> ${lon}, lon=${lon} -> ${lat}`);
     [lat, lon] = [lon, lat];
   }
 

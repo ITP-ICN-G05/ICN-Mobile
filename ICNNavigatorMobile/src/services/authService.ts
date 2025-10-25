@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { userApiService, UserFull, InitialUser } from './userApiService';
+import { PasswordHasher } from '../utils/passwordHasher';
 
 class AuthService {
   private static TOKEN_KEY = '@auth_token';
@@ -125,6 +126,9 @@ class AuthService {
   static async deleteAccount(password: string): Promise<void> {
     const token = await AsyncStorage.getItem(this.TOKEN_KEY);
     
+    // Hash the password before sending to backend
+    const hashedPassword = await PasswordHasher.hash(password);
+    
     // Use unified API configuration
     const { API_BASE_URL } = await import('../constants');
     const response = await fetch(`${API_BASE_URL}/account/delete`, {
@@ -134,7 +138,7 @@ class AuthService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        password,
+        password: hashedPassword,
         confirmDeletion: true,
       }),
     });

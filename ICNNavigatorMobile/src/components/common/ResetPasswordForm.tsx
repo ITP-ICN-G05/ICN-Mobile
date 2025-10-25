@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import AuthService from '../../services/authService';
+import { PasswordHasher } from '../../utils/passwordHasher';
 
 export default function ResetPasswordForm() {
   const [email, setEmail] = useState('');
@@ -17,6 +18,11 @@ export default function ResetPasswordForm() {
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const countdownTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Refs for input field navigation
+  const verificationCodeInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
+  const confirmPasswordInputRef = useRef<TextInput>(null);
 
   // Countdown effect
   useEffect(() => {
@@ -64,14 +70,14 @@ export default function ResetPasswordForm() {
 
   const handleConfirmReset = async () => {
     // Validate verification code
-    if (!verificationCode || verificationCode.length !== 6) {
-      Alert.alert('Error', 'Please enter a valid 6-digit verification code');
+    if (!verificationCode || verificationCode.length !== 4) {
+      Alert.alert('Error', 'Please enter a valid 4-character verification code');
       return;
     }
 
-    // Validate passwords
-    if (!password || password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+    // Validate password format before hashing
+    if (!PasswordHasher.validatePassword(password)) {
+      Alert.alert('Invalid Password', 'Password must be 6-20 characters long and contain only letters, numbers, and underscores (_)');
       return;
     }
 
@@ -143,6 +149,9 @@ export default function ResetPasswordForm() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          returnKeyType="next"
+          onSubmitEditing={() => verificationCodeInputRef.current?.focus()}
+          blurOnSubmit={false}
         />
       </View>
 
@@ -152,13 +161,17 @@ export default function ResetPasswordForm() {
         
         <View style={styles.verificationContainer}>
           <TextInput
+            ref={verificationCodeInputRef}
             style={styles.verificationInput}
-            placeholder="6-digit code"
+            placeholder="4-character code"
             placeholderTextColor="#999"
             value={verificationCode}
             onChangeText={setVerificationCode}
-            keyboardType="number-pad"
-            maxLength={6}
+            keyboardType="default"
+            maxLength={4}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordInputRef.current?.focus()}
+            blurOnSubmit={false}
           />
           
           <TouchableOpacity 
@@ -191,12 +204,16 @@ export default function ResetPasswordForm() {
         </View>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={passwordInputRef}
             style={styles.passwordInput}
             placeholder="Enter your password"
             placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            returnKeyType="next"
+            onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
+            blurOnSubmit={false}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}
@@ -216,12 +233,15 @@ export default function ResetPasswordForm() {
         <Text style={styles.label}>Confirm Password</Text>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={confirmPasswordInputRef}
             style={styles.passwordInput}
             placeholder="Enter your password"
             placeholderTextColor="#999"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!showConfirmPassword}
+            returnKeyType="done"
+            onSubmitEditing={handleConfirmReset}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}

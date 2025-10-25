@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useUser } from '../../contexts/UserContext';
@@ -13,6 +13,9 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Refs for input field navigation
+  const passwordInputRef = useRef<TextInput>(null);
 
   const handleSignIn = async () => {
     if (submitting) return;
@@ -59,6 +62,9 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          returnKeyType="next"
+          onSubmitEditing={() => passwordInputRef.current?.focus()}
+          blurOnSubmit={false}
         />
       </View>
 
@@ -70,12 +76,15 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
         </View>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={passwordInputRef}
             style={styles.passwordInput}
             placeholder="Enter your password"
             placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            returnKeyType="done"
+            onSubmitEditing={handleSignIn}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}

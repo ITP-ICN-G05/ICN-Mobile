@@ -5,6 +5,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '../../contexts/UserContext';
 import AuthService from '../../services/authService';
+import { PasswordHasher } from '../../utils/passwordHasher';
 
 interface SignUpFormProps {
   onAlreadyHaveAccount: () => void;
@@ -23,6 +24,12 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const countdownTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Refs for input field navigation
+  const emailInputRef = useRef<TextInput>(null);
+  const verificationCodeInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
+  const confirmPasswordInputRef = useRef<TextInput>(null);
 
   // Countdown effect
   useEffect(() => {
@@ -69,9 +76,28 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
   const handleSignUp = async () => {
     if (submitting) return;
 
-    // Validate form
-    if (!userName || !email || !password || !verificationCode) {
-      Alert.alert('Error', 'Please fill in all fields');
+    // Validate user name - minimum 2 characters
+    if (!userName || userName.trim().length < 2) {
+      Alert.alert('Error', 'User name must be at least 2 characters long');
+      return;
+    }
+
+    // Validate name pattern (letters, numbers, spaces only)
+    const namePattern = /^[a-zA-Z0-9\s]{2,50}$/;
+    if (!namePattern.test(userName.trim())) {
+      Alert.alert('Error', 'User name can only contain letters, numbers, and spaces');
+      return;
+    }
+
+    // Validate email
+    if (!email || !email.includes('@')) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    // Validate password format before hashing
+    if (!PasswordHasher.validatePassword(password)) {
+      Alert.alert('Invalid Password', 'Password must be 6-20 characters long and contain only letters, numbers, and underscores (_)');
       return;
     }
 
@@ -80,25 +106,21 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
-      return;
-    }
-
-    if (verificationCode.length !== 6) {
-      Alert.alert('Error', 'Please enter a valid 6-digit verification code');
+    // Validate verification code
+    if (verificationCode.length !== 4) {
+      Alert.alert('Error', 'Please enter a valid 4-character verification code');
       return;
     }
 
     setSubmitting(true);
     try {
-      // Register user with backend
+      // Register user - phone will be omitted if empty
       await AuthService.register({
-        email,
-        name: userName,
+        email: email.trim(),
+        name: userName.trim(),
         password,
-        phone: '', // Empty phone for now, can be added later in profile
-        code: verificationCode
+        code: verificationCode.trim().toUpperCase(), // Normalize code to uppercase
+        phone: '', // Will be omitted by userApiService if empty
       });
 
       // After successful registration, log in
@@ -110,9 +132,9 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
       // Force show onboarding for new users
       setShowOnboarding(true);
       
-      // Remove Alert - onboarding modal will show instead
       console.log('User registered and logged in successfully');
     } catch (e: any) {
+      // Now shows detailed error from backend
       Alert.alert('Registration Failed', e.message || 'Failed to create account');
     } finally {
       setSubmitting(false);
@@ -137,11 +159,14 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         </View>
         <TextInput
           style={styles.input}
-          placeholder="e.g. JohnSmith11"
+          placeholder="e.g. John Smith (min 2 characters)"
           placeholderTextColor="#999"
           value={userName}
           onChangeText={setUserName}
-          autoCapitalize="none"
+          autoCapitalize="words"
+          returnKeyType="next"
+          onSubmitEditing={() => emailInputRef.current?.focus()}
+          blurOnSubmit={false}
         />
       </View>
 
@@ -152,6 +177,7 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           <Text style={styles.label}>Email</Text>
         </View>
         <TextInput
+          ref={emailInputRef}
           style={styles.input}
           placeholder="Enter your email"
           placeholderTextColor="#999"
@@ -159,6 +185,9 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          returnKeyType="next"
+          onSubmitEditing={() => verificationCodeInputRef.current?.focus()}
+          blurOnSubmit={false}
         />
       </View>
 
@@ -168,13 +197,17 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         
         <View style={styles.verificationContainer}>
           <TextInput
+            ref={verificationCodeInputRef}
             style={styles.verificationInput}
-            placeholder="6-digit code"
+            placeholder="4-character code"
             placeholderTextColor="#999"
             value={verificationCode}
             onChangeText={setVerificationCode}
-            keyboardType="number-pad"
-            maxLength={6}
+            keyboardType="default"
+            maxLength={4}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordInputRef.current?.focus()}
+            blurOnSubmit={false}
           />
           
           <TouchableOpacity 
@@ -203,12 +236,16 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         </View>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={passwordInputRef}
             style={styles.passwordInput}
             placeholder="Enter your password"
             placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            returnKeyType="next"
+            onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
+            blurOnSubmit={false}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}
@@ -231,12 +268,15 @@ export default function SignUpForm({ onAlreadyHaveAccount }: SignUpFormProps) {
         </View>
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={confirmPasswordInputRef}
             style={styles.passwordInput}
             placeholder="Enter your password"
             placeholderTextColor="#999"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!showConfirmPassword}
+            returnKeyType="done"
+            onSubmitEditing={handleSignUp}
           />
           <TouchableOpacity 
             style={styles.eyeIcon}

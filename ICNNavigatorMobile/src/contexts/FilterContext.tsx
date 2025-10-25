@@ -66,15 +66,17 @@ export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   /**
    * Check if any filters are active
+   * Properly detects empty filters vs active filters
    */
   const hasActiveFilters = useMemo(() => {
+    // Check each filter against its default value
     return (
-      filters.capabilities.length > 0 ||
+      (filters.capabilities && filters.capabilities.length > 0) ||
       (filters.sectors && filters.sectors.length > 0) ||
-      (filters.state && filters.state !== 'All') ||
+      (filters.state && filters.state !== undefined && filters.state !== 'All') ||
       (filters.companyTypes && filters.companyTypes.length > 0) ||
-      filters.distance !== 'All' ||
-      (filters.companySize && filters.companySize !== 'All') ||
+      (filters.distance && filters.distance !== 'All') ||
+      (filters.companySize && filters.companySize !== undefined && filters.companySize !== 'All') ||
       (filters.certifications && filters.certifications.length > 0) ||
       (filters.ownershipType && filters.ownershipType.length > 0) ||
       filters.socialEnterprise === true ||

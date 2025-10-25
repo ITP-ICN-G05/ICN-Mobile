@@ -47,7 +47,7 @@ export default function AppNavigator() {
       {/* Onboarding modal */}
       {showOnboarding && (
         <OnboardingModal
-          visible={showOnboarding}
+          visible={!!showOnboarding}
           onComplete={handleOnboardingComplete}
           onSkip={handleOnboardingSkip}
         />

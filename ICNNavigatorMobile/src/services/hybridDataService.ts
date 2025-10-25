@@ -26,9 +26,13 @@ export class HybridDataService {
 
   /**
    * Set whether to use API
+   * Note: Geographic queries are disabled due to backend issues
    */
   setApiEnabled(enabled: boolean) {
     this.useApi = enabled;
+    if (enabled) {
+      console.warn('⚠️ API geographic queries are disabled due to backend issues. Using local data only.');
+    }
   }
 
   /**
@@ -55,10 +59,12 @@ export class HybridDataService {
       // Try to load from backend API first (already has geocoded coordinates)
       if (this.useApi) {
         try {
+          console.log('🔄 Fetching all organisations (no geo filter, limit 5000)...');
           const apiCompanies = await organisationApiService.getAllOrganisations();
           if (apiCompanies && apiCompanies.length > 0) {
             this.companies = this.convertApiResultsToCompanies(apiCompanies);
-            console.log(`Loaded ${this.companies.length} companies from backend (with geocoded coordinates)`);
+            console.log(`✅ TOTAL COMPANIES LOADED: ${this.companies.length}`);
+            console.log(`� Raw API response count: ${apiCompanies.length}`);
             this.isLoaded = true;
             this.lastLoadTime = new Date();
             this.isLoading = false;
@@ -378,18 +384,50 @@ export class HybridDataService {
       let latitude = 0;
       let longitude = 0;
       
-      if (org.coord && org.coord.coordinates && org.coord.coordinates.length === 2) {
-        // Backend stores as [latitude, longitude] (NON-STANDARD order)
-        // Extract them in the correct order for this backend
-        latitude = org.coord.coordinates[0];  // First element is latitude
-        longitude = org.coord.coordinates[1]; // Second element is longitude
-        
-        // Validate coordinate ranges
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-          console.warn(`Invalid coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
-          latitude = 0;
-          longitude = 0;
+      // Priority 1: Direct latitude/longitude fields from backend (if they exist)
+      if (org.latitude !== undefined && org.longitude !== undefined) {
+        // Check if coordinates are swapped (common issue with Australian data)
+        // If latitude > 90, it's likely longitude, and if longitude < 90, it's likely latitude
+        if (Math.abs(org.latitude) > 90 && Math.abs(org.longitude) <= 90) {
+          // Coordinates are swapped, fix them
+          latitude = org.longitude;  // Backend's "longitude" field actually contains latitude
+          longitude = org.latitude;  // Backend's "latitude" field actually contains longitude
+          console.log(`[COORDS] Fixed swapped coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
+        } else {
+          // Coordinates are correct
+          latitude = org.latitude;
+          longitude = org.longitude;
         }
+      }
+      // Priority 2: Fallback to coord.coordinates array (GeoJSON format: [longitude, latitude])
+      else if (org.coord && org.coord.coordinates && org.coord.coordinates.length === 2) {
+        longitude = org.coord.coordinates[0]; // First element is longitude in GeoJSON
+        latitude = org.coord.coordinates[1];  // Second element is latitude in GeoJSON
+        console.log(`[COORDS] Using GeoJSON coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
+      }
+      // Priority 3: Check for misspelled field (lontitude) as last resort
+      else if (org.latitude !== undefined && org.lontitude !== undefined) {
+        // Handle the misspelled field from backend
+        if (Math.abs(org.latitude) > 90 && Math.abs(org.lontitude) <= 90) {
+          // Coordinates are swapped, fix them
+          latitude = org.lontitude;  // Backend's "lontitude" field actually contains latitude
+          longitude = org.latitude;  // Backend's "latitude" field actually contains longitude
+          console.log(`[COORDS] Fixed swapped coordinates (misspelled field) for ${org.name}: lat=${latitude}, lon=${longitude}`);
+        } else {
+          // Coordinates are correct
+          latitude = org.latitude;
+          longitude = org.lontitude;
+        }
+      }
+      else {
+        console.warn(`[COORDS] No valid coordinates found for ${org.name}`);
+      }
+      
+      // Validate coordinate ranges
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        console.warn(`[COORDS] Invalid coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
+        latitude = 0;
+        longitude = 0;
       }
       
       // Create unique ID based on organization ID, address, and index to prevent duplicates
@@ -667,12 +705,22 @@ export class HybridDataService {
           .filter(Boolean)
       )];
 
-      // Extract coordinates
+      // Extract coordinates from GeoJSON format: [longitude, latitude]
       let latitude = 0;
       let longitude = 0;
       if (org.coord && org.coord.coordinates && org.coord.coordinates.length === 2) {
-        latitude = org.coord.coordinates[0];
-        longitude = org.coord.coordinates[1];
+        longitude = org.coord.coordinates[0]; // First element is longitude in GeoJSON
+        latitude = org.coord.coordinates[1];  // Second element is latitude in GeoJSON
+        console.log(`[COORDS] Using GeoJSON coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
+      } else {
+        console.warn(`[COORDS] No valid coordinates found for ${org.name}`);
+      }
+      
+      // Validate coordinate ranges
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        console.warn(`[COORDS] Invalid coordinates for ${org.name}: lat=${latitude}, lon=${longitude}`);
+        latitude = 0;
+        longitude = 0;
       }
 
       // Generate mock data

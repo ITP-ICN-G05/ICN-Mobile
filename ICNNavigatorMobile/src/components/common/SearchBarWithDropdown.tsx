@@ -17,19 +17,23 @@ import { Company } from '../../types';
 interface SearchBarWithDropdownProps {
   value: string;
   onChangeText: (text: string) => void;
+  onSubmit?: (text: string) => void;
   onSelectCompany: (company: Company) => void;
   onFilter?: () => void;
   placeholder?: string;
   companies: Company[];
+  showDropdownOnSearch?: boolean; // NEW: Control when to show dropdown
 }
 
 export default function SearchBarWithDropdown({
   value,
   onChangeText,
+  onSubmit,
   onSelectCompany,
   onFilter,
   placeholder = "Search companies...",
   companies,
+  showDropdownOnSearch = false, // NEW: Default to false (don't show on typing)
 }: SearchBarWithDropdownProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([]);
@@ -39,10 +43,12 @@ export default function SearchBarWithDropdown({
   useEffect(() => {
     // Don't show dropdown if item was just selected (prevents reopening when MapScreen updates search text)
     if (justSelectedRef.current) {
+      console.log('[SearchBarWithDropdown] Skipping dropdown show - item just selected');
       return;
     }
 
-    if (value.length > 0) {
+    // Only show dropdown when showDropdownOnSearch is true (e.g., after search button click)
+    if (showDropdownOnSearch && value.length > 0) {
       // Filter companies based on search text
       const filtered = companies
         .filter(company =>
@@ -54,6 +60,7 @@ export default function SearchBarWithDropdown({
       setFilteredCompanies(filtered);
       
       if (filtered.length > 0) {
+        console.log('[SearchBarWithDropdown] Showing dropdown with', filtered.length, 'results');
         showDropdownAnimation();
       } else {
         hideDropdownAnimation();
@@ -61,7 +68,7 @@ export default function SearchBarWithDropdown({
     } else {
       hideDropdownAnimation();
     }
-  }, [value, companies]);
+  }, [value, companies, showDropdownOnSearch]);
 
   const showDropdownAnimation = () => {
     setShowDropdown(true);
@@ -81,6 +88,8 @@ export default function SearchBarWithDropdown({
   };
 
   const handleSelectCompany = (company: Company) => {
+    console.log('[SearchBarWithDropdown] Company selected:', company.name);
+    
     // Set flag to prevent dropdown from reopening when MapScreen updates the search text
     justSelectedRef.current = true;
     
@@ -90,15 +99,27 @@ export default function SearchBarWithDropdown({
     // Note: Don't call onChangeText here - MapScreen.handleCompanySelection 
     // will update the search text after the map zoom animation completes
     
-    // Clear the flag after a delay (must be longer than MapScreen's CAMERA_ANIM_MS + setTimeout)
+    // Clear the flag after a longer delay to ensure MapScreen completes all state updates
     setTimeout(() => {
       justSelectedRef.current = false;
-    }, 800); // 800ms should cover the 500ms animation + buffer
+      console.log('[SearchBarWithDropdown] Selection flag cleared');
+    }, 1000); // Increased to 1000ms to cover: 500ms camera + 150ms state updates + buffer
   };
 
   const handleClear = () => {
     onChangeText('');
     hideDropdownAnimation();
+  };
+
+  const handleSearchSubmit = () => {
+    if (onSubmit && value.trim()) {
+      onSubmit(value.trim());
+      Keyboard.dismiss();
+    }
+  };
+
+  const handleSearchIconPress = () => {
+    handleSearchSubmit();
   };
 
   const renderCompanyItem = ({ item }: { item: Company }) => (
@@ -148,22 +169,23 @@ export default function SearchBarWithDropdown({
             style={styles.input}
             value={value}
             onChangeText={onChangeText}
+            onSubmitEditing={handleSearchSubmit}
+            returnKeyType="search"
             placeholder={placeholder}
             placeholderTextColor={Colors.black50}
             onFocus={() => value.length > 0 && showDropdownAnimation()}
             numberOfLines={1} // Limit to single line
           />
           
-          {/* Right side search icon or clear button */}
-          {value.length > 0 ? (
-            <TouchableOpacity onPress={handleClear} style={styles.iconButton}>
+          {/* Right side icons: clear button (conditional) + search icon (always visible) */}
+          {value.length > 0 && (
+            <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
               <Ionicons name="close-circle" size={20} color="#EF8059" />
             </TouchableOpacity>
-          ) : (
-            <View style={styles.iconButton}>
-              <Ionicons name="search" size={20} color="#EF8059" />
-            </View>
           )}
+          <TouchableOpacity onPress={handleSearchIconPress} style={styles.searchButton}>
+            <Ionicons name="search" size={20} color="#EF8059" />
+          </TouchableOpacity>
         </View>
         {onFilter && (
           <TouchableOpacity style={styles.filterButton} onPress={onFilter}>
@@ -258,12 +280,18 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 0, // Remove default padding
   },
-  iconButton: {
-    width: 24, // Right side icon button area
+  clearButton: {
+    width: 24, // Clear button area
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
+    marginRight: 8, // Space between clear and search buttons
+  },
+  searchButton: {
+    width: 24, // Search button area
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterButton: {
     width: 48, // Match search bar height

@@ -6,14 +6,15 @@ export const API_CONFIG = {
   // Development Environment - Based on Backend API Guide
   DEV: {
     // For Android emulator, use 10.0.2.2 to access your computer's localhost
-    // For iOS simulator, use localhost
-    // If using physical device, replace with your computer's IP address (e.g., 'http://192.168.1.100:8082/api')
-    BASE_URL: 'http://192.168.5.74:8082/api',
-    TIMEOUT: 10000,
+    // For iOS simulator, use localhost 172.20.10.12
+    // For physical device via WiFi/Hotspot, use your computer's IP address
+    // For USB debugging, use 'http://localhost:8082/api' with 'adb reverse tcp:8082 tcp:8082'
+    BASE_URL: 'http://34.227.10.56:8080/api', // Mobile Hotspot - Laptop IP when connected to phone's hotspot
+    TIMEOUT: 30000, // Increased from 10s to 30s to prevent timeouts during large data loads
   },
-  // Production Environment
+  // Production Environment - AWS Backend
   PROD: {
-    BASE_URL: 'https://api.icnvictoria.com/api',
+    BASE_URL: 'http://34.227.10.56:8080/api', // AWS EC2 Backend - Tested and verified working
     TIMEOUT: 15000,
   }
 };
@@ -36,7 +37,7 @@ export const getApiBaseUrl = (): string => {
 
 /**
  * Get API timeout configuration
- * @returns Timeout in milliseconds (10000 for dev, 15000 for prod)
+ * @returns Timeout in milliseconds (30000 for dev, 15000 for prod)
  */
 export const getApiTimeout = (): number => {
   return getCurrentConfig().TIMEOUT;
@@ -136,15 +137,15 @@ export class BaseApiService {
         success: true
       };
     } else {
-      // Try to get detailed error message from X-Error header first
-      const xError = response.headers.get('X-Error');
+      // Read X-Error header first (backend's custom error)
+      const xError = response.headers.get('X-Error') || response.headers.get('x-error');
       let errorMessage = 'Request failed';
       
-      // Use X-Error header if available
+      // Priority 1: X-Error header
       if (xError) {
         errorMessage = xError;
       } else {
-        // Otherwise try to parse response body
+        // Priority 2: Response body
         try {
           if (isJson) {
             const errorData = await response.json();
@@ -156,13 +157,15 @@ export class BaseApiService {
             }
           }
         } catch (e) {
-          // If parsing fails, keep the default error message
           console.warn('Failed to parse error response:', e);
         }
       }
       
+      // Add status code for debugging
+      const detailedError = `${errorMessage} (HTTP ${response.status})`;
+      
       return {
-        error: errorMessage,
+        error: detailedError,
         status: response.status,
         success: false
       };
@@ -170,7 +173,7 @@ export class BaseApiService {
   }
 
   /**
-   * Execute HTTP request
+   * Execute HTTP request with timeout support
    */
   protected async request<T = any>(
     endpoint: string,
@@ -200,7 +203,8 @@ export class BaseApiService {
 
       console.log(`🌐 API ${method} ${url}`, body ? { body } : '');
 
-      const response = await fetch(url, requestOptions);
+      // Use fetchWithTimeout instead of regular fetch to prevent timeouts
+      const response = await fetchWithTimeout(url, requestOptions, this.config.TIMEOUT);
       const result = await this.handleResponse<T>(response);
 
       if (result.success) {
