@@ -9,12 +9,12 @@ export const API_CONFIG = {
     // For iOS simulator, use localhost 172.20.10.12
     // For physical device via WiFi/Hotspot, use your computer's IP address
     // For USB debugging, use 'http://localhost:8082/api' with 'adb reverse tcp:8082 tcp:8082'
-    BASE_URL: 'http://34.227.10.56:8080/api', // Mobile Hotspot - Laptop IP when connected to phone's hotspot
+    BASE_URL: 'http://54.242.81.107:8080/api', // Mobile Hotspot - Laptop IP when connected to phone's hotspot
     TIMEOUT: 30000, // Increased from 10s to 30s to prevent timeouts during large data loads
   },
   // Production Environment - AWS Backend
   PROD: {
-    BASE_URL: 'http://34.227.10.56:8080/api', // AWS EC2 Backend - Tested and verified working
+    BASE_URL: 'http://54.242.81.107:8080/api', // AWS EC2 Backend - Tested and verified working
     TIMEOUT: 15000,
   }
 };
@@ -59,17 +59,28 @@ export const fetchWithTimeout = async (
 ): Promise<Response> => {
   const timeoutMs = timeout || getApiTimeout();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => {
+    console.error(`⏰ Request timeout after ${timeoutMs}ms for URL: ${url}`);
+    controller.abort();
+  }, timeoutMs);
 
   try {
+    console.log(`🚀 Initiating fetch request to: ${url}`);
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+    console.log(`✅ Fetch completed for: ${url}`);
     return response;
-  } catch (error) {
+  } catch (error: any) {
     clearTimeout(timeoutId);
+    console.error(`❌ Fetch failed for: ${url}`, {
+      error: error.message,
+      name: error.name,
+      cause: error.cause,
+      aborted: error.name === 'AbortError'
+    });
     throw error;
   }
 };
@@ -202,9 +213,22 @@ export class BaseApiService {
       }
 
       console.log(`🌐 API ${method} ${url}`, body ? { body } : '');
+      console.log(`🔧 Request options:`, {
+        method: requestOptions.method,
+        headers: requestOptions.headers,
+        timeout: this.config.TIMEOUT,
+        hasBody: !!requestOptions.body
+      });
 
       // Use fetchWithTimeout instead of regular fetch to prevent timeouts
+      console.log(`📡 Sending request to server...`);
       const response = await fetchWithTimeout(url, requestOptions, this.config.TIMEOUT);
+      console.log(`📨 Response received:`, {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
       const result = await this.handleResponse<T>(response);
 
       if (result.success) {
@@ -236,11 +260,17 @@ export class BaseApiService {
           if (Array.isArray(value)) {
             value.forEach(v => searchParams.append(key, String(v)));
           } else {
+            // Debug: Log parameter values before adding to URLSearchParams
+            if (key === 'email') {
+              console.log('🔍 Adding email to URLSearchParams:', JSON.stringify(value));
+              console.log('🔍 Email type:', typeof value);
+            }
             searchParams.append(key, String(value));
           }
         }
       });
       url += `?${searchParams.toString()}`;
+      console.log('🔍 Final URL:', url);
     }
     return this.request<T>(url, HttpMethod.GET);
   }

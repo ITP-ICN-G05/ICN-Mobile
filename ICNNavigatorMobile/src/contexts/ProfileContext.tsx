@@ -4,6 +4,20 @@ import { profileApi, ProfileData } from '../services/profileApi';
 import { userApiService } from '../services/userApiService';
 import { useUser } from './UserContext';
 
+/**
+ * ProfileContext
+ * 
+ * Responsibility: Manages extended profile fields and local storage
+ * - Handles bio, linkedIn, website, avatar, and other extended fields
+ * - Manages local storage for profile data
+ * - Does NOT handle backend sync for basic fields (name, email)
+ * 
+ * Backend Sync Responsibility:
+ * - Basic fields (name, email, phone, company, role) are synced by UserContext
+ * - This prevents duplicate API calls and ensures proper password handling
+ * - UserContext.updateUser() includes the required password field for backend requests
+ */
+
 interface UserProfile {
   id: string;
   displayName: string;
@@ -29,7 +43,7 @@ interface ProfileContextType {
   profile: UserProfile | null;
   settings: UserSettings;
   loading: boolean;
-  updateProfile: (data: Partial<UserProfile>, currentPassword?: string) => Promise<void>;
+  updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   updateSettings: (settings: Partial<UserSettings>) => Promise<void>;
   uploadAvatar: (uri: string) => Promise<void>;
   deleteAvatar: () => Promise<void>;
@@ -135,40 +149,15 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateProfile = async (data: Partial<UserProfile>, currentPassword?: string) => {
+  const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       const email = data.email || profile?.email || user?.email || '';
       
-      // 1. Prepare backend sync data (only name, email, password)
-      const backendData: any = {};
-      if (data.displayName !== undefined) backendData.name = data.displayName;
-      if (data.email !== undefined) backendData.email = data.email;
+      // ProfileContext is responsible for local storage only
+      // Backend sync for basic fields (name, email) is handled by UserContext
+      // This prevents duplicate API calls and ensures proper password handling
       
-      // Need user.id and password for backend verification
-      if (user?.id) backendData.id = user.id;
-      if (currentPassword) backendData.password = currentPassword;
-      
-      // 2. Sync to backend (if there are fields to sync and password is provided)
-      const hasBackendFields = data.displayName !== undefined || data.email !== undefined;
-      if (hasBackendFields && currentPassword) {
-        try {
-          const response = await userApiService.updateUser(backendData);
-          if (!response.success) {
-            console.warn('Backend sync failed, saving locally only:', response.error);
-            // Continue with local save, don't block user operation
-          } else {
-            console.log('Profile synced to backend successfully');
-          }
-        } catch (backendError) {
-          console.warn('Backend sync error, saving locally only:', backendError);
-          // Continue with local save, don't block user operation
-        }
-      } else if (hasBackendFields && !currentPassword) {
-        console.log('Backend sync skipped - password required for name/email updates');
-        // Continue with local save only
-      }
-      
-      // 3. Update local state (all fields)
+      // Update local state (all fields)
       const updateData: Partial<{
         displayName?: string;
         email: string;

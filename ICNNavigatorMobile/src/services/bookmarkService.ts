@@ -38,7 +38,7 @@ class BookmarkService {
 
   /**
    * Update user bookmarks via PUT /user endpoint
-   * Requires email and hashed password for authentication
+   * Uses userApiService.updateUser with stored hashed password
    */
   private async updateUserCards(cards: string[]): Promise<boolean> {
     try {
@@ -55,34 +55,29 @@ class BookmarkService {
         return false;
       }
 
-      // Prepare user data for PUT /user
+      // Ensure cards is an array (organization IDs added to List)
+      const safeCards = Array.isArray(cards) ? cards : [];
+      
+      // Use userApiService.updateUser with stored hashed password
       const userData = {
         id: currentUser.id,
         email: currentUser.email,
         name: currentUser.name,
-        password: hashedPassword,
-        cards: cards
+        password: hashedPassword, // Pass the stored hashed password
+        cards: safeCards
       };
 
-      const url = `${this.baseUrl}/user`;
-      console.log('[BookmarkService] PUT /user with cards:', cards.length);
+      console.log('[BookmarkService] Updating user with organization IDs:', safeCards.length, safeCards);
 
-      const response = await fetchWithTimeout(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
+      const response = await userApiService.updateUser(userData);
 
-      if (!response.ok) {
-        const errorHeader = response.headers.get('X-Error');
-        console.error('[BookmarkService] Update user failed:', response.status, errorHeader);
+      if (response.success) {
+        console.log('[BookmarkService] Update user success');
+        return true;
+      } else {
+        console.error('[BookmarkService] Update user failed:', response.error);
         return false;
       }
-
-      console.log('[BookmarkService] Update user success');
-      return true;
     } catch (error) {
       console.error('[BookmarkService] Update user error:', error);
       return false;
@@ -109,16 +104,12 @@ class BookmarkService {
 
       const currentCards = currentUser.cards || [];
       
-      // Check if already bookmarked
-      if (currentCards.includes(companyId)) {
-        console.log('[BookmarkService] Company already bookmarked');
-        return true;
-      }
-
-      // Add new bookmark
-      const updatedCards = [...currentCards, companyId];
+      // If already exists, keep original array; otherwise add
+      const updatedCards = currentCards.includes(companyId) 
+        ? currentCards 
+        : [...currentCards, companyId];
       
-      // Update via PUT /user
+      // Always call API to sync to backend
       const success = await this.updateUserCards(updatedCards);
       
       if (success) {

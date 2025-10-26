@@ -205,7 +205,9 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
 
   // Handle bookmark toggle - now uses BookmarkContext
   const handleBookmark = async () => {
-    await toggleBookmark(company.id);
+    // Use organizationId for bookmarking instead of the generated ID
+    const bookmarkId = company.organizationId || company.id;
+    await toggleBookmark(bookmarkId);
   };
 
   // Handle share

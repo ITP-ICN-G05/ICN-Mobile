@@ -311,7 +311,9 @@ export default function CompaniesScreen() {
 
   // Bookmarked companies section
   const bookmarkedCompanies = useMemo(() => {
-    return allCompanies.filter(company => bookmarkedIds.includes(company.id));
+    return allCompanies.filter(company => 
+      bookmarkedIds.includes(company.organizationId || company.id)
+    );
   }, [bookmarkedIds, allCompanies]);
 
   // Check if filters are active
@@ -397,9 +399,10 @@ export default function CompaniesScreen() {
   };
 
   // Toggle bookmark - now uses BookmarkContext
-  const handleToggleBookmark = async (id: string) => {
+  const handleToggleBookmark = async (company: Company) => {
     // Check bookmark limit for free tier
-    if (currentTier === 'free' && !isBookmarked(id) && bookmarkedIds.length >= 10) {
+    const bookmarkId = company.organizationId || company.id;
+    if (currentTier === 'free' && !isBookmarked(bookmarkId) && bookmarkedIds.length >= 10) {
       Alert.alert(
         'Bookmark Limit',
         'Free tier allows up to 10 bookmarks. Upgrade to save more companies.',
@@ -412,7 +415,7 @@ export default function CompaniesScreen() {
     }
     
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    await toggleBookmark(id);
+    await toggleBookmark(bookmarkId);
   };
 
   // Handle company press
@@ -783,10 +786,10 @@ export default function CompaniesScreen() {
         </Text>
         <TouchableOpacity 
           style={styles.gridBookmark}
-          onPress={() => handleToggleBookmark(item.id)}
+          onPress={() => handleToggleBookmark(item)}
         >
           <Ionicons 
-            name={isBookmarked(item.id) ? 'bookmark' : 'bookmark-outline'} 
+            name={isBookmarked(item.organizationId || item.id) ? 'bookmark' : 'bookmark-outline'} 
             size={16} 
             color={Colors.black50}
           />
@@ -837,8 +840,8 @@ export default function CompaniesScreen() {
             <CompanyCard
               company={item}
               onPress={() => handleCompanyPress(item)}
-              onBookmark={() => handleToggleBookmark(item.id)}
-              isBookmarked={isBookmarked(item.id)}
+              onBookmark={() => handleToggleBookmark(item)}
+              isBookmarked={isBookmarked(item.organizationId || item.id)}
             />
           ) : 
           renderGridItem

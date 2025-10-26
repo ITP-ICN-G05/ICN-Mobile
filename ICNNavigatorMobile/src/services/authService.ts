@@ -55,14 +55,13 @@ class AuthService {
   }
 
   /**
-   * User logout
+   * User logout - only clear auth tokens, keep user data for same-user re-login
    */
   static async signOut(): Promise<void> {
     try {
-      // Clear all authentication tokens
+      // Only clear authentication tokens, keep user data for same user
       await AsyncStorage.multiRemove([
         this.TOKEN_KEY,
-        this.USER_KEY,
         this.REFRESH_TOKEN_KEY,
       ]);
 
@@ -109,7 +108,9 @@ class AuthService {
       const token = await AsyncStorage.getItem(this.TOKEN_KEY);
       if (token) {
         // Use unified API configuration
-        const { API_BASE_URL } = await import('../constants');
+        const { getApiBaseUrl } = await import('./apiConfig');
+        const API_BASE_URL = getApiBaseUrl();
+        
         await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
@@ -130,7 +131,9 @@ class AuthService {
     const hashedPassword = await PasswordHasher.hash(password);
     
     // Use unified API configuration
-    const { API_BASE_URL } = await import('../constants');
+    const { getApiBaseUrl } = await import('./apiConfig');
+    const API_BASE_URL = getApiBaseUrl();
+    
     const response = await fetch(`${API_BASE_URL}/account/delete`, {
       method: 'DELETE',
       headers: {

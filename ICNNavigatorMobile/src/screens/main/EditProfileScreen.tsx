@@ -31,7 +31,6 @@ import { Colors, Spacing } from '../../constants/colors';
 import { useProfile } from '../../contexts/ProfileContext';
 import { useUser } from '../../contexts/UserContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import PasswordConfirmDialog from '../../components/common/PasswordConfirmDialog';
 
 interface ProfileFormData {
   displayName: string;
@@ -53,7 +52,6 @@ export default function EditProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState<ProfileFormData>({
@@ -257,24 +255,15 @@ export default function EditProfileScreen() {
       return;
     }
 
-    // 3. Check if name or email changed (needs backend sync)
-    const nameChanged = formData.displayName !== (profile?.displayName || user?.name || '');
-    const emailChanged = formData.email !== (profile?.email || user?.email || '');
-    
-    if (nameChanged || emailChanged) {
-      // Show password dialog for backend sync
-      setShowPasswordDialog(true);
-    } else {
-      // No backend sync needed, save directly
-      await saveProfileChanges();
-    }
+    // 3. Save directly, no password input required
+    await saveProfileChanges();
   }, [formData, validateForm, user, userLoading, profile, navigation]);
 
-  const saveProfileChanges = async (password?: string) => {
+  const saveProfileChanges = async () => {
     setSaving(true);
 
     try {
-      // Update profile with optional password
+      // Update profile without password
       await updateProfile({
         displayName: formData.displayName,
         email: formData.email,
@@ -285,7 +274,7 @@ export default function EditProfileScreen() {
         linkedIn: formData.linkedIn,
         website: formData.website,
         avatar: formData.avatar,
-      }, password);
+      });
 
       // Also update user context
       if (user) {
@@ -296,7 +285,7 @@ export default function EditProfileScreen() {
           phone: formData.phone,
           company: formData.company,
           role: formData.role,
-        }, password);
+        });
       }
       
       // SUCCESS: Go back immediately
@@ -313,14 +302,6 @@ export default function EditProfileScreen() {
     }
   };
 
-  const handlePasswordConfirm = async (password: string) => {
-    await saveProfileChanges(password);
-    setShowPasswordDialog(false);
-  };
-
-  const handlePasswordCancel = () => {
-    setShowPasswordDialog(false);
-  };
 
   // Effect 2: Set header (after handleSave is defined)
   useLayoutEffect(() => {
@@ -513,14 +494,6 @@ export default function EditProfileScreen() {
       </KeyboardAvoidingView>
       )}
 
-      {/* Password Confirmation Dialog */}
-      <PasswordConfirmDialog
-        visible={showPasswordDialog}
-        onConfirm={handlePasswordConfirm}
-        onCancel={handlePasswordCancel}
-        title="Confirm Password"
-        message="Your name or email has changed. Please enter your password to sync these changes to the server."
-      />
     </SafeAreaView>
   );
 }

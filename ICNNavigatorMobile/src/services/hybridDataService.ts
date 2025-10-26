@@ -433,7 +433,7 @@ export class HybridDataService {
       // Create unique ID based on organization ID, address, and index to prevent duplicates
       const addressKey = `${org.street || ''}_${org.city || ''}_${org.state || ''}`.toLowerCase().replace(/\s+/g, '_');
       const addressHash = this.hashString(addressKey);
-      const uniqueId = `${org._id || 'unknown'}_${addressHash}_${index}`;
+      const uniqueId = `${org.id || org._id || 'unknown'}_${addressHash}_${index}`;
       
       // ✅ Convert items to icnCapabilities
       const icnCapabilities = this.convertBackendItemsToCapabilities(org.items);
@@ -449,7 +449,7 @@ export class HybridDataService {
       )];
       
       // ✅ Generate mock data for missing fields
-      const mockData = this.generateMockCompanyData(org._id || uniqueId);
+      const mockData = this.generateMockCompanyData(org.id || org._id || uniqueId);
       
       return {
         id: uniqueId,
@@ -484,7 +484,7 @@ export class HybridDataService {
         dataSource: 'ICN' as const,
         lastUpdated: new Date().toISOString(),
         // Store original organization ID for potential grouping in detail screens
-        organizationId: org._id || 'unknown'
+        organizationId: org.id || org._id || 'unknown'
       } as Company;
     });
   }
@@ -724,10 +724,10 @@ export class HybridDataService {
       }
 
       // Generate mock data
-      const mockData = this.generateMockCompanyData(org._id);
+      const mockData = this.generateMockCompanyData(org.id || org._id || 'unknown');
 
       return {
-        id: org._id,
+        id: org.id || org._id,
         name: org.name || 'Unknown Company',
         address: [org.street, org.city, org.state, org.zip].filter(Boolean).join(', ') || 'Address Not Available',
         billingAddress: {
@@ -758,7 +758,7 @@ export class HybridDataService {
         
         dataSource: 'ICN' as const,
         lastUpdated: new Date().toISOString(),
-        organizationId: org._id
+        organizationId: org.id || org._id
       } as Company;
     } catch (error) {
       console.error('Error fetching company details:', error);
@@ -771,7 +771,7 @@ export class HybridDataService {
    */
   private convertApiDetailToCompany(org: any): Company {
     return {
-      id: org._id,
+      id: org.id || org._id,
       name: org.itemName || org.detailedItemName || 'Unknown Company',
       address: '',
       latitude: 0,

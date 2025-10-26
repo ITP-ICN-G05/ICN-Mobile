@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useUser } from '../../contexts/UserContext';
+import { debugEmail } from '../../utils/emailNormalizer';
 
 interface SignInFormProps {
   onForgotPassword: () => void;
@@ -20,6 +21,11 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
   const handleSignIn = async () => {
     if (submitting) return;
     
+    // Debug email and password values
+    console.log('🔍 SignInForm - Email state:', email);
+    console.log('🔍 SignInForm - Password state length:', password.length);
+    debugEmail(email, 'SignInForm Email');
+    
     // Add basic validation
     if (!email || !password) {
       Alert.alert('Error', 'Please enter email and password');
@@ -33,9 +39,12 @@ export default function SignInForm({ onForgotPassword }: SignInFormProps) {
 
     setSubmitting(true);
     try {
+      console.log('🚀 SignInForm - Starting login process');
       await login(email, password); 
+      console.log('✅ SignInForm - Login successful');
       // UserContext will handle navigation automatically
     } catch (e: any) {
+      console.error('❌ SignInForm - Login failed:', e.message);
       Alert.alert('Login Failed', e.message || 'Invalid credentials. Please check your email and password.');
     } finally {
       setSubmitting(false);

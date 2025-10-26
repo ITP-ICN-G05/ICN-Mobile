@@ -1,7 +1,8 @@
 // services/userApiService.ts - User service based on backend API guide
-import BaseApiService, { ApiResponse } from './apiConfig';
+import BaseApiService, { ApiResponse, HttpMethod, API_CONFIG } from './apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PasswordHasher } from '../utils/passwordHasher';
+import { normalizeEmail, debugEmail } from '../utils/emailNormalizer';
 
 // User-related interface definitions - based on backend API guide
 export interface User {
@@ -11,6 +12,7 @@ export interface User {
   name: string;
   password?: string;
   cards: string[];
+  organisationIds?: string[]; // Backend field for bookmarks
 }
 
 export interface UserFull {
@@ -43,7 +45,8 @@ export interface InitialUser {
 
 export interface OrganisationCard {
   // Organization card data structure (adjust based on actual backend response)
-  _id: string;
+  id: string;  // Primary field from backend API
+  _id?: string;  // Optional MongoDB-style field for backward compatibility
   itemName: string;
   sectorName: string;
   // ... other fields
@@ -68,20 +71,53 @@ export class UserApiService extends BaseApiService {
    * @returns Promise<ApiResponse<UserFull>>
    */
   async login(email: string, password: string): Promise<ApiResponse<UserFull>> {
+    // Debug email normalization
+    debugEmail(email, 'Login Email');
+    
+    // Normalize email using unified function
+    const normalizedEmail = normalizeEmail(email);
+    
     // Hash the password before sending to backend
     const hashedPassword = await PasswordHasher.hash(password);
     
-    // Use GET with query parameters to match backend implementation
-    const response = await this.get<UserFull>('/user', { 
-      email, 
-      password: hashedPassword 
+    // Ensure password hash is lowercase for backend compatibility
+    const normalizedPassword = hashedPassword.toLowerCase();
+    
+    console.log('🔐 Password hash (first 10 chars):', normalizedPassword.substring(0, 10) + '...');
+    
+    // Use URLSearchParams for proper URL encoding
+    const params = new URLSearchParams({
+      email: normalizedEmail,
+      password: normalizedPassword
     });
+    const endpoint = `/user?${params.toString()}`;
+    
+    console.log('🌐 Final login URL:', `${API_CONFIG[__DEV__ ? 'DEV' : 'PROD'].BASE_URL}${endpoint}`);
+    
+    // Use direct request instead of get method to avoid URLSearchParams issues
+    const response = await this.request<UserFull>(endpoint, HttpMethod.GET);
     
     // If login successful, save user information and hashed password
     if (response.success && response.data) {
       await this.saveUserData(response.data);
-      // Store hashed password for bookmark functionality
-      await this.saveHashedPassword(hashedPassword);
+      // Store normalized password hash for bookmark functionality
+      await this.saveHashedPassword(normalizedPassword);
+    } else if (response.status === 500) {
+      // Backend login endpoint has issues, try to use local data if available
+      console.log('⚠️ Backend login failed with 500, checking local data...');
+      const localUserData = await this.getLocalUserData();
+      const storedPassword = await this.getStoredHashedPassword();
+      
+      if (localUserData && storedPassword === normalizedPassword) {
+        console.log('✅ Using local user data for login');
+        return {
+          data: localUserData,
+          success: true,
+          status: 200
+        };
+      } else {
+        console.log('❌ No valid local data found');
+      }
     }
     
     return response;
@@ -102,16 +138,38 @@ export class UserApiService extends BaseApiService {
       name: userData.name
     };
     
-    // Hash password if provided
+    // Handle password - check if it's already hashed or needs hashing
     if (userData.password) {
-      backendData.password = await PasswordHasher.hash(userData.password);
+      // Check if password is already a 64-character hex string (hashed)
+      if (PasswordHasher.validateHashedPassword(userData.password)) {
+        // Password is already hashed, normalize to lowercase
+        backendData.password = userData.password.toLowerCase();
+      } else {
+        // Password is plain text, hash it and normalize to lowercase
+        const hashedPassword = await PasswordHasher.hash(userData.password);
+        backendData.password = hashedPassword.toLowerCase();
+      }
     }
     
-    // Remove undefined values
+    // Send organisationIds field (organization IDs added to List)
+    // Backend User class accepts 'organisationIds' field
+    if (userData.cards !== undefined) {
+      backendData.organisationIds = userData.cards;
+      console.log('[userApiService] Sending organization IDs as organisationIds:', userData.cards.length, userData.cards);
+    }
+    
+    // Also handle direct organisationIds field if provided
+    if (userData.organisationIds !== undefined) {
+      backendData.organisationIds = userData.organisationIds;
+      console.log('[userApiService] Sending organisationIds directly:', userData.organisationIds.length, userData.organisationIds);
+    }
+    
+    // Only delete undefined values, preserve empty arrays and other falsy values
     Object.keys(backendData).forEach(key => 
       backendData[key] === undefined && delete backendData[key]
     );
     
+    console.log('[userApiService] PUT /user payload:', JSON.stringify(backendData));
     return this.put<void>('/user', backendData);
   }
 
@@ -123,7 +181,13 @@ export class UserApiService extends BaseApiService {
    * @returns Promise<ApiResponse<void>>
    */
   async sendValidationCode(email: string): Promise<ApiResponse<void>> {
-    return this.get<void>('/user/getCode', { email });
+    // Debug email normalization
+    debugEmail(email, 'Validation Code Email');
+    
+    // Normalize email using unified function
+    const normalizedEmail = normalizeEmail(email);
+    
+    return this.get<void>('/user/getCode', { email: normalizedEmail });
   }
 
   /**
@@ -134,14 +198,23 @@ export class UserApiService extends BaseApiService {
    * @returns Promise<ApiResponse<void>>
    */
   async createUser(userData: InitialUser): Promise<ApiResponse<void>> {
+    // Debug email normalization
+    debugEmail(userData.email, 'Register Email');
+    
+    // Normalize email using unified function
+    const normalizedEmail = normalizeEmail(userData.email);
+    
     // Hash the password before sending to backend
     const hashedPassword = await PasswordHasher.hash(userData.password);
     
+    // Ensure password hash is lowercase for backend compatibility
+    const normalizedPassword = hashedPassword.toLowerCase();
+    
     // Build clean request body - omit phone if empty
     const requestBody: any = {
-      email: userData.email.trim(),
+      email: normalizedEmail,
       name: userData.name.trim(),
-      password: hashedPassword,
+      password: normalizedPassword,
       code: userData.code.trim(),
     };
     
@@ -152,9 +225,9 @@ export class UserApiService extends BaseApiService {
     
     const response = await this.post<void>('/user/create', requestBody);
     
-    // If registration successful, store hashed password for bookmark functionality
+    // If registration successful, store normalized password hash for bookmark functionality
     if (response.success) {
-      await this.saveHashedPassword(hashedPassword);
+      await this.saveHashedPassword(normalizedPassword);
     }
     
     return response;
@@ -170,11 +243,20 @@ export class UserApiService extends BaseApiService {
    * @returns Promise<ApiResponse<void>>
    */
   async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<void>> {
+    // Debug email normalization
+    debugEmail(email, 'Reset Password Email');
+    
+    // Normalize email using unified function
+    const normalizedEmail = normalizeEmail(email);
+    
     // Hash the new password before sending to backend
     const hashedPassword = await PasswordHasher.hash(newPassword);
     
+    // Ensure password hash is lowercase for backend compatibility
+    const normalizedPassword = hashedPassword.toLowerCase();
+    
     // Send parameters in POST body for security instead of URL
-    const endpoint = `/user/resetPassword?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&newPassword=${encodeURIComponent(hashedPassword)}`;
+    const endpoint = `/user/resetPassword?email=${encodeURIComponent(normalizedEmail)}&code=${encodeURIComponent(code)}&newPassword=${encodeURIComponent(normalizedPassword)}`;
     return this.post<void>(endpoint);
   }
 
@@ -194,8 +276,34 @@ export class UserApiService extends BaseApiService {
    */
   private async saveUserData(userData: UserFull): Promise<void> {
     try {
-      await AsyncStorage.setItem('@user_data', JSON.stringify(userData));
+      // Preserve existing local bookmarks when saving new user data
+      const existingUserData = await AsyncStorage.getItem('@user_data');
+      let existingCards: string[] = [];
+      
+      if (existingUserData) {
+        const parsed = JSON.parse(existingUserData);
+        existingCards = parsed.cards || [];
+      }
+      
+      // Extract bookmark IDs from organisationCards if available
+      let backendCards: string[] = [];
+      if (userData.organisationCards && Array.isArray(userData.organisationCards)) {
+        backendCards = userData.organisationCards.map(card => card.id || card._id);
+      }
+      
+      // Merge local and backend bookmarks (union)
+      const mergedCards = Array.from(new Set([...existingCards, ...backendCards]));
+      
+      // Create user data with merged bookmarks
+      const userDataWithCards = {
+        ...userData,
+        cards: mergedCards
+      };
+      
+      await AsyncStorage.setItem('@user_data', JSON.stringify(userDataWithCards));
       console.log('✅ User data saved to local storage');
+      console.log(`📚 Merged bookmarks: local=${existingCards.length}, backend=${backendCards.length}, final=${mergedCards.length}`);
+      console.log('🔄 User data save operation completed - ready for bookmark sync');
     } catch (error) {
       console.error('❌ Failed to save user data:', error);
     }
@@ -260,10 +368,16 @@ export class UserApiService extends BaseApiService {
   }
 
   /**
-   * User logout
+   * User logout - only clear auth tokens, keep user data for same-user re-login
    */
   async logout(): Promise<void> {
-    await this.clearLocalUserData();
+    try {
+      // Only clear authentication tokens, keep user data and password hash for same user
+      await AsyncStorage.multiRemove(['@auth_token', '@refresh_token']);
+      console.log('✅ Authentication tokens cleared, user data preserved for re-login');
+    } catch (error) {
+      console.error('❌ Failed to clear auth tokens:', error);
+    }
   }
 }
 
