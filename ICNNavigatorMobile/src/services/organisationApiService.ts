@@ -126,8 +126,8 @@ export class OrganisationApiService extends BaseApiService {
       queryParams.skip = params.skip;
     }
     if (params.limit !== undefined) {
-      // Cap limit at 5000 for worldwide search
-      queryParams.limit = Math.min(params.limit, 5000);
+      // Cap limit at 3000 for worldwide search
+      queryParams.limit = Math.min(params.limit, 3000);
     }
 
     return this.get<OrganisationCard[]>('/organisation/general', queryParams);
@@ -273,18 +273,50 @@ export class OrganisationApiService extends BaseApiService {
 
   /**
    * Get all organisations (for initial data load)
-   * Uses global coverage as default search area
+   * Uses progressive loading strategy to avoid timeouts
    */
-  async getAllOrganisations(limit: number = 1000): Promise<OrganisationCard[]> {
+  async getAllOrganisations(limit: number = 3000): Promise<OrganisationCard[]> {
     // Use worldwide region for initial load to get all companies
     const box = clampQueryBox(DEFAULT_QUERY_BOX);
 
-    return await this.searchOrganisationsWithErrorHandling(
-      box.locationY, box.locationX, box.locationY + box.lenY, box.locationX + box.lenX,
-      {},         // No filters
-      '',         // No search text
-      { skip: 0, limit: Math.min(limit, 5000) }  // Cap at 5000
-    );
+    // Progressive loading strategy: start with smaller batches
+    const batchSize = Math.min(limit, 3000); // Start with 3000 records
+    const maxRetries = 3;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Attempt ${attempt + 1}: Loading ${batchSize} organisations...`);
+        
+        const result = await this.searchOrganisationsWithErrorHandling(
+          box.locationY, box.locationX, box.locationY + box.lenY, box.locationX + box.lenX,
+          {},         // No filters
+          '',         // No search text
+          { skip: 0, limit: batchSize }
+        );
+        
+        console.log(`✅ Successfully loaded ${result.length} organisations`);
+        return result;
+        
+      } catch (error: any) {
+        console.warn(`⚠️ Attempt ${attempt + 1} failed:`, error.message);
+        
+        if (attempt === maxRetries - 1) {
+          // Last attempt failed, try with even smaller batch
+          console.log(`🔄 Final attempt: Trying with smaller batch (1000 records)...`);
+          return await this.searchOrganisationsWithErrorHandling(
+            box.locationY, box.locationX, box.locationY + box.lenY, box.locationX + box.lenX,
+            {},         // No filters
+            '',         // No search text
+            { skip: 0, limit: 1000 }
+          );
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    return [];
   }
 
   /**

@@ -14,7 +14,7 @@ export const API_CONFIG = {
   },
   // Production Environment - AWS Backend
   PROD: {
-    BASE_URL: 'http://54.242.81.107:8080/api', // AWS EC2 Backend - Tested and verified working
+    BASE_URL: 'http://54.242.81.107:8080/api', // AWS EC2 Backend - Using HTTP until HTTPS is configured
     TIMEOUT: 15000,
   }
 };
@@ -61,17 +61,28 @@ export const fetchWithTimeout = async (
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     console.error(`⏰ Request timeout after ${timeoutMs}ms for URL: ${url}`);
+    console.error(`💡 This might be due to large data size. Consider reducing the limit parameter.`);
     controller.abort();
   }, timeoutMs);
 
   try {
     console.log(`🚀 Initiating fetch request to: ${url}`);
+    console.log(`🔧 Request options:`, {
+      method: options.method || 'GET',
+      headers: options.headers,
+      body: options.body ? 'Present' : 'None'
+    });
+    
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-    console.log(`✅ Fetch completed for: ${url}`);
+    console.log(`✅ Fetch completed for: ${url}`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
     return response;
   } catch (error: any) {
     clearTimeout(timeoutId);
