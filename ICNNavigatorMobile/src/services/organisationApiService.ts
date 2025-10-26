@@ -80,10 +80,10 @@ export interface OrganisationCard {
 }
 
 export interface OrganisationSearchParams {
-  locationX?: number;  // Optional, will use global default if invalid
-  locationY?: number;  // Optional, will use global default if invalid
-  lenX?: number;       // Optional, will use global default if invalid
-  lenY?: number;       // Optional, will use global default if invalid
+  startLatitude?: number;  // Optional, will use global default if invalid
+  startLongitude?: number;  // Optional, will use global default if invalid
+  endLatitude?: number;       // Optional, will use global default if invalid
+  endLongitude?: number;       // Optional, will use global default if invalid
   filterParameters: Record<string, any>;
   searchString?: string;
   skip?: number;
@@ -105,25 +105,17 @@ export class OrganisationApiService extends BaseApiService {
    */
   async searchOrganisations(params: OrganisationSearchParams): Promise<ApiResponse<OrganisationCard[]>> {
     // Require coordinates - no world defaults
-    if (params.locationX === undefined || params.locationY === undefined ||
-        params.lenX === undefined || params.lenY === undefined) {
-      throw new Error('Geographic query parameters (locationX/Y, lenX/Y) are required');
+    if (params.startLatitude === undefined || params.startLongitude === undefined ||
+        params.endLatitude === undefined || params.endLongitude === undefined) {
+      throw new Error('Geographic query parameters (startLatitude/startLongitude/endLatitude/endLongitude) are required');
     }
 
-    // Apply range clamping to prevent 500 errors
-    const clamped = clampQueryBox({
-      locationX: params.locationX,
-      locationY: params.locationY,
-      lenX: params.lenX,
-      lenY: params.lenY
-    });
-    
-    // Build query parameters with clamped values
+    // Build query parameters with new parameter names
     const queryParams: Record<string, any> = {
-      locationX: clamped.locationX,
-      locationY: clamped.locationY,
-      lenX: clamped.lenX,
-      lenY: clamped.lenY,
+      startLatitude: params.startLatitude,
+      startLongitude: params.startLongitude,
+      endLatitude: params.endLatitude,
+      endLongitude: params.endLongitude,
       filterParameters: JSON.stringify(params.filterParameters),
     };
 
@@ -180,38 +172,36 @@ export class OrganisationApiService extends BaseApiService {
   /**
    * Search organisations with error handling
    * 
-   * @param locationX Location X coordinate
-   * @param locationY Location Y coordinate
-   * @param lenX Search range X length
-   * @param lenY Search range Y length
+   * @param startLatitude Start latitude coordinate
+   * @param startLongitude Start longitude coordinate
+   * @param endLatitude End latitude coordinate
+   * @param endLongitude End longitude coordinate
    * @param filters Filter conditions
    * @param searchText Search text
    * @param pagination Pagination parameters
    * @returns Promise<OrganisationCard[]>
    */
   async searchOrganisationsWithErrorHandling(
-    locationX?: number,
-    locationY?: number,
-    lenX?: number,
-    lenY?: number,
+    startLatitude?: number,
+    startLongitude?: number,
+    endLatitude?: number,
+    endLongitude?: number,
     filters: Record<string, any> = {},
     searchText: string = '',
     pagination: { skip?: number; limit?: number } = {}
   ): Promise<OrganisationCard[]> {
     try {
       // Provide safe default (worldwide region)
-      const safeBox = clampQueryBox({
-        locationX: locationX ?? DEFAULT_QUERY_BOX.locationX,
-        locationY: locationY ?? DEFAULT_QUERY_BOX.locationY,
-        lenX: lenX ?? DEFAULT_QUERY_BOX.lenX,
-        lenY: lenY ?? DEFAULT_QUERY_BOX.lenY
-      });
+      const safeStartLatitude = startLatitude ?? DEFAULT_QUERY_BOX.locationY;
+      const safeStartLongitude = startLongitude ?? DEFAULT_QUERY_BOX.locationX;
+      const safeEndLatitude = endLatitude ?? (DEFAULT_QUERY_BOX.locationY + DEFAULT_QUERY_BOX.lenY);
+      const safeEndLongitude = endLongitude ?? (DEFAULT_QUERY_BOX.locationX + DEFAULT_QUERY_BOX.lenX);
 
       const response = await this.searchOrganisations({
-        locationX: safeBox.locationX,
-        locationY: safeBox.locationY,
-        lenX: safeBox.lenX,
-        lenY: safeBox.lenY,
+        startLatitude: safeStartLatitude,
+        startLongitude: safeStartLongitude,
+        endLatitude: safeEndLatitude,
+        endLongitude: safeEndLongitude,
         filterParameters: filters,
         searchString: searchText,
         ...pagination
@@ -290,7 +280,7 @@ export class OrganisationApiService extends BaseApiService {
     const box = clampQueryBox(DEFAULT_QUERY_BOX);
 
     return await this.searchOrganisationsWithErrorHandling(
-      box.locationX, box.locationY, box.lenX, box.lenY,
+      box.locationY, box.locationX, box.locationY + box.lenY, box.locationX + box.lenX,
       {},         // No filters
       '',         // No search text
       { skip: 0, limit: Math.min(limit, 5000) }  // Cap at 5000
@@ -315,21 +305,16 @@ export class OrganisationApiService extends BaseApiService {
     searchText: string = '',
     pagination: { skip?: number; limit?: number } = {}
   ): Promise<OrganisationCard[]> {
-    const rawBox = {
-      locationX: region.longitude - (region.longitudeDelta / 2),
-      locationY: region.latitude - (region.latitudeDelta / 2),
-      lenX: region.longitudeDelta,
-      lenY: region.latitudeDelta
-    };
-
-    // Force range limits to prevent 500 errors
-    const clamped = clampQueryBox(rawBox);
+    const startLatitude = region.latitude - (region.latitudeDelta / 2);
+    const startLongitude = region.longitude - (region.longitudeDelta / 2);
+    const endLatitude = region.latitude + (region.latitudeDelta / 2);
+    const endLongitude = region.longitude + (region.longitudeDelta / 2);
     
     return await this.searchOrganisationsWithErrorHandling(
-      clamped.locationX,
-      clamped.locationY,
-      clamped.lenX,
-      clamped.lenY,
+      startLatitude,
+      startLongitude,
+      endLatitude,
+      endLongitude,
       filters,
       searchText,
       pagination

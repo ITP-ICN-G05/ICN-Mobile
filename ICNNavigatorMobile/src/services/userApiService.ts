@@ -63,8 +63,8 @@ export interface UserPayment {
 export class UserApiService extends BaseApiService {
   
   /**
-   * User login - GET endpoint with query parameters
-   * GET /api/user?email={email}&password={hashedPassword}
+   * User login - POST endpoint with query parameters
+   * POST /api/user?email={email}&password={hashedPassword}
    * 
    * @param email User email
    * @param password User password (will be hashed before sending)
@@ -94,8 +94,8 @@ export class UserApiService extends BaseApiService {
     
     console.log('🌐 Final login URL:', `${API_CONFIG[__DEV__ ? 'DEV' : 'PROD'].BASE_URL}${endpoint}`);
     
-    // Use direct request instead of get method to avoid URLSearchParams issues
-    const response = await this.request<UserFull>(endpoint, HttpMethod.GET);
+    // Use POST request as per API documentation
+    const response = await this.request<UserFull>(endpoint, HttpMethod.POST);
     
     // If login successful, save user information and hashed password
     if (response.success && response.data) {
@@ -175,7 +175,7 @@ export class UserApiService extends BaseApiService {
 
   /**
    * Send email verification code
-   * GET /api/user/getCode?email={email}
+   * POST /api/user/getCode?email={email}
    * 
    * @param email User email
    * @returns Promise<ApiResponse<void>>
@@ -187,7 +187,13 @@ export class UserApiService extends BaseApiService {
     // Normalize email using unified function
     const normalizedEmail = normalizeEmail(email);
     
-    return this.get<void>('/user/getCode', { email: normalizedEmail });
+    // Use URLSearchParams for proper URL encoding
+    const params = new URLSearchParams({
+      email: normalizedEmail
+    });
+    const endpoint = `/user/getCode?${params.toString()}`;
+    
+    return this.post<void>(endpoint);
   }
 
   /**
@@ -288,7 +294,9 @@ export class UserApiService extends BaseApiService {
       // Extract bookmark IDs from organisationCards if available
       let backendCards: string[] = [];
       if (userData.organisationCards && Array.isArray(userData.organisationCards)) {
-        backendCards = userData.organisationCards.map(card => card.id || card._id);
+        backendCards = userData.organisationCards
+          .map(card => card.id || card._id)
+          .filter((id): id is string => id !== undefined && id !== null);
       }
       
       // Merge local and backend bookmarks (union)

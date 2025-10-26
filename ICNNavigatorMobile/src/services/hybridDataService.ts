@@ -325,7 +325,7 @@ export class HybridDataService {
     limit: number
   ): Promise<OrganisationCard[]> {
     return await organisationApiService.searchOrganisationsWithErrorHandling(
-      -200, -200, 400, 400, // Large search area to cover all of Australia
+      -200, -200, 200, 200, // Large search area to cover all of Australia (startLatitude, startLongitude, endLatitude, endLongitude)
       filters,
       searchText,
       { skip: 0, limit }
