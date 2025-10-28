@@ -47,7 +47,7 @@ interface ProfileContextType {
   updateSettings: (settings: Partial<UserSettings>) => Promise<void>;
   uploadAvatar: (uri: string) => Promise<void>;
   deleteAvatar: () => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changePassword: (newPassword: string, verificationCode?: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -243,8 +243,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const changePassword = async (currentPassword: string, newPassword: string) => {
-    await profileApi.changePassword({ currentPassword, newPassword });
+  const changePassword = async (newPassword: string, verificationCode?: string) => {
+    await profileApi.changePassword({ newPassword, verificationCode });
   };
 
   const refreshProfile = async () => {

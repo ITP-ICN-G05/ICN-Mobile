@@ -33,8 +33,8 @@ interface ProfileData {
 }
 
 interface PasswordChangeData {
-  currentPassword: string;
   newPassword: string;
+  verificationCode?: string;
 }
 
 class ProfileApiService {
@@ -222,12 +222,57 @@ class ProfileApiService {
 
   // Password Management
   async changePassword(data: PasswordChangeData): Promise<void> {
-    // Hash both current and new passwords before sending
-    const hashedData = {
-      currentPassword: await PasswordHasher.hash(data.currentPassword),
-      newPassword: await PasswordHasher.hash(data.newPassword)
+    // Get current user data from AsyncStorage
+    const cachedUserData = await AsyncStorage.getItem('@user_data');
+    if (!cachedUserData) {
+      throw new Error('No user data available. Please login again.');
+    }
+    
+    const userData = JSON.parse(cachedUserData);
+    
+    // Hash the new password
+    const hashedPassword = await PasswordHasher.hash(data.newPassword);
+    
+    // Prepare request body according to backend API specification
+    const requestBody: any = {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      password: hashedPassword.toLowerCase()
     };
-    return this.makeRequest('/api/user/password', 'PUT', hashedData);
+    
+    // Add verification code if provided
+    if (data.verificationCode) {
+      requestBody.code = data.verificationCode;
+    }
+    
+    // Call backend API directly without using makeRequest()
+    const API_BASE_URL = getApiBaseUrl();
+    console.log('🔐 Changing password for user:', userData.email);
+    console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
+    console.log('🌐 Full URL:', `${API_BASE_URL}/api/user`);
+    
+    const response = await fetchWithTimeout(`${API_BASE_URL}/api/user`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+    
+    console.log('📨 Password change response:', response.status);
+    
+    if (!response.ok) {
+      const errorHeader = response.headers.get('X-Error');
+      
+      if (response.status === 400) {
+        throw new Error(errorHeader || 'Invalid input. Please check your information.');
+      } else if (response.status === 409) {
+        throw new Error(errorHeader || 'Update failed. Please try again.');
+      } else {
+        throw new Error(errorHeader || `Request failed with status ${response.status}`);
+      }
+    }
   }
 
   async requestPasswordReset(email: string): Promise<void> {

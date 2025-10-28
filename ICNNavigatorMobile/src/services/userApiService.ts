@@ -241,7 +241,7 @@ export class UserApiService extends BaseApiService {
 
   /**
    * Reset password - secure POST endpoint
-   * POST /api/user/resetPassword
+   * PUT /api/user (same endpoint as change password)
    * 
    * @param email User email
    * @param code Verification code
@@ -249,9 +249,6 @@ export class UserApiService extends BaseApiService {
    * @returns Promise<ApiResponse<void>>
    */
   async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse<void>> {
-    // Debug email normalization
-    debugEmail(email, 'Reset Password Email');
-    
     // Normalize email using unified function
     const normalizedEmail = normalizeEmail(email);
     
@@ -261,9 +258,23 @@ export class UserApiService extends BaseApiService {
     // Ensure password hash is lowercase for backend compatibility
     const normalizedPassword = hashedPassword.toLowerCase();
     
-    // Send parameters in POST body for security instead of URL
-    const endpoint = `/user/resetPassword?email=${encodeURIComponent(normalizedEmail)}&code=${encodeURIComponent(code)}&newPassword=${encodeURIComponent(normalizedPassword)}`;
-    return this.post<void>(endpoint);
+    console.log('🔐 Resetting password for user:', normalizedEmail);
+    
+    // Prepare request body for PUT /user
+    const requestBody = {
+      email: normalizedEmail,
+      password: normalizedPassword,
+      code: code.trim().toUpperCase()
+    };
+    
+    console.log('📤 Reset password request body:', { email: normalizedEmail, code: code.trim().toUpperCase() });
+    
+    // Use PUT /user endpoint (same as change password)
+    const response = await this.put<void>('/user', requestBody);
+    
+    console.log('📨 Reset password response:', response.status);
+    
+    return response;
   }
 
   /**

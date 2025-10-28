@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,35 +17,70 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Colors } from '../../constants/colors';
 import { PasswordHasher } from '../../utils/passwordHasher';
+import { useProfile } from '../../contexts/ProfileContext';
+import { useUser } from '../../contexts/UserContext';
+import AuthService from '../../services/authService';
+import { userApiService } from '../../services/userApiService';
 
 interface PasswordFormData {
-  currentPassword: string;
+  verificationCode: string;
   newPassword: string;
   confirmPassword: string;
 }
 
 interface PasswordErrors {
-  currentPassword?: string;
+  verificationCode?: string;
   newPassword?: string;
   confirmPassword?: string;
 }
 
 export default function ChangePasswordScreen() {
   const navigation = useNavigation();
+  const { changePassword } = useProfile();
+  const { user } = useUser();
   const [loading, setLoading] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [sendingCode, setSendingCode] = useState(false);
   
   const [formData, setFormData] = useState<PasswordFormData>({
-    currentPassword: '',
+    verificationCode: '',
     newPassword: '',
     confirmPassword: '',
   });
 
   const [errors, setErrors] = useState<PasswordErrors>({});
 
-  // Password strength calculation
+  // Countdown timer effect
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  // Send verification code function
+  const handleSendCode = async () => {
+    if (!user?.email) {
+      Alert.alert('Error', 'No email address found. Please login again.');
+      return;
+    }
+
+    setSendingCode(true);
+    try {
+      await userApiService.sendValidationCode(user.email);
+      setCodeSent(true);
+      setCountdown(60); // 60 second countdown
+      Alert.alert('Success', 'Verification code sent to your email address.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send verification code. Please try again.');
+    } finally {
+      setSendingCode(false);
+    }
+  };
   const calculatePasswordStrength = (password: string): {
     score: number;
     label: string;
@@ -55,22 +90,21 @@ export default function ChangePasswordScreen() {
     
     if (!password) return { score: 0, label: '', color: Colors.black20 };
     
-    // Length check
-    if (password.length >= 8) score++;
+    // Length check (6-20 characters)
+    if (password.length >= 6) score++;
     if (password.length >= 12) score++;
     
     // Character variety checks
-    if (/[a-z]/.test(password)) score++;
-    if (/[A-Z]/.test(password)) score++;
+    if (/[a-zA-Z]/.test(password)) score++;
     if (/[0-9]/.test(password)) score++;
-    if (/[^A-Za-z0-9]/.test(password)) score++;
+    if (/^[a-zA-Z0-9_]*$/.test(password)) score++;
     
     // Determine strength label and color
     if (score <= 2) {
       return { score: 1, label: 'Weak', color: Colors.error };
-    } else if (score <= 4) {
+    } else if (score <= 3) {
       return { score: 2, label: 'Fair', color: Colors.warning };
-    } else if (score <= 5) {
+    } else if (score <= 4) {
       return { score: 3, label: 'Good', color: Colors.orange[200] };
     } else {
       return { score: 4, label: 'Strong', color: Colors.success };
@@ -82,33 +116,36 @@ export default function ChangePasswordScreen() {
   // Password requirements check
   const passwordRequirements = [
     { 
-      met: formData.newPassword.length >= 8, 
-      text: 'At least 8 characters' 
+      met: formData.newPassword.length >= 6 && formData.newPassword.length <= 20, 
+      text: '6-20 characters' 
     },
     { 
-      met: /[A-Z]/.test(formData.newPassword), 
-      text: 'One uppercase letter' 
-    },
-    { 
-      met: /[a-z]/.test(formData.newPassword), 
-      text: 'One lowercase letter' 
+      met: /[a-zA-Z]/.test(formData.newPassword), 
+      text: 'Contains letters' 
     },
     { 
       met: /[0-9]/.test(formData.newPassword), 
-      text: 'One number' 
+      text: 'Contains numbers (optional)' 
     },
     { 
-      met: /[^A-Za-z0-9]/.test(formData.newPassword), 
-      text: 'One special character' 
+      met: /^[a-zA-Z0-9_]*$/.test(formData.newPassword), 
+      text: 'Only letters, numbers, and underscores' 
     },
   ];
 
   const validateForm = (): boolean => {
     const newErrors: PasswordErrors = {};
 
-    // Current password validation
-    if (!formData.currentPassword) {
-      newErrors.currentPassword = 'Current password is required';
+    // Only validate verification code if it has been sent
+    if (codeSent) {
+      const trimmedCode = formData.verificationCode.trim().toUpperCase();
+      if (!trimmedCode) {
+        newErrors.verificationCode = 'Verification code is required';
+      } else if (trimmedCode.length !== 4) {
+        newErrors.verificationCode = 'Verification code must be 4 characters';
+      } else if (!/^[0-9A-Z]+$/.test(trimmedCode)) {
+        newErrors.verificationCode = 'Verification code must contain only numbers and letters';
+      }
     }
 
     // New password format validation (must match backend requirements)
@@ -116,8 +153,6 @@ export default function ChangePasswordScreen() {
       newErrors.newPassword = 'New password is required';
     } else if (!PasswordHasher.validatePassword(formData.newPassword)) {
       newErrors.newPassword = 'Password must be 6-20 characters long and contain only letters, numbers, and underscores (_)';
-    } else if (formData.newPassword === formData.currentPassword) {
-      newErrors.newPassword = 'New password must be different from current password';
     }
 
     // Confirm password validation
@@ -136,39 +171,38 @@ export default function ChangePasswordScreen() {
       return;
     }
 
+    if (!codeSent) {
+      Alert.alert('Error', 'Please send and enter the verification code first.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // TODO: Implement actual API call
-      // await api.changePassword({
-      //   currentPassword: formData.currentPassword,
-      //   newPassword: formData.newPassword,
-      // });
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Call the changePassword API with verification code
+      await changePassword(formData.newPassword, formData.verificationCode.trim().toUpperCase());
       
       Alert.alert(
         'Success',
-        'Your password has been changed successfully. Please log in with your new password.',
+        'Your password has been changed successfully. You will be signed out and redirected to login.',
         [
           {
             text: 'OK',
-            onPress: () => {
-              navigation.goBack();
-              // Here you might want to sign out the user
+            onPress: async () => {
+              // Sign out the user - UserContext will handle navigation automatically
+              await AuthService.signOut();
             }
           }
         ]
       );
     } catch (error: any) {
       // Handle specific error cases
-      if (error?.message?.includes('incorrect')) {
-        setErrors({ currentPassword: 'Current password is incorrect' });
+      if (error?.message?.includes('verification')) {
+        setErrors({ verificationCode: 'Invalid verification code' });
       } else {
         Alert.alert(
           'Error',
-          'Failed to change password. Please try again later.'
+          error?.message || 'Failed to change password. Please try again later.'
         );
       }
     } finally {
@@ -193,27 +227,36 @@ export default function ChangePasswordScreen() {
           ]}
           value={formData[key]}
           onChangeText={(text) => {
-            setFormData({ ...formData, [key]: text });
+            let processedText = text;
+            if (key === 'verificationCode') {
+              // Convert to uppercase and keep only alphanumeric, max 4 chars
+              processedText = text.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 4);
+            }
+            setFormData({ ...formData, [key]: processedText });
             if (errors[key]) {
               setErrors({ ...errors, [key]: undefined });
             }
           }}
           placeholder={placeholder}
           placeholderTextColor={Colors.black50}
-          secureTextEntry={!showPassword}
+          secureTextEntry={key !== 'verificationCode' && !showPassword}
           autoCapitalize="none"
           autoCorrect={false}
+          keyboardType={key === 'verificationCode' ? 'numeric' : 'default'}
+          maxLength={key === 'verificationCode' ? 4 : undefined}
         />
-        <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={toggleShowPassword}
-        >
-          <Ionicons
-            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-            size={22}
-            color="rgba(27, 62, 111, 0.6)"
-          />
-        </TouchableOpacity>
+        {key !== 'verificationCode' && (
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={toggleShowPassword}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={22}
+              color="rgba(27, 62, 111, 0.6)"
+            />
+          </TouchableOpacity>
+        )}
       </View>
       {errors[key] && (
         <Text style={styles.errorText}>{errors[key]}</Text>
@@ -242,19 +285,43 @@ export default function ChangePasswordScreen() {
           <View style={styles.securityNotice}>
             <Ionicons name="shield-checkmark-outline" size={24} color="#1B3E6F" />
             <Text style={styles.securityText}>
-              For your security, we'll sign you out after changing your password
+              For your security, email verification is required and you'll be signed out after changing your password
             </Text>
           </View>
 
           {/* Form Section */}
           <View style={styles.formSection}>
-            {/* Current Password */}
-            {renderPasswordInput(
-              'Current Password',
-              'currentPassword',
-              'Enter current password',
-              showCurrentPassword,
-              () => setShowCurrentPassword(!showCurrentPassword)
+            {/* Email Display with Send Code Button */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address</Text>
+              <View style={styles.emailContainer}>
+                <Text style={styles.emailText}>{user?.email || 'No email found'}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.sendCodeButton,
+                    (sendingCode || countdown > 0) && styles.sendCodeButtonDisabled
+                  ]}
+                  onPress={handleSendCode}
+                  disabled={sendingCode || countdown > 0}
+                >
+                  {sendingCode ? (
+                    <ActivityIndicator size="small" color={Colors.white} />
+                  ) : (
+                    <Text style={styles.sendCodeButtonText}>
+                      {countdown > 0 ? `Resend (${countdown}s)` : 'Send Code'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Verification Code */}
+            {codeSent && renderPasswordInput(
+              'Verification Code',
+              'verificationCode',
+              'Enter 4-digit code',
+              false,
+              () => {}
             )}
 
             {/* New Password */}
@@ -324,28 +391,6 @@ export default function ChangePasswordScreen() {
               ))}
             </View>
 
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotButton}
-              onPress={() => {
-                Alert.alert(
-                  'Forgot Password',
-                  'We\'ll send you a password reset link to your registered email address.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { 
-                      text: 'Send Link', 
-                      onPress: () => {
-                        // TODO: Implement forgot password flow
-                        Alert.alert('Email Sent', 'Check your email for the reset link.');
-                      }
-                    }
-                  ]
-                );
-              }}
-            >
-              <Text style={styles.forgotText}>Forgot your current password?</Text>
-            </TouchableOpacity>
 
             {/* Submit Button */}
             <TouchableOpacity
@@ -479,6 +524,37 @@ const styles = StyleSheet.create({
   eyeButton: {
     padding: 12,
   },
+  emailContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(27, 62, 111, 0.2)',
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  emailText: {
+    flex: 1,
+    fontSize: 15,
+    color: 'rgba(27, 62, 111, 0.9)',
+  },
+  sendCodeButton: {
+    backgroundColor: '#1B3E6F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginLeft: 12,
+  },
+  sendCodeButtonDisabled: {
+    opacity: 0.6,
+  },
+  sendCodeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.white,
+  },
   errorText: {
     fontSize: 12,
     color: Colors.error,
@@ -544,15 +620,6 @@ const styles = StyleSheet.create({
   requirementMet: {
     color: 'rgba(27, 62, 111, 0.85)', // Match ProfileScreen text color
     fontWeight: '500',
-  },
-  forgotButton: {
-    alignSelf: 'center',
-    marginBottom: 24,
-  },
-  forgotText: {
-    fontSize: 14,
-    color: '#1B3E6F', // Match ProfileScreen button color
-    textDecorationLine: 'underline',
   },
   submitButton: {
     flexDirection: 'row',

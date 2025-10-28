@@ -9,12 +9,14 @@ export const API_CONFIG = {
     // For iOS simulator, use localhost 172.20.10.12
     // For physical device via WiFi/Hotspot, use your computer's IP address
     // For USB debugging, use 'http://localhost:8082/api' with 'adb reverse tcp:8082 tcp:8082'
-    BASE_URL: 'http://54.242.81.107:8080/api', // Mobile Hotspot - Laptop IP when connected to phone's hotspot
+    BASE_URL: 'https://dustin-notour-uncomplementally.ngrok-free.dev/api', // HTTPS ngrok tunnel
+    //BASE_URL: 'http://98.83.91.193:8080/api', // Mobile Hotspot - Laptop IP when connected to phone's hotspot
     TIMEOUT: 30000, // Increased from 10s to 30s to prevent timeouts during large data loads
   },
   // Production Environment - AWS Backend
   PROD: {
-    BASE_URL: 'http://54.242.81.107:8080/api', // AWS EC2 Backend - Using HTTP until HTTPS is configured
+    BASE_URL: 'https://dustin-notour-uncomplementally.ngrok-free.dev/api', // HTTPS ngrok tunnel
+    //BASE_URL: 'http://98.83.91.193:8080/api', // AWS EC2 Backend - Using HTTP until HTTPS is configured
     TIMEOUT: 15000,
   }
 };
