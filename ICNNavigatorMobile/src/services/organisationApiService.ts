@@ -92,7 +92,7 @@ export interface OrganisationSearchParams {
 
 /**
  * Organisation API service class
- * Based on backend API guide (http://localhost:8082/api)
+ * API base URL is configured via EXPO_PUBLIC_API_BASE_URL environment variable
  */
 export class OrganisationApiService extends BaseApiService {
 

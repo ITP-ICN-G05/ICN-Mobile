@@ -349,10 +349,11 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   /**
    * Sync bookmarks with backend
-   * - Fetches backend bookmarks
-   * - Merges with local bookmarks (union)
-   * - Applies pending operations
+   * - Fetches latest bookmarks from backend API (true backend data)
+   * - Uses backend bookmarks as authoritative source
+   * - Applies pending operations to backend bookmarks
    * - Updates backend with final state
+   * - Updates local state to match final state
    * - PRESERVES local bookmarks if backend fails
    */
   const syncWithBackend = async () => {
@@ -376,58 +377,44 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
       console.log('[BookmarkContext] 📊 Local bookmarks before sync:', bookmarkedIds.length);
       console.log('[BookmarkContext] 🔒 Sync lock acquired, preventing concurrent operations');
 
-      // Fetch backend bookmarks
+      // Fetch latest bookmarks from backend API (true backend data)
       const backendBookmarks = await bookmarkService.fetchBookmarks(user.id);
-      console.log('[BookmarkContext] Backend bookmarks:', backendBookmarks.length);
+      console.log('[BookmarkContext] Backend bookmarks (from API):', backendBookmarks.length);
 
-      // If backend fetch failed (returns empty array), keep local bookmarks and retry later
-      if (backendBookmarks.length === 0 && bookmarkedIds.length > 0) {
-        console.log('[BookmarkContext] Backend returned no bookmarks, pushing local bookmarks to backend');
-        // Try to push local bookmarks to backend
-        const pushSuccess = await bookmarkService.syncBookmarks(user.id, bookmarkedIds);
-        if (pushSuccess) {
-          console.log('[BookmarkContext] Successfully pushed local bookmarks to backend');
-          // Clear pending operations since we synced
-          setPendingOperations([]);
-          await savePendingOperations([]);
-        } else {
-          console.warn('[BookmarkContext] Failed to push local bookmarks, will retry later');
-          setError('Backend sync failed, bookmarks saved locally');
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      // Merge local and backend bookmarks (union)
-      const mergedBookmarks = Array.from(new Set([...bookmarkedIds, ...backendBookmarks]));
-      console.log('[BookmarkContext] Merged bookmarks:', mergedBookmarks.length);
-
-      // Apply pending operations to merged set
-      let finalBookmarks = [...mergedBookmarks];
+      // Use backend bookmarks as the authoritative source (starting point)
+      // Apply pending operations to backend bookmarks to get final state
+      let finalBookmarks = [...backendBookmarks];
+      
+      // Apply pending operations: add operations add, remove operations remove
       for (const op of pendingOperations) {
-        if (op.type === 'add' && !finalBookmarks.includes(op.companyId)) {
-          finalBookmarks.push(op.companyId);
+        if (op.type === 'add') {
+          // Add bookmark if not already present
+          if (!finalBookmarks.includes(op.companyId)) {
+            finalBookmarks.push(op.companyId);
+          }
         } else if (op.type === 'remove') {
+          // Remove bookmark from final list
           finalBookmarks = finalBookmarks.filter(id => id !== op.companyId);
         }
       }
 
-      console.log('[BookmarkContext] Final bookmarks after pending ops:', finalBookmarks.length);
+      console.log('[BookmarkContext] Final bookmarks after applying pending ops:', finalBookmarks.length);
 
-      // Check if we need to update backend (if there are changes)
+      // Check if we need to update backend (if final state differs from backend state)
       const needsBackendUpdate = finalBookmarks.length !== backendBookmarks.length || 
-        !finalBookmarks.every(id => backendBookmarks.includes(id));
+        !finalBookmarks.every(id => backendBookmarks.includes(id)) ||
+        !backendBookmarks.every(id => finalBookmarks.includes(id));
       
       if (needsBackendUpdate) {
         console.log('[BookmarkContext] Changes detected, updating backend...');
         const syncSuccess = await bookmarkService.syncBookmarks(user.id, finalBookmarks);
         
         if (syncSuccess) {
-          // Update local state
+          // Update local state to match final state
           setBookmarkedIds(finalBookmarks);
           await saveBookmarks(finalBookmarks);
 
-          // Clear pending operations
+          // Clear pending operations since we synced successfully
           setPendingOperations([]);
           await savePendingOperations([]);
 
@@ -439,7 +426,7 @@ export const BookmarkProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
       } else {
         console.log('[BookmarkContext] No changes needed, local state updated to match backend');
-        // Update local state to match backend
+        // Update local state to match backend (even if no pending ops, to ensure consistency)
         setBookmarkedIds(finalBookmarks);
         await saveBookmarks(finalBookmarks);
         

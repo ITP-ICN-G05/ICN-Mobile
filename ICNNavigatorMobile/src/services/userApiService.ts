@@ -58,7 +58,8 @@ export interface UserPayment {
 
 /**
  * User API Service Class
- * Implementation based on backend API guide (http://localhost:8082/api)
+ * Implementation based on backend API guide
+ * API base URL is configured via EXPO_PUBLIC_API_BASE_URL environment variable
  */
 export class UserApiService extends BaseApiService {
   
@@ -169,7 +170,28 @@ export class UserApiService extends BaseApiService {
       backendData[key] === undefined && delete backendData[key]
     );
     
-    console.log('[userApiService] PUT /user payload:', JSON.stringify(backendData));
+    // Log detailed request body with field-by-field breakdown
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📝 [userApiService] Edit Profile Request Body:');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    Object.keys(backendData).forEach(key => {
+      if (key === 'password') {
+        // Mask password for security (show first 10 chars only)
+        const passwordValue = backendData[key];
+        const maskedPassword = passwordValue ? `${passwordValue.substring(0, 10)}... (${passwordValue.length} chars, hashed)` : 'undefined';
+        console.log(`   ${key}: ${maskedPassword}`);
+      } else if (key === 'organisationIds') {
+        // Show array details
+        const orgIds = backendData[key];
+        console.log(`   ${key}: [${Array.isArray(orgIds) ? orgIds.length : 0} items]`, orgIds);
+      } else {
+        console.log(`   ${key}:`, backendData[key]);
+      }
+    });
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📦 [userApiService] Full JSON payload:', JSON.stringify(backendData, null, 2));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     return this.put<void>('/user', backendData);
   }
 

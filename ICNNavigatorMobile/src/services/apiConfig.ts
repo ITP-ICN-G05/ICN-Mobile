@@ -2,22 +2,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API Configuration
+// Read from environment variables with fallback defaults
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://1355xcz.top:8080/api';
+const API_TIMEOUT = parseInt(process.env.EXPO_PUBLIC_API_TIMEOUT || '30000', 10);
+
 export const API_CONFIG = {
-  // Development Environment - Based on Backend API Guide
+  // Development Environment
   DEV: {
-    // For Android emulator, use 10.0.2.2 to access your computer's localhost
-    // For iOS simulator, use localhost 172.20.10.12
-    // For physical device via WiFi/Hotspot, use your computer's IP address
-    // For USB debugging, use 'http://localhost:8082/api' with 'adb reverse tcp:8082 tcp:8082'
-    BASE_URL: 'https://dustin-notour-uncomplementally.ngrok-free.dev/api', // HTTPS ngrok tunnel
-    //BASE_URL: 'http://98.83.91.193:8080/api', // Mobile Hotspot - Laptop IP when connected to phone's hotspot
-    TIMEOUT: 30000, // Increased from 10s to 30s to prevent timeouts during large data loads
+    BASE_URL: API_BASE_URL,
+    TIMEOUT: API_TIMEOUT,
   },
-  // Production Environment - AWS Backend
+  // Production Environment
   PROD: {
-    BASE_URL: 'https://dustin-notour-uncomplementally.ngrok-free.dev/api', // HTTPS ngrok tunnel
-    //BASE_URL: 'http://98.83.91.193:8080/api', // AWS EC2 Backend - Using HTTP until HTTPS is configured
-    TIMEOUT: 15000,
+    BASE_URL: API_BASE_URL,
+    TIMEOUT: API_TIMEOUT,
   }
 };
 

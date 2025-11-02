@@ -1,4 +1,7 @@
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://dustin-notour-uncomplementally.ngrok-free.dev/api';
+// API Base URL - read from environment variable with default fallback
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://1355xcz.top:8080/api';
+
+// Google Maps API Key - read from environment variable
 export const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export const COLORS = {

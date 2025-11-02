@@ -462,9 +462,9 @@ export default function CompanyDetailScreen({ route, navigation }: CompanyDetail
                     <Text style={styles.companyName}>{displayName}</Text>
                     <TouchableOpacity onPress={handleBookmark} style={styles.bookmarkButton} activeOpacity={1}>
                       <Ionicons 
-                        name={isBookmarked(company.id) ? "bookmark" : "bookmark-outline"} 
+                        name={isBookmarked(company.organizationId || company.id) ? "bookmark" : "bookmark-outline"} 
                         size={24} 
-                        color={isBookmarked(company.id) ? Colors.primary : Colors.black50} 
+                        color={isBookmarked(company.organizationId || company.id) ? Colors.primary : Colors.black50} 
                       />
                     </TouchableOpacity>
                   </View>

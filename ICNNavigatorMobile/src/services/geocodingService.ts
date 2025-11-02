@@ -1,7 +1,8 @@
 import { Platform } from 'react-native';
+import { GOOGLE_MAPS_API_KEY } from '../constants';
 
-// Replace with your actual API key
-const GOOGLE_GEOCODING_API_KEY = 'AIzaSyBsJb-fpJij7dFzZC9QbO4DsGXlw1c2-n0';
+// Use Google Maps API Key from environment variables via constants
+const GOOGLE_GEOCODING_API_KEY = GOOGLE_MAPS_API_KEY;
 
 interface GeocodingResult {
   latitude: number;

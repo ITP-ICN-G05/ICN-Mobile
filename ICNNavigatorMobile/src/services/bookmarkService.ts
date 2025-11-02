@@ -4,8 +4,9 @@
  * Uses PUT /user to update user.cards array with hashed password authentication
  */
 
-import { getApiBaseUrl, fetchWithTimeout } from './apiConfig';
-import { userApiService } from './userApiService';
+import { getApiBaseUrl, fetchWithTimeout, API_CONFIG, HttpMethod } from './apiConfig';
+import { userApiService, UserFull } from './userApiService';
+import { normalizeEmail } from '../utils/emailNormalizer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface BookmarkResponse {
@@ -167,15 +168,127 @@ class BookmarkService {
   }
 
   /**
+   * Fetch user data from backend API to get latest bookmarks
+   * Uses stored email and hashed password to authenticate
+   * Uses POST /api/user endpoint (same as login endpoint) to get latest user data
+   * @returns Promise resolving to UserFull object or null
+   */
+  private async fetchUserDataFromBackend(): Promise<UserFull | null> {
+    try {
+      const currentUser = await this.getCurrentUser();
+      const hashedPassword = await this.getHashedPassword();
+
+      if (!currentUser || !currentUser.email) {
+        console.error('[BookmarkService] No user data found');
+        return null;
+      }
+
+      if (!hashedPassword) {
+        console.error('[BookmarkService] No hashed password found');
+        return null;
+      }
+
+      // Use POST /api/user endpoint with stored credentials to get latest user data
+      // This is the same endpoint as login, but we use already-hashed password
+      // Normalize email to ensure consistent format with login
+      const normalizedEmail = normalizeEmail(currentUser.email);
+      const params = new URLSearchParams({
+        email: normalizedEmail,
+        password: hashedPassword.toLowerCase() // Ensure lowercase for backend compatibility
+      });
+      const endpoint = `/user?${params.toString()}`;
+
+      // Build full URL with /api prefix
+      const apiBaseUrl = API_CONFIG[__DEV__ ? 'DEV' : 'PROD'].BASE_URL;
+      const fullUrl = `${apiBaseUrl}${endpoint}`;
+
+      console.log('[BookmarkService] Fetching user data from backend:', fullUrl);
+
+      const response = await fetchWithTimeout(fullUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.warn('[BookmarkService] Failed to fetch user data from backend:', response.status);
+        return null;
+      }
+
+      const userData = await response.json();
+      return userData;
+    } catch (error) {
+      console.error('[BookmarkService] Error fetching user data from backend:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Extract bookmark IDs from user data
+   * Supports both organisationCards array and cards array formats
+   * @param userData User data object
+   * @returns Array of organization IDs
+   */
+  private extractBookmarkIds(userData: any): string[] {
+    // Priority 1: Extract from organisationCards (backend field)
+    if (userData.organisationCards && Array.isArray(userData.organisationCards)) {
+      return userData.organisationCards
+        .map((card: any) => {
+          if (typeof card === 'string') {
+            return card;
+          }
+          return card.id || card._id;
+        })
+        .filter((id: any): id is string => id !== undefined && id !== null);
+    }
+
+    // Priority 2: Extract from cards field (backward compatibility)
+    if (userData.cards && Array.isArray(userData.cards)) {
+      return userData.cards
+        .map((card: any) => {
+          if (typeof card === 'string') {
+            return card;
+          }
+          return card.id || card._id;
+        })
+        .filter((id: any): id is string => id !== undefined && id !== null);
+    }
+
+    return [];
+  }
+
+  /**
    * Fetch all bookmarks for a user
-   * Returns bookmarks from local user data (cards array)
+   * Fetches latest bookmarks from backend API, falls back to local storage if API fails
    * @param userId User ID (not used, kept for compatibility)
    * @returns Promise resolving to array of company IDs
    */
   async fetchBookmarks(userId: string): Promise<string[]> {
     try {
-      console.log('[BookmarkService] Fetching bookmarks');
-      
+      console.log('[BookmarkService] Fetching bookmarks from backend...');
+
+      // Try to fetch latest data from backend API
+      const backendUserData = await this.fetchUserDataFromBackend();
+
+      if (backendUserData) {
+        // Extract bookmarks from backend response
+        const bookmarks = this.extractBookmarkIds(backendUserData);
+        console.log('[BookmarkService] Fetched bookmarks from backend, count:', bookmarks.length);
+
+        // Update local storage with latest data to keep in sync
+        const currentUser = await this.getCurrentUser();
+        if (currentUser) {
+          currentUser.cards = bookmarks;
+          await AsyncStorage.setItem('@user_data', JSON.stringify(currentUser));
+          console.log('[BookmarkService] Updated local storage with backend bookmarks');
+        }
+
+        return bookmarks;
+      }
+
+      // Fallback to local storage if backend fetch fails
+      console.log('[BookmarkService] Backend fetch failed, falling back to local storage');
       const currentUser = await this.getCurrentUser();
       if (!currentUser) {
         console.error('[BookmarkService] No user data found');
@@ -183,11 +296,16 @@ class BookmarkService {
       }
 
       const bookmarks = currentUser.cards || [];
-      console.log('[BookmarkService] Fetch bookmarks success, count:', bookmarks.length);
+      console.log('[BookmarkService] Fetch bookmarks from local storage, count:', bookmarks.length);
       return bookmarks;
     } catch (error) {
       console.error('[BookmarkService] Fetch bookmarks error:', error);
-      return [];
+      // Fallback to local storage on error
+      const currentUser = await this.getCurrentUser();
+      if (!currentUser) {
+        return [];
+      }
+      return currentUser.cards || [];
     }
   }
 
