@@ -19,7 +19,7 @@ export function useMapCamera() {
   const cameraBusyRef = useRef<boolean>(false);
   const manualZoomLockUntil = useRef<number>(0);
 
-  // 添加一个状态来跟踪是否是用户交互
+  // Add a state to track if it's user interaction
   const isUserInteractionRef = useRef<boolean>(false);
 
   const bumpManualLock = useCallback((ms = 4000) => {
@@ -56,42 +56,42 @@ export function useMapCamera() {
     }, delay);
   }, []);
 
-  // 修复区域变化处理
+  // Fix region change handling
   const handleRegionChangeComplete = useCallback((newRegion: Region, details?: { isGesture?: boolean }) => {
-    // 只有在用户交互时才更新 region 状态
+    // Only update region state during user interaction
     if (details?.isGesture) {
       setRegion(newRegion);
       bumpManualLock(4000);
       isUserInteractionRef.current = true;
       
-      // 重置用户交互标志
+      // Reset user interaction flag
       setTimeout(() => {
         isUserInteractionRef.current = false;
       }, 1000);
     }
   }, [bumpManualLock]);
 
-  // 添加程序化区域变化函数
+  // Add programmatic region change function
   const animateToRegion = useCallback((newRegion: Region, duration = 500) => {
     if (!mapRef.current) return;
     
-    // 设置相机忙碌标志，防止自动缩放干扰
+    // Set camera busy flag to prevent auto-zoom interference
     cameraBusyRef.current = true;
     startSelectionLock(duration + 500);
     
     mapRef.current.animateToRegion(newRegion, duration);
     
-    // 更新 region 状态，但标记为非用户交互
+    // Update region state, but mark as non-user interaction
     setRegion(newRegion);
     
-    // 释放锁定
+    // Release lock
     setTimeout(() => {
       cameraBusyRef.current = false;
       selectionLockUntil.current = 0;
     }, duration + 100);
   }, [startSelectionLock]);
 
-  // 添加动画到坐标函数
+  // Add animate to coordinates function
   const animateToCoordinates = useCallback((coordinates: LatLng[], edgePadding?: any) => {
     if (!mapRef.current || coordinates.length === 0) return;
     
@@ -109,7 +109,7 @@ export function useMapCamera() {
         { duration: 500 }
       );
       
-      // 更新 region 状态
+      // Update region state
       setRegion(prev => ({
         ...prev,
         latitude: coordinates[0].latitude,
@@ -151,7 +151,7 @@ export function useMapCamera() {
 
       bumpManualLock(2500);
       
-      // 使用新的动画函数
+      // Use new animation function
       animateToRegion({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -180,7 +180,7 @@ export function useMapCamera() {
     }
   }, [bumpManualLock, animateToRegion]);
 
-  // 添加清除所有公司的函数
+  // Add function to clear all companies
   const zoomToAllCompanies = useCallback((companies: Company[]) => {
     const coords = companies
       .map(company => {

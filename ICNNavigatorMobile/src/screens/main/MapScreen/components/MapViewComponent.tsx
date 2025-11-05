@@ -47,7 +47,7 @@ export default function MapViewComponent({
     bumpManualLock(4000);
   };
 
-  // 修复：移除 region 属性，使用 initialRegion 代替
+  // Fix: Remove region property, use initialRegion instead
   return (
     <>
       <MapView
@@ -55,14 +55,14 @@ export default function MapViewComponent({
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={MELBOURNE_REGION}
-        // 移除 region 属性，让地图自己管理状态
-        // region={region} // 这行注释掉或删除
+        // Remove region property, let the map manage its own state
+        // region={region} // Comment out or delete this line
         onRegionChangeComplete={onRegionChangeComplete}
         onPanDrag={handlePanDrag}
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
-        // 添加这些属性来改善地图行为
+        // Add these properties to improve map behavior
         moveOnMarkerPress={false}
         loadingEnabled={true}
         loadingIndicatorColor={Colors.primary}

@@ -9,7 +9,7 @@ export function useCompanySelection(navigation: any) {
   const slideAnimation = useRef(new Animated.Value(300)).current;
   const markerRefs = useRef<Record<string, any>>({});
 
-  // 修复：使用 useCallback 包装所有函数
+  // Fix: Wrap all functions with useCallback
   const closeCompanyCard = useCallback((
     searchText: string, 
     setSearchText: React.Dispatch<React.SetStateAction<string>>,

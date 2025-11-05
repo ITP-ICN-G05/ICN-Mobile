@@ -15,7 +15,7 @@ export function useMapFilters(companies: Company[]) {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [region, setRegion] = useState(AUSTRALIA_REGION);
 
-  // 确保返回严格的布尔值
+  // Ensure strictly boolean return value
   const hasAnyFilters = useMemo((): boolean => {
     return Boolean(
       filters.capabilities.length > 0 ||

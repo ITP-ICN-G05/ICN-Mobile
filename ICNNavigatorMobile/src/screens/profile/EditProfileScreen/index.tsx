@@ -24,7 +24,7 @@ import { ProfessionalInfoSection } from './components/ProfessionalInfoSection';
 import { SocialLinksSection } from './components/SocialLinksSection';
 
 export default function EditProfileScreen() {
-  const navigation = useNavigation(); // 添加这行
+  const navigation = useNavigation(); // Add this line
 
   const {
     formData,
