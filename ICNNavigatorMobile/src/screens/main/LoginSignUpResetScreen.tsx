@@ -130,12 +130,12 @@ const styles = StyleSheet.create({
     flexGrow: 1, 
     justifyContent: 'center', 
     paddingBottom: 50,
-    paddingTop: 20, // 增加顶部间距
+    paddingTop: 20, // Add top spacing
   },
   authWrapper: { 
     flex: 1, 
     justifyContent: 'center', 
     minHeight: 500,
-    paddingHorizontal: 10, // 增加水平间距
+    paddingHorizontal: 10, // Add horizontal spacing
   },
 });

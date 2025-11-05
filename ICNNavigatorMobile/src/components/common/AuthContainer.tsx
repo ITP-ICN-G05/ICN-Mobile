@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     minHeight: 300,
-    paddingBottom: 10, // 为表单底部添加额外间距
+    paddingBottom: 10, // Add extra spacing to the bottom of the form
   },
   backToSignInContainer: {
     alignItems: 'center',
